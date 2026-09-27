@@ -30,7 +30,7 @@ function makeNoise(seed = 3) {
   return (x, y, oct = 5) => { let a = 1, fr = 1, t = 0, m = 0; for (let i = 0; i < oct; i++) { t += n2(x * fr, y * fr) * a; m += a; a *= 0.5; fr *= 2.03; } return t / m; };
 }
 
-export function mountWorld(container, spots, onPick) {
+export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ elev: 45, pm: false }), weather = 'clear' } = {}) {
   const noise = makeNoise(11);
   const shown = spots.filter((s) => s.vis !== 'hidden').map((s) => {
     const [x, z] = toWorld(s.def.map);
@@ -79,7 +79,8 @@ export function mountWorld(container, spots, onPick) {
   const pmrem = new THREE.PMREMGenerator(renderer);
   const skyScene = new THREE.Scene(); const skyClone = new Sky(); skyClone.scale.setScalar(1000);
   Object.assign(skyClone.material.uniforms.sunPosition.value, sunDir); skyScene.add(skyClone);
-  scene.environment = pmrem.fromScene(skyScene).texture;
+  const envTex = pmrem.fromScene(skyScene).texture;
+  scene.environment = envTex;
 
   const sun = new THREE.DirectionalLight(0xfff1d6, 2.6);
   sun.position.copy(sunDir).multiplyScalar(300);
@@ -87,7 +88,8 @@ export function mountWorld(container, spots, onPick) {
   sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -220, right: 220, top: 180, bottom: -180, near: 1, far: 800 });
   sun.shadow.bias = -0.0005;
-  scene.add(sun, new THREE.HemisphereLight(0xcfe6ff, 0x6b5a3a, 0.8));
+  const hemi = new THREE.HemisphereLight(0xcfe6ff, 0x6b5a3a, 0.8);
+  scene.add(sun, hemi);
 
   // ---------- terrain mesh ----------
   const geo = new THREE.PlaneGeometry(SIZE * 1.6, DEPTH * 1.6, 300, 225);
@@ -556,14 +558,145 @@ export function mountWorld(container, spots, onPick) {
   };
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
 
+  // ---------- time of day, weather, night sky ----------
+  const W_TAB = {
+    clear: { cloud: 0, dim: 0, fog: 0, rain: 0, snow: 0 }, cloudy: { cloud: 0.3, dim: 0.15, fog: 0.1, rain: 0, snow: 0 },
+    overcast: { cloud: 0.6, dim: 0.45, fog: 0.3, rain: 0, snow: 0 }, fog: { cloud: 0.4, dim: 0.4, fog: 1, rain: 0, snow: 0 },
+    rain: { cloud: 0.7, dim: 0.55, fog: 0.4, rain: 1, snow: 0 }, storm: { cloud: 0.9, dim: 0.7, fog: 0.5, rain: 1.4, snow: 0 },
+    snow: { cloud: 0.6, dim: 0.35, fog: 0.45, rain: 0, snow: 1 },
+  };
+  let WX = W_TAB[weather] || W_TAB.clear, wxKind = weather, night = 0, golden = 0;
+  // Stars: a dome of points with twinkle, plus a band of the milky way.
+  const STAR_N = 3500, starPos = new Float32Array(STAR_N * 3), starCol = new Float32Array(STAR_N * 3);
+  for (let i = 0; i < STAR_N; i++) {
+    const band = i < 1200;
+    const th = band ? Math.PI / 2 + (rand() - 0.5) * 0.35 : Math.acos(1 - rand() * 0.98);
+    const v3 = new THREE.Vector3().setFromSphericalCoords(1500, th, rand() * Math.PI * 2);
+    if (band) v3.applyAxisAngle(new THREE.Vector3(1, 0, 0.4).normalize(), 1.1);
+    if (v3.y < 60) v3.y = 60 + Math.abs(v3.y) * 0.6;
+    starPos.set([v3.x, v3.y, v3.z], i * 3);
+    const c = new THREE.Color().setHSL(0.58 + (rand() - 0.5) * 0.15, 0.5, 0.75 + rand() * 0.25); starCol.set([c.r, c.g, c.b], i * 3);
+  }
+  const starGeo = new THREE.BufferGeometry(); starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3)); starGeo.setAttribute('color', new THREE.BufferAttribute(starCol, 3));
+  const starTex = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 32; const g = cv.getContext('2d'); const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, '#fff'); gr.addColorStop(0.3, 'rgba(255,255,255,.8)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 32, 32); return new THREE.CanvasTexture(cv); })();
+  const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ size: 4.5, sizeAttenuation: false, map: starTex, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, fog: false }));
+  const bigStars = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(starPos.slice(1200 * 3, 1500 * 3), 3)), new THREE.PointsMaterial({ size: 9, sizeAttenuation: false, map: starTex, color: 0xfff6e0, transparent: true, opacity: 0, depthWrite: false, fog: false }));
+  scene.add(stars, bigStars);
+  // Moon
+  const moon = new THREE.Mesh(new THREE.SphereGeometry(40, 32, 16), new THREE.MeshBasicMaterial({ color: 0xfff4d6, fog: false, transparent: true }));
+  moon.position.set(-600, 700, -900); scene.add(moon);
+  const moonGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, color: 0xcfdcff, transparent: true, opacity: 0, depthWrite: false, fog: false })); moonGlow.scale.setScalar(420); moonGlow.position.copy(moon.position); scene.add(moonGlow);
+  const moonLight = new THREE.DirectionalLight(0x9fb4e6, 0); moonLight.position.copy(moon.position).normalize().multiplyScalar(300); scene.add(moonLight);
+  // Shooting stars: streaks that cross the sky every few seconds at night.
+  const meteors = Array.from({ length: 4 }, () => {
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array([1, 1, 1, 0.1, 0.15, 0.3]), 3));
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, fog: false, blending: THREE.AdditiveBlending, depthWrite: false, linewidth: 2 }));
+    const headS = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, color: 0xffffff, transparent: true, opacity: 0, fog: false, depthWrite: false, blending: THREE.AdditiveBlending })); headS.scale.setScalar(26); scene.add(headS);
+    scene.add(line);
+    return { line, headS, life: 0, dur: 1, from: new THREE.Vector3(), dir: new THREE.Vector3(), next: 0.5 + Math.random() * 3 };
+  });
+  const launch = (m) => {
+    // Start somewhere in the sky in front of the camera so the player sees it.
+    const f = new THREE.Vector3(); camera.getWorldDirection(f); f.y = 0; f.normalize();
+    const side = new THREE.Vector3(-f.z, 0, f.x);
+    m.from.copy(camera.position).addScaledVector(f, 700).addScaledVector(side, (Math.random() - 0.5) * 900); m.from.y = camera.position.y + 120 + Math.random() * 220;
+    m.dir.copy(side).multiplyScalar(Math.random() < 0.5 ? -1 : 1).add(new THREE.Vector3(0, -0.45 - Math.random() * 0.3, 0)).normalize().multiplyScalar(500 + Math.random() * 400);
+    m.life = 0; m.dur = 0.7 + Math.random() * 0.8;
+  };
+  // Night lights at every place (windows / lanterns) + fireflies over the forest.
+  const nightLights = [];
+  for (const s of shown) {
+    const l = new THREE.PointLight(s.def.floating ? 0xffd27a : 0xffb866, 0, 40, 1.6);
+    l.position.set(s.x, (s.def.floating ? 26 : height(s.x, s.z)) + 10, s.z); scene.add(l); nightLights.push(l);
+  }
+  const FF = 300, ffPos = new Float32Array(FF * 3), ffSeed = new Float32Array(FF);
+  for (let i = 0; i < FF; i++) { const x = (rand() - 0.5) * SIZE * 1.1, z = (rand() - 0.5) * DEPTH * 1.1; ffPos.set([x, Math.max(2, height(x, z)) + 2 + rand() * 4, z], i * 3); ffSeed[i] = rand() * 6.28; }
+  const fireflies = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(ffPos, 3)), new THREE.PointsMaterial({ color: 0xfff08a, size: 1.4, map: starTex, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+  scene.add(fireflies);
+  // Rain / snow around the camera target
+  const PR = 7000, prPos = new Float32Array(PR * 6);
+  for (let i = 0; i < PR; i++) { const x = (rand() - 0.5) * 260, y = rand() * 140, z = (rand() - 0.5) * 260; prPos.set([x, y, z, x, y - 3, z], i * 6); }
+  const rainL = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(prPos, 3)), new THREE.LineBasicMaterial({ color: 0xb4c8d8, transparent: true, opacity: 0.5 }));
+  rainL.frustumCulled = false; scene.add(rainL);
+  const SN = 6000, snPos = new Float32Array(SN * 3);
+  for (let i = 0; i < SN; i++) snPos.set([(rand() - 0.5) * 260, rand() * 140, (rand() - 0.5) * 260], i * 3);
+  const snowP = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(snPos, 3)), new THREE.PointsMaterial({ color: 0xffffff, size: 1.1, map: starTex, transparent: true, depthWrite: false }));
+  snowP.frustumCulled = false; scene.add(snowP);
+  const flash = new THREE.AmbientLight(0xdfe8ff, 0); scene.add(flash);
+  const baseCloud = cloudMats.map((m) => m.color.clone());
+  const tmpC = new THREE.Color();
+
+  const applySky = () => {
+    const { elev, pm } = skyInfo();
+    const e = Math.max(elev, -14);
+    const dir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - e), pm ? 3.9 : 0.9);
+    su.sunPosition.value.copy(dir);
+    su.turbidity.value = 6 + WX.dim * 12; su.rayleigh.value = THREE.MathUtils.lerp(1.6, 0.6, WX.dim);
+    night = THREE.MathUtils.clamp((3 - elev) / 13, 0, 1);
+    golden = THREE.MathUtils.clamp(1 - Math.abs(elev - 4) / 12, 0, 1) * (1 - night);
+    sun.position.copy(dir).multiplyScalar(300);
+    sun.color.set(0xfff1d6).lerp(tmpC.set(0xff9a5a), golden * 0.85);
+    sun.intensity = 2.6 * (1 - night) * (1 - WX.dim * 0.75);
+    sun.castShadow = night < 0.6 && WX.dim < 0.5;
+    moonLight.intensity = 0.9 * night * (1 - WX.dim * 0.7);
+    hemi.intensity = THREE.MathUtils.lerp(0.8, 0.22, night) * (1 - WX.dim * 0.2);
+    hemi.color.set(night > 0.5 ? 0x3a4a80 : 0xcfe6ff);
+    renderer.toneMappingExposure = THREE.MathUtils.lerp(0.55, 0.85, night) + WX.dim * 0.1;
+    sky.visible = night < 0.97 && WX.dim < 0.6;
+    const bg = tmpC.set(0xaab6c0).lerp(new THREE.Color(0x070b1c), night);
+    scene.background = sky.visible ? null : bg.clone();
+    const fogC = new THREE.Color(0xbfd4e2).lerp(new THREE.Color(0xe8b48c), golden * 0.7).lerp(new THREE.Color(0x0b1024), night).lerp(new THREE.Color(0x9aa6b0).multiplyScalar(1 - night * 0.8), WX.dim);
+    scene.fog.color.copy(fogC); scene.fog.density = 0.0026 + WX.fog * 0.006;
+    cloudMats.forEach((m, i) => m.color.copy(baseCloud[i]).lerp(tmpC.set(0x6f7880), WX.dim).lerp(tmpC.set(0xffb48a), golden * 0.5).lerp(tmpC.set(0x121828), night));
+    moon.visible = moonGlow.visible = night > 0.05;
+    scene.environment = night > 0.6 ? null : envTex;
+    hemi.intensity *= 1 - night * 0.3;
+    rainL.visible = WX.rain > 0; snowP.visible = WX.snow > 0;
+    water.material.color.set(night > 0.5 ? 0x0e2a3a : 0x1f6f8b);
+  };
+  applySky();
+
   const clock = new THREE.Clock(); const v = new THREE.Vector3();
-  let raf;
+  let raf, lastSky = 0, nextBolt = 3;
   const tick = () => {
     const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
     controls.update();
     waveTex.offset.set(t * 0.004, t * 0.006);
     for (const sp of cloudGroup.children) { sp.position.x += dt * sp.userData.drift; if (sp.position.x > SIZE * 0.85) sp.position.x -= SIZE * 1.7; }
     if (glow) glow.material.opacity = 0.35 + Math.sin(t * 2) * 0.2;
+    if (t - lastSky > 30) { applySky(); lastSky = t; }
+    // night sky
+    const clearSky = Math.min(1, night * 1.2) * (1 - WX.cloud * 0.95);
+    stars.material.opacity = clearSky * (0.85 + Math.sin(t * 3) * 0.1);
+    bigStars.material.opacity = clearSky * (0.6 + Math.sin(t * 5.3) * 0.4);
+    moon.material.opacity = night * (1 - WX.dim * 0.7); moonGlow.material.opacity = 0.35 * night * (1 - WX.dim);
+    for (const m of meteors) {
+      if (clearSky < 0.3) { m.line.material.opacity = 0; m.headS.material.opacity = 0; continue; }
+      if (m.life <= 0) { m.next -= dt; if (m.next <= 0) { launch(m); m.life = 0.0001; m.next = 1.5 + Math.random() * 4; } continue; }
+      m.life += dt; const k = m.life / m.dur;
+      if (k >= 1) { m.life = 0; m.line.material.opacity = 0; m.headS.material.opacity = 0; continue; }
+      const head = m.from.clone().addScaledVector(m.dir, k), tail = m.from.clone().addScaledVector(m.dir, Math.max(0, k - 0.25));
+      const a = m.line.geometry.attributes.position; a.setXYZ(0, head.x, head.y, head.z); a.setXYZ(1, tail.x, tail.y, tail.z); a.needsUpdate = true;
+      m.line.material.opacity = Math.sin(k * Math.PI) * clearSky; m.headS.position.copy(head); m.headS.material.opacity = m.line.material.opacity;
+    }
+    for (const l of nightLights) l.intensity = (night * 1 + WX.dim * 0.3) * 60 * (0.9 + Math.sin(t * 7 + l.position.x) * 0.06);
+    fireflies.material.opacity = night * (1 - WX.rain) * (1 - WX.snow) * (0.6 + Math.sin(t * 2) * 0.3);
+    for (let i = 0; i < FF; i++) { ffPos[i * 3 + 1] += Math.sin(t * 1.5 + ffSeed[i]) * dt * 0.8; ffPos[i * 3] += Math.cos(t + ffSeed[i]) * dt * 0.6; }
+    fireflies.geometry.attributes.position.needsUpdate = true;
+    // precipitation follows the camera target
+    const cx = controls.target.x, cz = controls.target.z;
+    if (rainL.visible) {
+      const sp = 90 * dt;
+      for (let i = 0; i < PR; i++) { const o = i * 6; let y = prPos[o + 1] - sp; if (y < -5) { y = 140; prPos[o] = cx + (Math.random() - 0.5) * 260; prPos[o + 2] = cz + (Math.random() - 0.5) * 260; } prPos[o + 1] = y; prPos[o + 3] = prPos[o] + 0.3; prPos[o + 4] = y - 3; prPos[o + 5] = prPos[o + 2]; }
+      rainL.geometry.attributes.position.needsUpdate = true;
+    }
+    if (snowP.visible) {
+      for (let i = 0; i < SN; i++) { const o = i * 3; let y = snPos[o + 1] - dt * 6; if (y < -5) { y = 140; snPos[o] = cx + (Math.random() - 0.5) * 260; snPos[o + 2] = cz + (Math.random() - 0.5) * 260; } snPos[o + 1] = y; snPos[o] += Math.sin(t + i) * dt; }
+      snowP.geometry.attributes.position.needsUpdate = true;
+    }
+    if (wxKind === 'storm' && t > nextBolt) { flash.intensity = 5; nextBolt = t + 4 + Math.random() * 8; }
+    flash.intensity *= 0.85;
     for (const o of pickables) if (o.userData.float != null) { o.position.y = o.userData.float + Math.sin(t * 0.8) * 0.9; o.rotation.y = t * 0.05; o.userData.tick?.(t); }
     renderer.render(scene, camera);
     const w = container.clientWidth, h = container.clientHeight;
@@ -577,10 +710,13 @@ export function mountWorld(container, spots, onPick) {
   };
   tick();
 
-  return () => {
+  const dispose = () => {
     cancelAnimationFrame(raf); ro.disconnect(); controls.dispose();
     scene.traverse((o) => { o.geometry?.dispose(); });
     renderer.dispose(); pmrem.dispose(); renderer.forceContextLoss?.();
     container.innerHTML = '';
   };
+  dispose.setWeather = (k) => { wxKind = k; WX = W_TAB[k] || W_TAB.clear; applySky(); };
+  dispose.refreshSky = applySky;
+  return dispose;
 }

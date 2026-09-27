@@ -134,7 +134,7 @@ function render() {
     return;
   }
   isle?.dispose(); isle = null;
-  if (screen === 'world' && disposeWorld && worldKey === worldSignature() && $('#world-view')) { bind(); return; }
+  if (screen === 'world' && disposeWorld && worldKey === worldSignature() && $('#world-view')) { const a = $('.world-atmo'); if (a) a.textContent = `${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}`; bind(); return; }
   oasis?.scene.dispose(); oasis = null;
   const view = { world: renderWorld, character: renderCharacter, shop: renderShop, trophies: renderTrophies, hq: renderHQ }[screen];
   $('#screen').innerHTML = view();
@@ -252,6 +252,7 @@ function renderWorld() {
   worldSpots = spots;
   return `
   <div class="world-view" id="world-view"><div class="w3-loading">جارٍ تحميل العالم…</div></div>
+  <button class="hud-chip atmo world-atmo" data-open-atmo>${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}</button>
   <p class="map-help">اسحب لتتنقّل · كبّر وصغّر بعجلة الماوس أو بإصبعين · زر الماوس الأيمن للدوران · اضغط على مكان لتدخله</p>`;
 }
 
@@ -268,7 +269,8 @@ async function bindWorld() {
     const { mountWorld } = await import('./world3d.js');
     if (!v.isConnected) return;
     v.innerHTML = '';
-    disposeWorld = mountWorld(v, worldSpots, openSpot);
+    disposeWorld = mountWorld(v, worldSpots, openSpot, { sky: skyInfo, weather: currentWeather() });
+    loadWeather();
   } catch (err) {
     console.warn('3D world unavailable', err);
     v.classList.add('flat');
@@ -422,6 +424,7 @@ async function loadWeather(force = false) {
     liveWeather = { kind: weatherFromCode(j.current.weather_code), temp: Math.round(j.current.temperature_2m) };
   } catch (e) { console.warn('weather unavailable', e); liveWeather = liveWeather || { kind: 'clear', offline: true }; }
   oasis?.scene.setWeather(currentWeather());
+  disposeWorld?.setWeather?.(currentWeather());
   if ($('#hud')) $('#hud').innerHTML = placeHUD(), bind();
 }
 
@@ -989,8 +992,8 @@ function bind() {
   on('data-judge', judgeFlow);
   on('data-wallet', showWallet);
   on('data-channel', (c) => { cupChannel = c; render(); });
-  on('data-set-weather', (k) => { weatherOverride = k; oasis?.scene.setWeather(currentWeather()); render(); });
-  on('data-set-time', (k) => { timeOverride = k; oasis?.scene.refreshSky(); render(); });
+  on('data-set-weather', (k) => { weatherOverride = k; oasis?.scene.setWeather(currentWeather()); disposeWorld?.setWeather?.(currentWeather()); render(); });
+  on('data-set-time', (k) => { timeOverride = k; oasis?.scene.refreshSky(); disposeWorld?.refreshSky?.(); render(); });
   on('data-toggle-quests', () => { questsCollapsed = !questsCollapsed; $('#quests')?.classList.toggle('collapsed', questsCollapsed); });
   on('data-pick-location', pickLocation);
   on('data-task-fail', (v) => {

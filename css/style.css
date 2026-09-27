@@ -472,3 +472,4 @@ body.in-store { min-height: 100vh; background-attachment: fixed; }
 .front p { max-width: 480px; }
 .front .meter { width: min(360px, 90%); color: #f6e7c4; }
 .front .btn.ghost { color: #f6e7c4; border-color: #f6e7c455; }
+.world-atmo { position: fixed; top: 12px; inset-inline-start: 12px; z-index: 21; cursor: pointer; } @media (max-width: 720px) { .world-atmo { top: 58px; } }
