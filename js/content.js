@@ -289,7 +289,7 @@ export const REGIONS = [
     cost: {},
     starter: true,
     requires: [],
-    map: { x: 150, y: 150 },   // on a plateau north of the emotional dimension
+    map: { x: 175, y: 640 },   // on a plateau south of the emotional dimension
     upgrades: [],
   },
   {

@@ -407,12 +407,26 @@ function showSettings() {
       <div class="row wrap"><button class="btn ghost" data-snd-test="coin">🪙 جرّب</button><button class="btn ghost" data-snd-test="prayer">🕌 جرّب</button><button class="btn ghost" data-snd-test="levelUp">⬆ جرّب</button><button class="btn ghost" data-snd-test="thunder">⛈ جرّب</button></div>
     </section>
     <section class="set-block">
+      <h3>🎙 أصوات حقيقية</h3>
+      <p class="muted small-text">اختر تسجيلات من جهازك (mp3 / wav / ogg) — مثلًا من مواقع الأصوات المجانية. تُحفظ في متصفحك.</p>
+      ${Object.entries(SND.RECORDINGS).map(([k, label]) => `
+        <div class="rec-row"><span>${label}</span><small class="muted" data-rec-name="${k}">…</small>
+          <label class="btn ghost small">اختيار ملف<input type="file" accept="audio/*" data-rec-file="${k}" hidden></label>
+          <button class="btn ghost small" data-rec-play="${k}">▶</button><button class="btn ghost small" data-rec-del="${k}">✕</button></div>`).join('')}
+    </section>
+    <section class="set-block">
       <h3>🌤 الوقت والجو</h3>
       <button class="btn" data-open-atmo>تغيير الوقت والطقس</button>
     </section>`);
   $('#snd-on').onchange = (e) => { SND.set('enabled', e.target.checked); };
   document.querySelectorAll('[data-snd]').forEach((el) => (el.oninput = () => { SND.set(el.dataset.snd, +el.value); el.nextElementSibling.textContent = Math.round(el.value * 100); }));
   document.querySelectorAll('[data-snd-test]').forEach((el) => (el.onclick = () => SND.sfx[el.dataset.sndTest]()));
+  let recSeq = 0;
+  const recNames = () => { const my = ++recSeq; document.querySelectorAll('[data-rec-name]').forEach(async (el) => { const n = await SND.recordingName(el.dataset.recName); if (my === recSeq) el.textContent = n || 'لا يوجد (صامت)'; }); };
+  recNames();
+  document.querySelectorAll('[data-rec-file]').forEach((el) => (el.onchange = async () => { const f = el.files[0]; if (!f) return; try { await SND.setRecording(el.dataset.recFile, f); FX.toast('✔ تم حفظ الصوت'); } catch { FX.toast('تعذّر قراءة الملف', 'err'); } recNames(); }));
+  document.querySelectorAll('[data-rec-del]').forEach((el) => (el.onclick = async () => { await SND.setRecording(el.dataset.recDel, null); recNames(); }));
+  document.querySelectorAll('[data-rec-play]').forEach((el) => (el.onclick = async () => { if (el.dataset.recPlay === 'door') SND.creak(); else { await SND.setCry(1); setTimeout(() => SND.setCry(0), 3000); } }));
   bind();
 }
 

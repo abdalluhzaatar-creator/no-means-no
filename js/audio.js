@@ -174,64 +174,45 @@ export function setScene(patch) {
   updateAmbience();
 }
 
-// ---------- inner child crying (volume follows distance) ----------
-// Each sob is a short voiced "waa" (sawtooth through two vocal formants with a
-// trembling pitch), followed by a breathy gasp. A scheduler keeps them coming
-// while the level is above zero; the level sets the bus volume.
-let cryBus = null, cryLevel = 0, cryTimer = null;
-function sobOnce() {
-  const t = now(), len = 0.8 + Math.random() * 0.7, base = 430 + Math.random() * 90;
-  const o = ctx.createOscillator(), vib = ctx.createOscillator(), vg = ctx.createGain();
-  const f1 = ctx.createBiquadFilter(), f2 = ctx.createBiquadFilter(), env = ctx.createGain();
-  o.type = 'sawtooth';
-  o.frequency.setValueAtTime(base * 0.9, t); o.frequency.linearRampToValueAtTime(base * 1.3, t + 0.2); o.frequency.exponentialRampToValueAtTime(base * 0.75, t + len);
-  vib.frequency.value = 7; vg.gain.value = 22; vib.connect(vg); vg.connect(o.frequency);
-  f1.type = 'peaking'; f1.frequency.value = 1000; f1.Q.value = 3; f1.gain.value = 14;
-  f2.type = 'peaking'; f2.frequency.value = 2700; f2.Q.value = 4; f2.gain.value = 10;
-  env.gain.setValueAtTime(0, t); env.gain.linearRampToValueAtTime(0.35, t + 0.08); env.gain.setValueAtTime(0.35, t + len * 0.55); env.gain.exponentialRampToValueAtTime(0.001, t + len);
-  o.connect(f1); f1.connect(f2); f2.connect(env); env.connect(cryBus);
-  o.start(t); vib.start(t); o.stop(t + len + 0.05); vib.stop(t + len + 0.05);
-  // gasp
-  const src = ctx.createBufferSource(), nf = ctx.createBiquadFilter(), ng = ctx.createGain();
-  src.buffer = noiseBuf; nf.type = 'bandpass'; nf.frequency.value = 1600; nf.Q.value = 1.2;
-  const g0 = t + len + 0.12; ng.gain.setValueAtTime(0, g0); ng.gain.linearRampToValueAtTime(0.25, g0 + 0.06); ng.gain.exponentialRampToValueAtTime(0.001, g0 + 0.3);
-  src.connect(nf); nf.connect(ng); ng.connect(cryBus); src.start(g0, Math.random()); src.stop(g0 + 0.35);
-  return len + 0.45 + Math.random() * 0.5;
+// ---------- recorded sounds chosen by the player ----------
+// The door and the inner child's crying play real recordings the player picks in
+// Settings (stored in IndexedDB). Without a recording they stay silent.
+const REC_DB = 'nmn-sounds';
+const recBuf = {};
+function idb() {
+  return new Promise((res, rej) => { const r = indexedDB.open(REC_DB, 1); r.onupgradeneeded = () => r.result.createObjectStore('files'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
 }
-export function setCry(level) {
+async function idbDo(mode, fn) { const db = await idb(); return new Promise((res, rej) => { const tx = db.transaction('files', mode); const q = fn(tx.objectStore('files')); tx.oncomplete = () => res(q?.result); tx.onerror = () => rej(tx.error); }); }
+export const RECORDINGS = { door: '🚪 صوت الباب', cry: '🧒 بكاء الطفل الداخلي' };
+export async function recordingName(key) { try { const f = await idbDo('readonly', (st) => st.get(key)); return f?.name || null; } catch { return null; } }
+export async function setRecording(key, file) {
+  if (file) await idbDo('readwrite', (st) => st.put(file, key)); else await idbDo('readwrite', (st) => st.delete(key));
+  delete recBuf[key]; await loadRecording(key);
+}
+async function loadRecording(key) {
+  if (!ensure()) return null;
+  if (recBuf[key] !== undefined) return recBuf[key];
+  try { const f = await idbDo('readonly', (st) => st.get(key)); recBuf[key] = f ? await ctx.decodeAudioData(await f.arrayBuffer()) : null; }
+  catch { recBuf[key] = null; }
+  return recBuf[key];
+}
+function playRec(buf, dest, gain = 1, loop = false) {
+  const s = ctx.createBufferSource(), g = ctx.createGain(); s.buffer = buf; s.loop = loop; g.gain.value = gain; s.connect(g); g.connect(dest); s.start(); return { s, g };
+}
+
+let cryNode = null, cryWant = 0;
+export async function setCry(level) {
   if (!ensure()) return;
-  if (!cryBus) { cryBus = ctx.createGain(); cryBus.gain.value = 0; cryBus.connect(out); }
-  cryLevel = S.enabled ? Math.max(0, Math.min(1, level)) : 0;
-  cryBus.gain.setTargetAtTime(cryLevel * S.ambience * 1.2, now(), 0.15);
-  if (cryLevel > 0.01 && !cryTimer) {
-    const loop = () => { if (cryLevel <= 0.01) { cryTimer = null; return; } cryTimer = setTimeout(loop, sobOnce() * 1000); };
-    loop();
+  cryWant = S.enabled ? Math.max(0, Math.min(1, level)) : 0;
+  if (cryWant > 0.01 && !cryNode) {
+    const buf = await loadRecording('cry'); if (!buf || cryNode || cryWant <= 0.01) return;
+    cryNode = playRec(buf, bus.ambience, 0, true);
+  }
+  if (cryNode) {
+    cryNode.g.gain.setTargetAtTime(cryWant * 1.2, now(), 0.2);
+    if (cryWant <= 0.01) { const n = cryNode; cryNode = null; setTimeout(() => { try { n.s.stop(); } catch {} }, 600); }
   }
 }
-// Old wooden door: a slow, groaning hinge — friction noise through a resonant
-// band that glides down in pitch with an irregular "stick-slip" tremble — then the
-// heavy wooden thump as it swings shut behind you.
-export const creak = () => {
-  if (!ensure()) return;
-  const t = now(), len = 1.6;
-  const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
-  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 18;
-  const bp2 = ctx.createBiquadFilter(); bp2.type = 'bandpass'; bp2.Q.value = 12;
-  const g = ctx.createGain(); g.gain.value = 0;
-  src.connect(bp); src.connect(bp2); bp.connect(g); bp2.connect(g); g.connect(bus.effects);
-  bp.frequency.setValueAtTime(620, t); bp.frequency.exponentialRampToValueAtTime(260, t + len);
-  bp2.frequency.setValueAtTime(1240, t); bp2.frequency.exponentialRampToValueAtTime(540, t + len);
-  // stick-slip tremble: amplitude pulses ~18-30 Hz, uneven
-  let tt = t;
-  while (tt < t + len) {
-    const a = 0.9 + Math.random() * 0.8 * Math.sin(((tt - t) / len) * Math.PI);
-    g.gain.setValueAtTime(0.05, tt); g.gain.linearRampToValueAtTime(a, tt + 0.008); g.gain.exponentialRampToValueAtTime(0.05, tt + 0.03);
-    tt += 0.035 + Math.random() * 0.025;
-  }
-  g.gain.linearRampToValueAtTime(0, t + len + 0.05);
-  src.start(t); src.stop(t + len + 0.1);
-  noise({ dur: 0.9, vol: 0.55, freq: 90, q: 0.8, filter: 'lowpass', at: len + 0.05 });           // heavy wooden thump
-  tone({ f: 60, f2: 38, dur: 0.6, vol: 0.35, at: len + 0.05, type: 'sine' });
-  noise({ dur: 1.2, vol: 0.05, freq: 500, q: 0.6, filter: 'lowpass', at: len + 0.2 });          // echo in the stone hall
-};
+export const creak = async () => { if (!ensure()) return; const buf = await loadRecording('door'); if (buf) playRec(buf, bus.effects, 1); };
+export const hasRecording = async (key) => !!(await loadRecording(key));
 export const chains = () => { if (!ensure()) return; for (let i = 0; i < 5; i++) tone({ f: 2000 + Math.random() * 1500, dur: 0.12, vol: 0.05, at: i * 0.07, type: 'square', b: 'ambience' }); };
