@@ -1,0 +1,7 @@
+{
+  "type": "module",
+  "scripts": {
+    "test": "node tests/engine.test.js",
+    "start": "npx -y http-server -p 8123 -c-1"
+  }
+}
