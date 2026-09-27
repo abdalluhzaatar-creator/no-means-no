@@ -169,19 +169,24 @@ main { max-width: 980px; margin: 0 auto; padding: 20px 16px 100px; }
 .sub { margin-top: 16px; }
 
 /* World map */
-.map-wrap { padding: 0; overflow: hidden; }
-.world-map { display: block; width: 100%; height: auto; }
+.world-view { position: relative; width: 100vw; margin: -20px calc(50% - 50vw) 0; height: calc(100vh - 110px); min-height: 420px; overflow: auto; direction: ltr; cursor: grab; scrollbar-width: none; background: #3f7f99; overscroll-behavior: contain; }
+.world-view::-webkit-scrollbar { display: none; }
+.world-view.dragging { cursor: grabbing; user-select: none; }
+.world-map { display: block; width: 2800px; height: auto; max-width: none; }
+@media (max-width: 720px) { .world-map { width: 1900px; } }
 .spot { cursor: pointer; }
 .spot:hover .spot-glow, .spot:focus .spot-glow { opacity: .7; }
 .spot:focus { outline: none; }
 .map-label { font: 700 20px 'Tajawal', sans-serif; fill: #1f2a2e; }
 .map-label.price { fill: #fff; font-size: 21px; }
 .teaser-ring { animation: spin 20s linear infinite; transform-origin: center; transform-box: fill-box; }
-.cloud { animation: drift 24s ease-in-out infinite alternate; }
-.map-help { text-align: center; font-size: .9rem; }
+.map-help { text-align: center; font-size: .9rem; margin: 8px 0 0; }
+.cloud { animation: drift 26s ease-in-out infinite alternate; }
+.cloud.alt { animation-name: drift2; animation-duration: 34s; }
+@keyframes drift2 { to { transform: translate(-50px, 18px); } }
+@media (prefers-reduced-motion: reduce) { .cloud { animation: none; } }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes drift { to { transform: translateX(60px); } }
-@media (max-width: 720px) { .world-map { height: 62vh; } }
 
 /* Progression */
 .keys-box { border-color: var(--primary); color: var(--primary); }

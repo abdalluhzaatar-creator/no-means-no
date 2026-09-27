@@ -74,45 +74,95 @@ export function regionSVG(def, features, characterMarkup = '', { locked = false 
 
 // ---------- World map with fog of war ----------
 // spots: [{ def, vis: 'owned'|'teaser'|'hidden', scene: regionSVG markup (owned only) }]
+// The world is a large pannable land. Region coords in content.js (0..1000 × 0..700)
+// sit in the middle of it; everything around is wilderness hidden under thick clouds.
+export const WORLD = { w: 2800, h: 2000, ox: 900, oy: 650 };
+
+// Deterministic pseudo-random so the world looks the same every render.
+function rng(seed) {
+  let t = seed >>> 0;
+  return () => { t += 0x6d2b79f5; let r = Math.imul(t ^ (t >>> 15), 1 | t); r ^= r + Math.imul(r ^ (r >>> 7), 61 | r); return ((r ^ (r >>> 14)) >>> 0) / 4294967296; };
+}
+
+// Irregular closed blob around (cx, cy).
+function blob(rand, cx, cy, rx, ry, n = 14, jag = 0.22) {
+  const pts = Array.from({ length: n }, (_, i) => {
+    const a = (i / n) * Math.PI * 2, k = 1 - jag + rand() * jag * 2;
+    return [cx + Math.cos(a) * rx * k, cy + Math.sin(a) * ry * k];
+  });
+  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  let d = `M${mid(pts[n - 1], pts[0]).join(' ')}`;
+  pts.forEach((p, i) => { const m = mid(p, pts[(i + 1) % n]); d += ` Q${p[0].toFixed(0)} ${p[1].toFixed(0)} ${m[0].toFixed(0)} ${m[1].toFixed(0)}`; });
+  return d + 'Z';
+}
+
 export function worldMapSVG(spots) {
-  const shown = spots.filter((s) => s.vis !== 'hidden');
+  const { w: W, h: H, ox, oy } = WORLD;
+  const rand = rng(7);
+  const shown = spots.filter((s) => s.vis !== 'hidden')
+    .map((s) => ({ ...s, x: s.def.map.x + ox, y: s.def.map.y + oy }));
   const owned = shown.filter((s) => s.vis === 'owned');
   const teasers = shown.filter((s) => s.vis === 'teaser');
   const R = 72;
+  const cx = W / 2, cy = H / 2;
+
+  const mountains = Array.from({ length: 70 }, () => {
+    const a = rand() * Math.PI * 2, d = 0.45 + rand() * 0.45;
+    return [cx + Math.cos(a) * W * 0.42 * d, cy + Math.sin(a) * H * 0.4 * d, 30 + rand() * 40];
+  }).filter(([x, y]) => !shown.some((s) => Math.hypot(s.x - x, s.y - y) < 190));
+  const trees = Array.from({ length: 260 }, () => [W * 0.12 + rand() * W * 0.76, H * 0.12 + rand() * H * 0.76, 8 + rand() * 8])
+    .filter(([x, y]) => !shown.some((s) => Math.hypot(s.x - x, s.y - y) < 150));
 
   const terrain = `
-  <rect width="1000" height="700" fill="#e6d3a8"/>
-  <path d="M0 520 Q180 470 360 540 T760 520 T1000 560 V700 H0Z" fill="#d8c08e"/>
-  <path d="M0 150 Q200 110 380 170 T800 120 T1000 150 V0 H0Z" fill="#d2ba88"/>
-  <path d="M-20 300 Q150 330 260 250 T520 230 Q640 220 720 330 T1020 420" fill="none" stroke="#7fb7c4" stroke-width="16" stroke-linecap="round" opacity=".8"/>
-  ${[[120, 120], [180, 90], [860, 90], [910, 130], [820, 600], [150, 610]].map(([x, y]) => `<path d="M${x - 45} ${y + 30} L${x} ${y - 40} L${x + 45} ${y + 30}Z" fill="#b89c6c"/><path d="M${x - 14} ${y - 18} L${x} ${y - 40} L${x + 14} ${y - 18}Z" fill="#f4ecd9"/>`).join('')}
-  ${[[300, 420], [330, 450], [620, 470], [650, 440], [560, 130], [240, 200], [820, 300], [400, 600]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="10" fill="#6f9a73"/><rect x="${x - 2}" y="${y + 8}" width="4" height="10" fill="#7a5a3c"/>`).join('')}
+  <defs>
+    <radialGradient id="sea" cx=".5" cy=".5" r=".75"><stop offset=".5" stop-color="#6fb0c4"/><stop offset="1" stop-color="#3f7f99"/></radialGradient>
+    <pattern id="waves" width="90" height="40" patternUnits="userSpaceOnUse"><path d="M5 20 q12 -10 24 0 t24 0" fill="none" stroke="#a9d6e2" stroke-width="3" opacity=".5"/></pattern>
+  </defs>
+  <rect width="${W}" height="${H}" fill="url(#sea)"/>
+  <rect width="${W}" height="${H}" fill="url(#waves)"/>
+  <path d="${blob(rand, cx, cy, W * 0.46, H * 0.44, 22, 0.12)}" fill="#e9dcb4" stroke="#f6efd6" stroke-width="18"/>
+  <path d="${blob(rand, cx, cy, W * 0.44, H * 0.42, 22, 0.1)}" fill="#e6d3a8"/>
+  <path d="${blob(rand, cx - W * 0.2, cy + H * 0.18, 380, 240)}" fill="#d8c08e"/>
+  <path d="${blob(rand, cx + W * 0.22, cy - H * 0.2, 420, 260)}" fill="#cfe0a8" opacity=".8"/>
+  <path d="${blob(rand, cx - W * 0.25, cy - H * 0.22, 360, 220)}" fill="#bfd49a" opacity=".8"/>
+  <path d="${blob(rand, cx + W * 0.26, cy + H * 0.22, 330, 200)}" fill="#e2c890"/>
+  <path d="${blob(rand, cx + W * 0.08, cy + H * 0.33, 150, 90)}" fill="#7fb7c4" stroke="#b9dde6" stroke-width="6"/>
+  <path d="${blob(rand, cx - W * 0.33, cy - H * 0.02, 120, 80)}" fill="#7fb7c4" stroke="#b9dde6" stroke-width="6"/>
+  <path d="M${W * 0.1} ${cy - 80} Q${ox + 150} ${oy + 330} ${ox + 260} ${oy + 250} T${ox + 520} ${oy + 230} Q${ox + 640} ${oy + 220} ${ox + 720} ${oy + 330} T${W * 0.9} ${cy + 260}" fill="none" stroke="#7fb7c4" stroke-width="20" stroke-linecap="round" opacity=".85"/>
+  ${[[W * 0.15, H * 0.12], [W * 0.82, H * 0.1], [W * 0.88, H * 0.85], [W * 0.1, H * 0.88], [W * 0.5, H * 0.05]].map(([x, y]) =>
+    `<path d="${blob(rand, x, y, 90, 55, 9)}" fill="#e6d3a8" stroke="#f6efd6" stroke-width="8"/><circle cx="${x}" cy="${y - 10}" r="12" fill="#6f9a73"/>`).join('')}
+  ${mountains.map(([x, y, s]) => `<path d="M${x - s} ${y + s * 0.7} L${x} ${y - s} L${x + s} ${y + s * 0.7}Z" fill="#b89c6c"/><path d="M${x} ${y - s} L${x + s} ${y + s * 0.7} L${x + s * 0.2} ${y + s * 0.7}Z" fill="#a38658"/><path d="M${x - s * 0.3} ${y - s * 0.55} L${x} ${y - s} L${x + s * 0.3} ${y - s * 0.55}Z" fill="#f4ecd9"/>`).join('')}
+  ${trees.map(([x, y, r]) => `<rect x="${x - 2}" y="${y + r - 2}" width="4" height="${r}" fill="#7a5a3c"/><circle cx="${x}" cy="${y}" r="${r}" fill="${rand() > 0.5 ? '#6f9a73' : '#5d8a63'}"/>`).join('')}
   ${owned.flatMap((o) => teasers.filter((t) => t.def.map.revealedBy === o.def.id).map((t) =>
-    `<path d="M${o.def.map.x} ${o.def.map.y} Q${(o.def.map.x + t.def.map.x) / 2 + 40} ${(o.def.map.y + t.def.map.y) / 2 + 40} ${t.def.map.x} ${t.def.map.y}" fill="none" stroke="#8a6b45" stroke-width="5" stroke-dasharray="4 12" stroke-linecap="round"/>`)).join('')}`;
+    `<path d="M${o.x} ${o.y} Q${(o.x + t.x) / 2 + 40} ${(o.y + t.y) / 2 + 40} ${t.x} ${t.y}" fill="none" stroke="#8a6b45" stroke-width="5" stroke-dasharray="4 12" stroke-linecap="round"/>`)).join('')}`;
 
-  // Fog: opaque everywhere except soft holes around visible places.
+  // Thick cloud cover everywhere except soft holes around visible places.
+  const puffs = [];
+  for (let y = -60; y < H + 120; y += 110) {
+    for (let x = -80; x < W + 160; x += 150) {
+      const px = x + (rand() - 0.5) * 90, py = y + (rand() - 0.5) * 70;
+      puffs.push([px, py, 90 + rand() * 110, rand()]);
+    }
+  }
   const fog = `
   <defs>
-    <radialGradient id="hole"><stop offset=".55" stop-color="#000"/><stop offset="1" stop-color="#fff"/></radialGradient>
-    <radialGradient id="half"><stop offset=".4" stop-color="#666"/><stop offset="1" stop-color="#fff"/></radialGradient>
+    <radialGradient id="hole"><stop offset=".5" stop-color="#000"/><stop offset="1" stop-color="#fff"/></radialGradient>
+    <radialGradient id="half"><stop offset=".35" stop-color="#777"/><stop offset="1" stop-color="#fff"/></radialGradient>
+    <radialGradient id="puff"><stop offset="0" stop-color="#fff"/><stop offset=".6" stop-color="#f1f4f6"/><stop offset="1" stop-color="#dfe5ea" stop-opacity="0"/></radialGradient>
     <mask id="fogmask">
-      <rect width="1000" height="700" fill="#fff"/>
-      ${owned.map((s) => `<circle cx="${s.def.map.x}" cy="${s.def.map.y}" r="210" fill="url(#hole)"/>`).join('')}
-      ${teasers.map((s) => `<circle cx="${s.def.map.x}" cy="${s.def.map.y}" r="140" fill="url(#half)"/>`).join('')}
+      <rect width="${W}" height="${H}" fill="#fff"/>
+      ${owned.map((s) => `<circle cx="${s.x}" cy="${s.y}" r="230" fill="url(#hole)"/>`).join('')}
+      ${teasers.map((s) => `<circle cx="${s.x}" cy="${s.y}" r="150" fill="url(#half)"/>`).join('')}
     </mask>
-    <filter id="blur"><feGaussianBlur stdDeviation="18"/></filter>
-    ${shown.map((s) => `<clipPath id="clip-${s.def.id}"><circle cx="${s.def.map.x}" cy="${s.def.map.y}" r="${R}"/></clipPath>`).join('')}
+    ${shown.map((s) => `<clipPath id="clip-${s.def.id}"><circle cx="${s.x}" cy="${s.y}" r="${R}"/></clipPath>`).join('')}
   </defs>
   <g mask="url(#fogmask)">
-    <rect width="1000" height="700" fill="#cfd6db" opacity=".97"/>
-    <g filter="url(#blur)" fill="#f2f4f5" opacity=".8">
-      ${[[150, 200, 180], [520, 120, 220], [850, 380, 200], [300, 600, 240], [700, 620, 200], [80, 420, 150]].map(([x, y, r], i) =>
-        `<ellipse cx="${x}" cy="${y}" rx="${r}" ry="${r * 0.45}" class="cloud" style="animation-delay:${i * -3}s"/>`).join('')}
-    </g>
+    <rect width="${W}" height="${H}" fill="#d9dfe4"/>
+    <g>${puffs.map(([x, y, r, k], i) => `<ellipse cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" rx="${r.toFixed(0)}" ry="${(r * 0.62).toFixed(0)}" fill="url(#puff)" class="cloud${k > 0.5 ? ' alt' : ''}" style="animation-delay:${(-(i % 13) * 2.3).toFixed(1)}s"/>`).join('')}</g>
+    <g opacity=".45">${puffs.filter((p) => p[3] > 0.6).map(([x, y, r]) => `<ellipse cx="${(x + 40).toFixed(0)}" cy="${(y + r * 0.35).toFixed(0)}" rx="${(r * 0.9).toFixed(0)}" ry="${(r * 0.3).toFixed(0)}" fill="#c3ccd4"/>`).join('')}</g>
   </g>`;
 
-  const spotsMarkup = shown.map(({ def, vis, scene }) => {
-    const { x, y } = def.map;
+  const spotsMarkup = shown.map(({ def, vis, scene, x, y }) => {
     if (vis === 'owned') {
       const inner = scene.replace('<svg ', `<svg x="${x - R * 1.5}" y="${y - R}" width="${R * 3}" height="${R * 2}" `);
       return `
@@ -133,5 +183,5 @@ export function worldMapSVG(spots) {
       </g>`;
   }).join('');
 
-  return `<svg viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid slice" class="world-map" role="img" aria-label="خريطة العالم">${terrain}${fog}${spotsMarkup}</svg>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" class="world-map" role="img" aria-label="خريطة العالم">${terrain}${fog}${spotsMarkup}</svg>`;
 }
