@@ -269,6 +269,7 @@ export function reportTask(s, charId, taskId, success, { applyPenalty = true, da
     p.streak = 0;
     s.stats.tasksFailed++;
     breakChain(ch); // one missed task breaks the key and level chains
+    ch.defeat = { level: totalLevel(ch), date }; // a crushing defeat at this level (see warStatus)
     if (applyPenalty && task.penalty > 0) loseGold(s, task.penalty, `✘ ${task.title}`, events);
     else addLog(s, `✘ ${task.title} (بدون عقوبة)`);
   }
@@ -366,4 +367,22 @@ export function demoState() {
   s.stats.goldEarned = 100;
   addLog(s, 'مرحبًا بك في No Means No', 100);
   return s;
+}
+
+// ---------- War map (خريطة الحرب) ----------
+// Overall level of a character: 5 levels per stage.
+export const totalLevel = (ch) => (ch.stage || 0) * 5 + (ch.level || 1);
+
+// coming  — the place is not opened yet (حرب قادمة)
+// ongoing — opened, no defeat recorded (حرب مستمرة)
+// crushed — a missed task zeroed the counter at level L, and the character is still at ≤ L (هزيمة ساحقة)
+// fierce  — recovered from a defeat by reaching level L + 1 (حرب طاحنة)
+export function warStatus(s, region) {
+  if (!s.regions[region.id]) return { id: 'coming' };
+  const ch = region.characterId && s.characters[region.characterId];
+  if (!ch) return { id: 'coming' };
+  const lvl = totalLevel(ch);
+  if (!ch.defeat) return { id: 'ongoing', level: lvl };
+  if (lvl <= ch.defeat.level) return { id: 'crushed', level: lvl, defeatLevel: ch.defeat.level, need: ch.defeat.level + 1 };
+  return { id: 'fierce', level: lvl, defeatLevel: ch.defeat.level };
 }

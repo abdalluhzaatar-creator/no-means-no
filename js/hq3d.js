@@ -5,8 +5,10 @@
 import * as THREE from './vendor/three.module.min.js';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { buildWorshipper } from './oasis3d.js';
+import { warMapCanvas } from './warmap.js';
 
 const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...o });
+const box3 = (g, w, h, d, m, x, y, z) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y + h / 2, z); g.add(o); return o; };
 const shadowAll = (o) => o.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
 
 // Hall size
@@ -22,7 +24,7 @@ function canvasTex(w, h, draw, repeat) {
   return t;
 }
 
-export function mountHQ(container, { places, rankIndex, sky: skyInfo, onCommander }) {
+export function mountHQ(container, { places, hq, rankIndex, sky: skyInfo, onCommander, onTable }) {
   let seed = 9; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -188,30 +190,32 @@ export function mountHQ(container, { places, rankIndex, sky: skyInfo, onCommande
     shadowAll(g); scene.add(g);
   }
 
-  // ---------- strategy table ----------
+  // ---------- war table: a long oak table with an unrolled pirate war map ----------
   const table = new THREE.Group(); table.position.set(0, 0, -4); scene.add(table);
-  const tTop = new THREE.Mesh(new THREE.CylinderGeometry(4.8, 4.8, 0.4, 64), woodM); tTop.position.y = 2.2; table.add(tTop);
-  const tBase = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 2.4, 2.1, 20), woodM); tBase.position.y = 1.05; table.add(tBase);
-  const tTrim = new THREE.Mesh(new THREE.TorusGeometry(4.8, 0.1, 8, 64), goldM); tTrim.rotation.x = Math.PI / 2; tTrim.position.y = 2.4; table.add(tTrim);
-  const mapTex = canvasTex(512, 512, (g) => {
-    g.fillStyle = '#2e6f86'; g.fillRect(0, 0, 512, 512);
-    g.fillStyle = '#d9c99a'; g.beginPath(); g.ellipse(256, 256, 210, 180, 0.2, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#7fa35a'; g.beginPath(); g.ellipse(230, 240, 160, 130, 0.3, 0, Math.PI * 2); g.fill();
-    g.strokeStyle = '#3d2d20'; g.globalAlpha = 0.2; for (let i = 0; i < 30; i++) { g.beginPath(); g.arc(256, 256, 20 + i * 8, 0, Math.PI * 2); g.stroke(); }
-  });
-  const mapDisc = new THREE.Mesh(new THREE.CircleGeometry(4.4, 64), new THREE.MeshStandardMaterial({ map: mapTex, roughness: 0.8 })); mapDisc.rotation.x = -Math.PI / 2; mapDisc.position.y = 2.41; table.add(mapDisc);
-  const markers = [];
-  places.forEach((p) => {
-    const x = (p.map.x / 1000 - 0.5) * 6.6, z = (p.map.y / 700 - 0.5) * 5.4;
-    const pin = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.5, 10), std(p.owned ? 0xffc83d : 0x555555, { metalness: p.owned ? 1 : 0, emissive: p.owned ? 0x7a5000 : 0, emissiveIntensity: 0.6 }));
-    pin.rotation.x = Math.PI; pin.position.set(x, 2.7, z); table.add(pin);
-    const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.3), std(p.owned ? 0x2f6f5e : 0x333333, { side: THREE.DoubleSide })); flag.position.set(x + 0.25, 3.05, z); table.add(flag);
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.6, 6), std(0xeeeeee)); pole.position.set(x, 2.95, z); table.add(pole);
-    markers.push({ flag, owned: p.owned });
-  });
+  box3(table, 10, 0.35, 7, woodM, 0, 2.05, 0);
+  const trimG = new THREE.Mesh(new THREE.BoxGeometry(10.2, 0.12, 7.2), goldM); trimG.position.y = 2.02; table.add(trimG);
+  for (const [x, z] of [[-4.4, -3], [4.4, -3], [-4.4, 3], [4.4, 3]]) { const l = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 2.05, 10), woodM); l.position.set(x, 1.02, z); table.add(l); const k = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 8), goldM); k.position.set(x, 0.3, z); table.add(k); }
+  const wm = warMapCanvas(places, hq);
+  const mapTex = new THREE.CanvasTexture(wm.canvas); mapTex.colorSpace = THREE.SRGBColorSpace; mapTex.anisotropy = 8;
+  wm.ready.then(() => { mapTex.needsUpdate = true; });
+  const parchment = new THREE.Mesh(new THREE.PlaneGeometry(8.6, 6), new THREE.MeshStandardMaterial({ map: mapTex, roughness: 0.9, transparent: true }));
+  parchment.rotation.x = -Math.PI / 2; parchment.position.y = 2.42; table.add(parchment);
+  const paperM = std(0xd8bd86, { roughness: 1 });
+  for (const sx of [-1, 1]) { const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 6.2, 16), paperM); roll.rotation.x = Math.PI / 2; roll.position.set(sx * 4.4, 2.6, 0); table.add(roll); }
+  // props: candle, dagger pinning the map, compass, ink pot
+  const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.7, 10), std(0xf5ecd8)); candle.position.set(3.6, 2.75, -2.3); table.add(candle);
+  const cf = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.25, 6), new THREE.MeshBasicMaterial({ color: 0xffb13b, toneMapped: false })); cf.position.set(3.6, 3.22, -2.3); table.add(cf);
+  const dagger = new THREE.Group(); dagger.position.set(-3.4, 2.5, 2.2); dagger.rotation.set(0.3, 0.6, 0.2); table.add(dagger);
+  const blade = new THREE.Mesh(new THREE.ConeGeometry(0.1, 1.4, 4), std(0xcfd4da, { metalness: 1, roughness: 0.2 })); blade.rotation.x = Math.PI; blade.position.y = 0.2; dagger.add(blade);
+  const hilt = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.6, 8), goldM); hilt.position.y = 1.1; dagger.add(hilt);
+  const comp = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.12, 24), goldM); comp.position.set(2.8, 2.47, 2.1); table.add(comp);
+  const ink = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.35, 12), std(0x1a1a2a, { roughness: 0.2 })); ink.position.set(-3.6, 2.57, -2.2); table.add(ink);
+  const quill = new THREE.Mesh(new THREE.ConeGeometry(0.06, 1.1, 6), std(0xf5f5f5)); quill.position.set(-3.5, 2.9, -2.1); quill.rotation.z = 0.5; table.add(quill);
   shadowAll(table);
-  const holo = new THREE.Mesh(new THREE.CylinderGeometry(4.4, 4.4, 3, 48, 1, true), new THREE.MeshBasicMaterial({ color: 0x7fdcff, transparent: true, opacity: 0.06, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
-  holo.position.set(0, 3.9, -4); scene.add(holo);
+  parchment.receiveShadow = true;
+  const markers = [];
+  const holo = new THREE.Mesh(new THREE.BoxGeometry(8.6, 2.5, 6), new THREE.MeshBasicMaterial({ color: 0xffd98a, transparent: true, opacity: 0.03, depthWrite: false, blending: THREE.AdditiveBlending }));
+  holo.position.set(0, 3.5, -4); scene.add(holo);
 
   // ---------- light: chandeliers, braziers, window light ----------
   scene.add(new THREE.HemisphereLight(0xffe2b8, 0x20140c, 0.5));
@@ -254,7 +258,7 @@ export function mountHQ(container, { places, rankIndex, sky: skyInfo, onCommande
 
   // ---------- commander ----------
   const cmd = buildWorshipper({ robe: '#3a4f7a', accent: '#d4a53a', skin: '#f3d3b6', glow: '#ffc83d' });
-  cmd.root.position.set(0, 0, 1.2); cmd.root.rotation.y = 0; scene.add(cmd.root);
+  cmd.root.position.set(0, 0, 1.4); cmd.root.rotation.y = 0; scene.add(cmd.root);
   const spot = new THREE.SpotLight(0xfff0d0, 90, 30, 0.35, 0.6, 1.4); spot.position.set(0, WALL_H - 2, 6); spot.target = cmd.root; spot.castShadow = true; scene.add(spot);
   const insignia = new THREE.Group(); cmd.root.add(insignia);
   // insignia in the character's local space (the model is scaled ×1.6 inside root)
@@ -293,7 +297,8 @@ export function mountHQ(container, { places, rankIndex, sky: skyInfo, onCommande
     const r = renderer.domElement.getBoundingClientRect();
     ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ptr, camera);
-    if (ray.intersectObject(cmd.root, true).length) { if (!cmd.busy()) cmd.wave(); onCommander?.(); }
+    if (ray.intersectObject(cmd.root, true).length) { if (!cmd.busy()) cmd.wave(); onCommander?.(); return; }
+    if (ray.intersectObject(table, true).length) onTable?.();
   });
 
   // Window light follows the real time of day.
@@ -323,7 +328,8 @@ export function mountHQ(container, { places, rankIndex, sky: skyInfo, onCommande
     }
     for (let i = 0; i < EMB; i++) { ep[i * 3 + 1] += dt * (0.2 + es[i] * 0.4); ep[i * 3] += Math.sin(t + i) * dt * 0.1; if (ep[i * 3 + 1] > WALL_H) ep[i * 3 + 1] = 0; }
     dust.geometry.attributes.position.needsUpdate = true;
-    holo.material.opacity = 0.05 + Math.sin(t * 2) * 0.02;
+    holo.material.opacity = 0.025 + Math.sin(t * 2) * 0.015;
+    cf.scale.y = 0.85 + Math.sin(t * 13) * 0.15;
     markers.forEach((m, i) => { if (m.owned) m.flag.rotation.y = Math.sin(t * 3 + i) * 0.3; });
     renderer.render(scene, camera);
     raf = requestAnimationFrame(tick);

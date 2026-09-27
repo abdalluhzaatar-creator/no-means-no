@@ -2,6 +2,7 @@
 import { CHARACTERS, REGIONS, CUPS, JOD_TO_USD } from './content.js';
 import * as C from './cups.js';
 import { commander } from './hq.js';
+import { warMapSVG, WAR } from './warmap.js';
 import * as E from './engine.js';
 import { createStorage } from './storage.js';
 import { characterSVG, regionSVG, worldMapSVG } from './scenes.js';
@@ -80,13 +81,14 @@ function showLogin() {
 // ---------- Modal ----------
 function modal(html, { closable = true } = {}) {
   const m = $('#modal');
+  m.classList.remove('wide');
   $('#modal-body').innerHTML = html;
   m.hidden = false;
   m.dataset.closable = closable;
   $('#modal-close').hidden = !closable;
 }
 let modalRefresh = null;
-function closeModal() { $('#modal').hidden = true; modalRefresh = null; }
+function closeModal() { $('#modal').hidden = true; $('#modal').classList.remove('wide'); modalRefresh = null; }
 // Re-draws an open panel (upgrades / path) after the state it shows changed.
 function refreshModal() { if (modalRefresh && !$('#modal').hidden) { const f = modalRefresh; f(); } }
 
@@ -602,8 +604,7 @@ async function bindHQ() {
     const { mountHQ } = await import('./hq3d.js');
     if (!v.isConnected) return;
     v.querySelector('.w3-loading')?.remove();
-    const places = REGIONS.filter((r) => r.map && r.kind !== 'hq').map((r) => ({ map: r.map, owned: !!state.regions[r.id] }));
-    hqScene = mountHQ(v, { places, rankIndex: cm.rankIndex, sky: skyInfo, onCommander: () => FX.toast(`القائد: ${cm.toNext ? `باقي ${cm.toNext} مستوى للرتبة ${cm.nextRank}` : 'أعلى رتبة! 🫡'}`) });
+    hqScene = mountHQ(v, { places: warPlaces(), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, sky: skyInfo, onTable: showWarMap, onCommander: () => FX.toast(`القائد: ${cm.toNext ? `باقي ${cm.toNext} مستوى للرتبة ${cm.nextRank}` : 'أعلى رتبة! 🫡'}`) });
   } catch (err) { console.warn('3D HQ unavailable', err); v.innerHTML = ''; }
 }
 // Celebrate when the commander's level went up since the last look.
@@ -612,6 +613,51 @@ function checkCommander() {
   if (lastCmdLevel != null && cm.level > lastCmdLevel) FX.banner(`ترقية القائد — ${cm.rank}`, `وصل القائد للمستوى ${cm.level}`, '🫡');
   lastCmdLevel = cm.level;
 }
+// The eight dimensions with their war status.
+const warPlaces = () => REGIONS.filter((r) => r.characterId).map((r) => {
+  const w = E.warStatus(state, r);
+  return { id: r.id, name: r.name, map: r.map, status: w.id, level: w.level, info: w };
+});
+
+function showWarMap() {
+  const places = warPlaces();
+  const count = (id) => places.filter((p) => p.status === id).length;
+  modal(`
+    <div class="war-wrap">${warMapSVG(places, E.findRegion('hq').map)}</div>
+    <div class="war-legend">${Object.entries(WAR).map(([id, w]) => `<span style="--c:${w.color}">${w.icon} ${w.name} <b>${count(id)}</b></span>`).join('')}</div>
+    <p class="muted small-text">اضغط على أي جبهة لترى حالتها.</p>`);
+  $('#modal').classList.add('wide');
+  modalRefresh = showWarMap;
+  document.querySelectorAll('.war-map [data-war]').forEach((el) => (el.onclick = () => showFront(el.dataset.war)));
+}
+
+function showFront(id) {
+  const r = E.findRegion(id), p = warPlaces().find((x) => x.id === id), w = WAR[p.status];
+  const c = E.findCharacter(r.characterId), ch = state.characters[c.id];
+  const why = {
+    coming: `افتح ${r.name} من المتجر (🗝 ${r.cost?.keys || 0}) لتبدأ هذه الحرب.`,
+    ongoing: `${c.name} يقاتل في المستوى ${p.level} دون هزيمة. حافظ على العدّاد.`,
+    fierce: `هُزمت عند المستوى ${p.info.defeatLevel}، ثم نهضت ووصلت المستوى ${p.level}. القتال شرس — لا تتراجع.`,
+    crushed: `انكسر العدّاد إلى الصفر عند المستوى ${p.info.defeatLevel}. لتعود إلى حرب طاحنة يجب أن تصل المستوى ${p.info.need}.`,
+  }[p.status];
+  modal(`
+    <div class="front" style="--c:${w.color}">
+      <div class="front-badge">${w.icon}</div>
+      <h2>${r.name}</h2>
+      <div class="front-status">${w.name}</div>
+      <p>${why}</p>
+      ${ch ? `<div class="meter dark"><span class="meter-label">📅 أيام نحو المستوى التالي</span><b><bdi>${E.liveProgress(ch, dayFor(c.id)).levelDays}/${c.daysPerLevel || 15}</bdi></b><div class="xp"><span style="width:${Math.round((E.liveProgress(ch, dayFor(c.id)).levelDays / (c.daysPerLevel || 15)) * 100)}%"></span></div></div>` : ''}
+      <div class="row wrap">
+        <button class="btn ghost" id="back-map">← الخريطة</button>
+        ${ch ? `<button class="btn primary" id="go-front">اذهب إلى الجبهة</button>` : `<button class="btn primary" id="go-front">المتجر</button>`}
+      </div>
+    </div>`);
+  $('#modal').classList.add('wide');
+  $('#back-map').onclick = showWarMap;
+  $('#go-front').onclick = () => (ch ? enter(c.id) : go('shop'));
+}
+
+let reportOpen = false;
 function hqHUD() {
   const cm = commander(state);
   const won = C.wonCups(state).length;
@@ -628,8 +674,9 @@ function hqHUD() {
   </div>
   <button class="hud-chip view-toggle" data-view-mode title="إخفاء اللوحات لمشاهدة القاعة">👁 مشاهدة</button>
   <aside class="cup-side">
-    <div class="challenge-card report">
-      <b class="report-title">📋 تقرير القائد</b>
+    <button class="hud-chip warmap-btn" data-war-map>🗺 خريطة الحرب</button>
+    <div class="challenge-card report ${reportOpen ? 'open' : ''}">
+      <button class="report-title" data-toggle-report>📋 تقرير القائد <span>${reportOpen ? '▴' : '▾'}</span></button>
       <small class="muted-w">مستواه يرتفع لحاله: +2 لكل مكان تفتحه، و+1 لكل مستوى تطوّره بأي شخصية.</small>
       <div class="report-row"><span>🗺 الأماكن المفتوحة</span><b>${cm.opened.length} / ${cm.places.length}</b><em>+${cm.fromPlaces}</em></div>
       <ul class="report-list">${cm.places.map((r) => `<li class="${state.regions[r.id] ? 'on' : ''}">${state.regions[r.id] ? '✔' : '🔒'} ${r.name}</li>`).join('')}</ul>
@@ -640,6 +687,7 @@ function hqHUD() {
     </div>
   </aside>
   <div class="dock">
+    <button class="dock-btn" data-war-map>🗺<span>خريطة الحرب</span></button>
     <button class="dock-btn" data-go="shop">🛒<span>افتح مكانًا</span></button>
     <button class="dock-btn" data-go="trophies">🏆<span>الكؤوس</span></button>
     <button class="dock-btn" data-go="world">🗺<span>العالم</span></button>
@@ -931,6 +979,8 @@ function bind() {
   on('data-open-path', showPath);
   on('data-open-atmo', showAtmosphere);
   on('data-cup-picker', showCupPicker);
+  on('data-war-map', showWarMap);
+  on('data-toggle-report', () => { reportOpen = !reportOpen; render(); });
   on('data-view-mode', () => document.body.classList.toggle('view-mode'));
   on('data-cup-rules', showCupRules);
   on('data-cup-history', showCupHistory);

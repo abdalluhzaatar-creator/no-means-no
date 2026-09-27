@@ -169,4 +169,17 @@ t('after midnight, Isha still belongs to the previous prayer day', () => {
   assert.equal(P.windowState(pd.windows.isha, now), 'open');
 });
 
+t('war status: coming → ongoing → crushed on a miss → fierce after one more level', () => {
+  const s = E.newState();
+  const lib = E.findRegion('library'), san = E.findRegion('sanctuary');
+  assert.equal(E.warStatus(s, lib).id, 'coming');
+  assert.equal(E.warStatus(s, san).id, 'ongoing');
+  E.reportTask(s, W, 'fajr', false, { date: day(1) });
+  const st = E.warStatus(s, san);
+  assert.equal(st.id, 'crushed'); assert.equal(st.need, 2);
+  s.characters[W].levelReady = true; s.keys = 1;
+  assert.ok(E.levelUpCharacter(s, W).ok);
+  assert.equal(E.warStatus(s, san).id, 'fierce');
+});
+
 console.log(`\n${passed} tests passed`);

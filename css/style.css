@@ -450,3 +450,25 @@ body.view-mode .hud .cup-side, body.view-mode .hud .dock, body.view-mode .hud .h
 body.view-mode .view-toggle { background: #ffc83d; color: #2a2210; }
 @media (max-width: 720px) { .view-toggle { bottom: auto; top: 150px; inset-inline-start: 10px; } }
 body.in-store { min-height: 100vh; background-attachment: fixed; }
+
+/* Collapsible commander report */
+.report-title { display: flex; justify-content: space-between; align-items: center; width: 100%; background: none; border: 0; color: #fff; font: inherit; font-weight: 800; font-size: 1.1rem; cursor: pointer; padding: 0; }
+.challenge-card.report:not(.open) > :not(.report-title) { display: none; }
+.warmap-btn { cursor: pointer; justify-self: start; border-color: #d6b57a !important; color: #f6e7c4 !important; }
+/* War map */
+.modal.wide .modal-box { max-width: min(1100px, 96vw); width: 96vw; background: #2a1c10; color: #f6e7c4; }
+.modal.wide .modal-close { color: #f6e7c4; }
+.war-wrap { overflow: auto; }
+.war-map { display: block; width: 100%; height: auto; min-width: 640px; }
+.wm-spot { cursor: pointer; }
+.wm-spot:hover circle, .wm-spot:focus circle { filter: brightness(1.08); }
+.war-legend { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 10px; }
+.war-legend span { border: 2px solid var(--c); border-radius: 99px; padding: 4px 12px; font-weight: 700; background: #f6e7c410; }
+.war-legend b { color: #ffe7a8; }
+.front { text-align: center; display: grid; gap: 8px; justify-items: center; }
+.front-badge { font-size: 3rem; width: 90px; height: 90px; display: grid; place-items: center; border-radius: 50%; background: #f6e7c4; border: 5px solid var(--c); }
+.front h2 { margin: 0; color: #ffe7a8; }
+.front-status { background: var(--c); color: #fff; font-weight: 800; padding: 4px 16px; border-radius: 99px; }
+.front p { max-width: 480px; }
+.front .meter { width: min(360px, 90%); color: #f6e7c4; }
+.front .btn.ghost { color: #f6e7c4; border-color: #f6e7c455; }

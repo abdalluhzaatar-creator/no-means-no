@@ -9,6 +9,9 @@ export const RANKS = [
 
 // Item costs are objects: { gold?: number, keys?: number }.
 
+// Generic path for characters whose levels add no extra tasks yet.
+const plainStages = () => [{ id: 'start', name: 'البداية', levels: Array.from({ length: 5 }, () => ({ adds: [] })) }, ...RANKS.map((r) => ({ ...r, levels: null }))];
+
 export const CHARACTERS = [
   {
     id: 'worshipper',
@@ -61,6 +64,9 @@ export const CHARACTERS = [
       { id: 'learn', title: 'تعلّم شيء جديد لمدة 20 دقيقة', reward: 25, penalty: 10 },
       { id: 'review', title: 'مراجعة ما تعلّمته اليوم', reward: 20, penalty: 10 },
     ],
+    keyEveryDays: 15,
+    daysPerLevel: 15,
+    stages: plainStages(),
     palette: { robe: '#2f4a6d', accent: '#c9a45c', skin: '#f0cfae', glow: '#9cc3e8' },
   },
   {
@@ -75,6 +81,9 @@ export const CHARACTERS = [
       { id: 'water', title: 'شرب 8 أكواب ماء', reward: 20, penalty: 10 },
       { id: 'sleep', title: 'نوم 7 ساعات', reward: 20, penalty: 10 },
     ],
+    keyEveryDays: 15,
+    daysPerLevel: 15,
+    stages: plainStages(),
     palette: {'robe': '#c0392b', 'accent': '#f5f5f5', 'skin': '#f0cfae', 'glow': '#ff7a5c'},
   },
   {
@@ -89,6 +98,9 @@ export const CHARACTERS = [
       { id: 'calm', title: '5 دقائق تنفّس وهدوء', reward: 20, penalty: 10 },
       { id: 'gratitude', title: 'ذكر 3 نعم تشكر عليها', reward: 20, penalty: 10 },
     ],
+    keyEveryDays: 15,
+    daysPerLevel: 15,
+    stages: plainStages(),
     palette: {'robe': '#e8a0b8', 'accent': '#8e3b5e', 'skin': '#f3d3b6', 'glow': '#ffb3cc'},
   },
   {
@@ -103,6 +115,9 @@ export const CHARACTERS = [
       { id: 'friend', title: 'التواصل مع صديق', reward: 20, penalty: 10 },
       { id: 'help', title: 'مساعدة شخص', reward: 20, penalty: 10 },
     ],
+    keyEveryDays: 15,
+    daysPerLevel: 15,
+    stages: plainStages(),
     palette: {'robe': '#e0a93b', 'accent': '#6b3f1d', 'skin': '#f0cfae', 'glow': '#ffd66b'},
   },
   {
@@ -117,6 +132,9 @@ export const CHARACTERS = [
       { id: 'plan', title: 'تخطيط مهام الغد', reward: 20, penalty: 10 },
       { id: 'skill', title: 'تطوير مهارة مهنية', reward: 20, penalty: 10 },
     ],
+    keyEveryDays: 15,
+    daysPerLevel: 15,
+    stages: plainStages(),
     palette: {'robe': '#34495e', 'accent': '#e67e22', 'skin': '#f0cfae', 'glow': '#f5a35c'},
   },
   {
@@ -131,6 +149,9 @@ export const CHARACTERS = [
       { id: 'save', title: 'ادخار مبلغ ولو صغير', reward: 20, penalty: 10 },
       { id: 'nowaste', title: 'يوم بلا شراء غير ضروري', reward: 20, penalty: 10 },
     ],
+    keyEveryDays: 15,
+    daysPerLevel: 15,
+    stages: plainStages(),
     palette: {'robe': '#1e6b52', 'accent': '#ffc83d', 'skin': '#f0cfae', 'glow': '#ffe07a'},
   },
   {
@@ -145,6 +166,9 @@ export const CHARACTERS = [
       { id: 'outside', title: '15 دقيقة في الطبيعة', reward: 20, penalty: 10 },
       { id: 'reduce', title: 'تقليل الهدر (بلاستيك/ماء/كهرباء)', reward: 20, penalty: 10 },
     ],
+    keyEveryDays: 15,
+    daysPerLevel: 15,
+    stages: plainStages(),
     palette: {'robe': '#4f7a2e', 'accent': '#8b5a2b', 'skin': '#f0cfae', 'glow': '#9fe37a'},
   },
 
