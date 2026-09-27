@@ -82,7 +82,10 @@ function modal(html, { closable = true } = {}) {
   m.dataset.closable = closable;
   $('#modal-close').hidden = !closable;
 }
-function closeModal() { $('#modal').hidden = true; }
+let modalRefresh = null;
+function closeModal() { $('#modal').hidden = true; modalRefresh = null; }
+// Re-draws an open panel (upgrades / path) after the state it shows changed.
+function refreshModal() { if (modalRefresh && !$('#modal').hidden) { const f = modalRefresh; f(); } }
 
 // In-page confirm (native confirm() can be blocked inside embedded frames).
 function ask(text, onYes) {
@@ -100,10 +103,22 @@ function render() {
   $('#keys').textContent = state.keys;
   const navScreen = screen === 'character' ? 'world' : screen;
   document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.screen === navScreen));
+  document.body.classList.toggle('in-scene', screen === 'character' && sceneFor(currentChar));
+  // A live 3D place only refreshes its overlay, so animations and camera survive.
+  if (screen === 'character' && oasis && oasis.char === currentChar && $('#place-view')) {
+    $('#hud').innerHTML = placeHUD();
+    oasis.scene.update(placeState());
+    bind(); refreshModal();
+    return;
+  }
+  if (screen === 'world' && disposeWorld && worldKey === worldSignature() && $('#world-view')) { bind(); return; }
+  oasis?.scene.dispose(); oasis = null;
   const view = { world: renderWorld, character: renderCharacter, shop: renderShop }[screen];
   $('#screen').innerHTML = view();
   bind();
   bindWorld();
+  bindPlace();
+  refreshModal();
 }
 
 // ---------- Prayer times ----------
@@ -217,10 +232,13 @@ function renderWorld() {
 
 // The 3D world is mounted after the screen HTML is in place; falls back to the flat map.
 let worldSpots = [], disposeWorld = null;
+let worldKey = '';
+const worldSignature = () => REGIONS.map((r) => E.mapVisibility(state, r)).join();
 async function bindWorld() {
   disposeWorld?.(); disposeWorld = null;
   const v = $('#world-view');
   if (!v) return;
+  worldKey = worldSignature();
   try {
     const { mountWorld } = await import('./world3d.js');
     if (!v.isConnected) return;
@@ -305,9 +323,117 @@ function showRanks(id) {
     }).join('')}</ol>`);
 }
 
-// Inside a character: its scene, daily tasks, progression, and place upgrades (gold).
+// Inside a character: a 3D place with the character, and a game HUD over it.
+// Places without a 3D scene yet use the classic layout.
+const sceneFor = (charId) => charId === 'worshipper';
+let oasis = null;
+let questsCollapsed = matchMedia('(max-width: 720px)').matches;
+const placeState = () => {
+  const c = E.findCharacter(currentChar), ch = state.characters[c.id];
+  return { features: E.regionFeatures(state, c.regionId), level: artLevel(ch) };
+};
+
+async function bindPlace() {
+  const v = $('#place-view');
+  if (!v) return;
+  const c = E.findCharacter(currentChar);
+  try {
+    const { mountOasis } = await import('./oasis3d.js');
+    if (!v.isConnected) return;
+    v.querySelector('.w3-loading')?.remove();
+    const scene = mountOasis(v, { palette: c.palette, ...placeState(), onCharacter: () => FX.toast(`${c.name}: ${randomLine()}`) });
+    oasis = { char: c.id, scene };
+  } catch (err) {
+    console.warn('3D place unavailable', err);
+    v.innerHTML = `<div class="hero-scene">${regionSVG(E.findRegion(c.regionId), E.regionFeatures(state, c.regionId), characterSVG(c, artLevel(state.characters[c.id]), { size: 80 }))}</div>`;
+  }
+}
+const LINES = ['الحمد لله', 'حيّ على الصلاة', 'اللهم أعنّي على ذكرك وشكرك', 'سبحان الله وبحمده', 'الصلاة نور'];
+const randomLine = () => LINES[Math.floor(Math.random() * LINES.length)];
+
+const PRAYER_NAMES = { fajr: 'الفجر', dhuhr: 'الظهر', asr: 'العصر', maghrib: 'المغرب', isha: 'العشاء' };
+function prayerNowLine() {
+  const pd = prayerNow();
+  if (!pd) return '';
+  const now = new Date();
+  const open = Object.entries(pd.windows).find(([, w]) => windowState(w, now) === 'open');
+  if (open) return `<div class="hud-chip now">🕌 وقت ${PRAYER_NAMES[open[0]]} الآن · حتى ${fmtTime(open[1].end)}</div>`;
+  const next = Object.entries(pd.windows).find(([, w]) => windowState(w, now) === 'upcoming');
+  return next ? `<div class="hud-chip">⏳ ${PRAYER_NAMES[next[0]]} ${fmtTime(next[1].start)}</div>` : '';
+}
+
+function placeHUD() {
+  const c = E.findCharacter(currentChar);
+  const ch = state.characters[c.id];
+  const r = E.findRegion(c.regionId);
+  const stage = c.stages?.[ch.stage];
+  const tasks = E.activeTasks(c, ch);
+  const date = dayFor(c.id);
+  const done = tasks.filter((t) => E.taskDoneToday(E.taskProgress(state, c.id, t.id), date)).length;
+  const live = c.stages ? E.liveProgress(ch, date) : null;
+  const best = Math.max(0, ...tasks.map((t) => E.currentStreak(E.taskProgress(state, c.id, t.id), date)));
+  const next = E.nextRegionUpgrade(state, r.id);
+  return `
+  <div class="hud-top">
+    <button class="hud-btn" data-go="world" aria-label="العودة للعالم">→ العالم</button>
+    <div class="plate">
+      <div class="plate-avatar" style="--glow:${c.palette.glow}">☪</div>
+      <div class="plate-body">
+        <div class="plate-name">${c.name} <span class="plate-place">· ${r.name}</span></div>
+        <div class="plate-row">
+          ${stage ? `<button class="rank" data-ranks="${c.id}" style="--rank:${stage.color || 'var(--primary)'}">${esc(stage.name)} · ${ch.level}</button>` : ''}
+          <span class="plate-streak" title="أطول سلسلة">🔥 ${best}</span>
+        </div>
+        ${live ? `<div class="xp" title="أيام كاملة متتالية للمستوى"><span style="width:${Math.round(((ch.levelReady ? c.daysPerLevel : live.levelDays) / c.daysPerLevel) * 100)}%"></span></div>` : ''}
+      </div>
+    </div>
+    ${prayerNowLine()}
+  </div>
+
+  <aside class="quests ${questsCollapsed ? 'collapsed' : ''}" id="quests">
+    <button class="quests-head" data-toggle-quests>
+      <span>📜 مهام اليوم</span><b>${done} / ${tasks.length}</b>
+    </button>
+    <ul class="tasks">${tasks.map((t) => taskRow(c.id, t)).join('')}</ul>
+  </aside>
+
+  <div class="dock">
+    <button class="dock-btn" data-open-upgrades>🛠<span>طوّر ${r.name}</span>${next && state.gold >= next.cost ? '<i class="dot"></i>' : ''}</button>
+    ${c.stages ? `<button class="dock-btn" data-open-path>🧭<span>طريق ${c.name}</span>${ch.levelReady && state.keys >= 1 ? '<i class="dot"></i>' : ''}</button>` : ''}
+    ${c.id === 'worshipper' ? `<button class="dock-btn" data-pick-location>📍<span>${state.location ? esc(state.location.name) : 'مدينتك'}</span></button>` : ''}
+  </div>`;
+}
+
+function showUpgrades() {
+  const c = E.findCharacter(currentChar);
+  const r = E.findRegion(c.regionId);
+  const region = state.regions[r.id];
+  const next = E.nextRegionUpgrade(state, r.id);
+  modal(`
+    <h2>🛠 طوّر ${r.name} <span class="lvl">مستوى ${region.level}</span></h2>
+    <p class="muted">كل تطوير يظهر في المكان نفسه.</p>
+    <div class="upgrade-list">
+      ${r.upgrades.map((u) => `<div class="upg ${u.level <= region.level ? 'have' : ''}">${u.level <= region.level ? '✔' : '○'} ${u.label} <small>${goldTxt(u.cost)}</small></div>`).join('')}
+    </div>
+    ${next ? `<button class="btn primary" data-upgrade="${r.id}" ${state.gold < next.cost ? 'disabled' : ''}>طوّر: ${next.label} — ${goldTxt(next.cost)}</button>` : '<span class="muted">المكان مكتمل ✨</span>'}`);
+  modalRefresh = showUpgrades;
+  bind();
+}
+
+function showPath() {
+  const c = E.findCharacter(currentChar);
+  modal(progressionPanel(c, state.characters[c.id]).replace('<section class="card">', '<section>'));
+  modalRefresh = showPath;
+  bind();
+}
+
 function renderCharacter() {
   const c = E.findCharacter(currentChar);
+  if (sceneFor(c.id)) {
+    return `
+    <div class="place-view" id="place-view"><div class="w3-loading">جارٍ تحميل ${E.findRegion(c.regionId).name}…</div></div>
+    <div class="hud" id="hud">${placeHUD()}</div>`;
+  }
   const ch = state.characters[c.id];
   const r = E.findRegion(c.regionId);
   const region = state.regions[r.id];
@@ -396,7 +522,15 @@ function bind() {
     if (!ok) { FX.toast('ليس وقت هذه الصلاة', 'err'); render(); }
     return ok;
   };
-  on('data-task-ok', (v, el) => { const [c, t] = v.split(':'); if (inWindow(c, t)) act(E.reportTask(state, c, t, true, { date: dayFor(c) }), el); });
+  on('data-task-ok', (v, el) => {
+    const [c, t] = v.split(':');
+    if (!inWindow(c, t)) return;
+    const r = act(E.reportTask(state, c, t, true, { date: dayFor(c) }), el);
+    if (r.ok && oasis?.char === c) oasis.scene.pray();
+  });
+  on('data-open-upgrades', showUpgrades);
+  on('data-open-path', showPath);
+  on('data-toggle-quests', () => { questsCollapsed = !questsCollapsed; $('#quests')?.classList.toggle('collapsed', questsCollapsed); });
   on('data-pick-location', pickLocation);
   on('data-task-fail', (v) => {
     const [c, t] = v.split(':');
