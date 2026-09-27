@@ -173,3 +173,37 @@ export function setScene(patch) {
   scene.outdoor = scene.screen !== 'hq' && scene.screen !== 'shop';
   updateAmbience();
 }
+
+// ---------- inner child crying (continuous, volume by distance) ----------
+let cry = null;
+export function setCry(level) {
+  if (!ensure()) return;
+  level = S.enabled ? Math.max(0, Math.min(1, level)) : 0;
+  if (!cry && level > 0.001) {
+    const o = ctx.createOscillator(), lfo = ctx.createOscillator(), lg = ctx.createGain(), f1 = ctx.createBiquadFilter(), f2 = ctx.createBiquadFilter(), g = ctx.createGain(), env = ctx.createGain();
+    o.type = 'sawtooth'; o.frequency.value = 420;
+    lfo.frequency.value = 6; lg.gain.value = 18; lfo.connect(lg); lg.connect(o.frequency);   // trembling voice
+    f1.type = 'bandpass'; f1.frequency.value = 1100; f1.Q.value = 6;
+    f2.type = 'bandpass'; f2.frequency.value = 2600; f2.Q.value = 8;
+    o.connect(f1); o.connect(f2); f1.connect(env); f2.connect(env); env.connect(g); g.connect(bus.ambience);
+    env.gain.value = 0; g.gain.value = 0; o.start(); lfo.start();
+    // Sobbing pattern: rising "waa", falling tail, gasps.
+    const sob = () => {
+      if (!cry) return;
+      const t = now(), len = 0.9 + Math.random() * 0.8, base = 380 + Math.random() * 80;
+      o.frequency.cancelScheduledValues(t);
+      o.frequency.setValueAtTime(base, t); o.frequency.linearRampToValueAtTime(base * 1.35, t + 0.25); o.frequency.exponentialRampToValueAtTime(base * 0.8, t + len);
+      env.gain.cancelScheduledValues(t); env.gain.setValueAtTime(0, t); env.gain.linearRampToValueAtTime(0.9, t + 0.12); env.gain.setValueAtTime(0.9, t + len * 0.6); env.gain.exponentialRampToValueAtTime(0.001, t + len);
+      if (Math.random() < 0.5) noise({ dur: 0.18, vol: 0.12 * cry.level, freq: 1800, q: 1, at: len + 0.1, b: 'ambience' }); // gasp
+      cry.timer = setTimeout(sob, (len + 0.35 + Math.random() * 0.6) * 1000);
+    };
+    cry = { o, lfo, g, level: 0 }; sob();
+  }
+  if (cry) {
+    cry.level = level;
+    cry.g.gain.setTargetAtTime(level * 0.22 * S.ambience, now(), 0.2);
+    if (level <= 0.001) { const c = cry; cry = null; clearTimeout(c.timer); setTimeout(() => { try { c.o.stop(); c.lfo.stop(); } catch {} }, 400); }
+  }
+}
+export const creak = () => { if (!ensure()) return; tone({ f: 90, f2: 60, dur: 1.4, vol: 0.2, type: 'sawtooth', attack: 0.2 }); noise({ dur: 1.2, vol: 0.15, freq: 400, q: 3, attack: 0.3 }); noise({ dur: 0.5, vol: 0.3, freq: 150, filter: 'lowpass', at: 1.2 }); };
+export const chains = () => { if (!ensure()) return; for (let i = 0; i < 5; i++) tone({ f: 2000 + Math.random() * 1500, dur: 0.12, vol: 0.05, at: i * 0.07, type: 'square', b: 'ambience' }); };

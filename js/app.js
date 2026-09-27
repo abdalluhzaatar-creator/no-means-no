@@ -126,7 +126,7 @@ function render() {
   }
   if (screen === 'hq' && hqScene && $('#hq-view')) {
     $('#hud').innerHTML = hqHUD();
-    hqScene.update(commander(state));
+    hqScene.update({ ...commander(state), ...innerState() });
     bind(); refreshModal();
     return;
   }
@@ -643,7 +643,7 @@ async function bindHQ() {
     const { mountHQ } = await import('./hq3d.js');
     if (!v.isConnected) return;
     v.querySelector('.w3-loading')?.remove();
-    hqScene = mountHQ(v, { places: warPlaces(), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, sky: skyInfo, onTable: showWarMap, onCommander: () => FX.toast(`القائد: ${cm.toNext ? `باقي ${cm.toNext} مستوى للرتبة ${cm.nextRank}` : 'أعلى رتبة! 🫡'}`) });
+    hqScene = mountHQ(v, { places: warPlaces(), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, ...innerState(), onRoom: (r) => document.body.classList.toggle('in-dungeon', r === 'dungeon'), sky: skyInfo, onTable: showWarMap, onCommander: () => FX.toast(`القائد: ${cm.toNext ? `باقي ${cm.toNext} مستوى للرتبة ${cm.nextRank}` : 'أعلى رتبة! 🫡'}`) });
   } catch (err) { console.warn('3D HQ unavailable', err); v.innerHTML = ''; }
 }
 // Celebrate when the commander's level went up since the last look.
@@ -698,6 +698,25 @@ function showFront(id) {
 }
 
 let reportOpen = false;
+
+// The two prisoners of the dungeon (0..1).
+// Future self: grows with every character level and every opened place, rewarded
+// for fierce wars won back, held back by crushed defeats.
+// Inner child: grows with self-respect in action — won challenge cups (keeping your
+// word to yourself), recovering from defeats, and the commander's rank.
+function innerState() {
+  const places = warPlaces();
+  const crushed = places.filter((p) => p.status === 'crushed').length;
+  const fierce = places.filter((p) => p.status === 'fierce').length;
+  const levels = CHARACTERS.reduce((a, c) => { const ch = state.characters[c.id]; return a + (ch ? E.totalLevel(ch) - 1 : 0); }, 0);
+  const opened = places.filter((p) => p.status !== 'coming').length;
+  const cups = C.wonCups(state).length;
+  const clamp = (x) => Math.max(0, Math.min(1, x));
+  return {
+    future: clamp((levels * 2 + (opened - 1) * 3 + fierce * 3 - crushed * 4) / 60),
+    child: clamp((cups * 8 + fierce * 3 + commander(state).rankIndex * 3 - crushed * 5) / 60),
+  };
+}
 function hqHUD() {
   const cm = commander(state);
   const won = C.wonCups(state).length;

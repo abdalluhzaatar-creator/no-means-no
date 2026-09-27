@@ -3,7 +3,9 @@
 // a throne on a stepped dais, great doors, and the strategy table with the commander.
 // The camera orbits freely (360°) inside the hall.
 import * as THREE from './vendor/three.module.min.js';
-import { OrbitControls } from './vendor/OrbitControls.js';
+import { createWalker } from './walker.js';
+import { buildDungeon, DX, D } from './dungeon3d.js';
+import { setCry, creak, chains } from './audio.js';
 import { buildWorshipper } from './oasis3d.js';
 import { warMapCanvas } from './warmap.js';
 
@@ -24,7 +26,7 @@ function canvasTex(w, h, draw, repeat) {
   return t;
 }
 
-export function mountHQ(container, { places, hq, rankIndex, sky: skyInfo, onCommander, onTable }) {
+export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 0, sky: skyInfo, onCommander, onTable, onRoom }) {
   let seed = 9; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -271,24 +273,63 @@ export function mountHQ(container, { places, hq, rankIndex, sky: skyInfo, onComm
   };
   setRank(rankIndex);
 
-  // ---------- camera: free 360° orbit, kept inside the hall ----------
-  camera.position.set(9, 7, 22);
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, 4.5, -2);
-  controls.enableDamping = true; controls.dampingFactor = 0.06;
-  controls.enablePan = true; controls.screenSpacePanning = false; controls.panSpeed = 0.8;
-  controls.minDistance = 4; controls.maxDistance = 28;
-  controls.maxPolarAngle = THREE.MathUtils.degToRad(88);
-  controls.autoRotate = true; controls.autoRotateSpeed = 0.2;
-  renderer.domElement.addEventListener('pointerdown', () => { controls.autoRotate = false; }, { once: true });
-  const keepInside = () => {
-    const lim = (v, a) => Math.max(-a, Math.min(a, v));
-    controls.target.x = lim(controls.target.x, 8); controls.target.z = lim(controls.target.z, HL - 3); controls.target.y = lim(controls.target.y, 20) || 1;
-    camera.position.x = lim(camera.position.x, HW - 1); camera.position.z = lim(camera.position.z, HL - 1);
-    camera.position.y = Math.max(0.8, Math.min(WALL_H + HW * 0.6, camera.position.y));
-    // Never stand inside the colonnade (columns and hanging banners at x = ±13).
-    camera.position.x = lim(camera.position.x, 10.5);
+  // ---------- walking: the commander moves around the hall ----------
+  const dungeon = buildDungeon(scene);
+  dungeon.setFuture(future); dungeon.setChild(child);
+  const inHall = (x, z) => {
+    if (Math.abs(x) > 10.5 || z > HL - 1.2 || z < -HL + 12) return true;          // nave walls, doors, dais
+    if (Math.abs(x) < 5.6 && z > -8 && z < 0) return true;                          // war table
+    for (const [bx, bz] of [[-7, -9], [7, -9], [-7, 1], [7, 1]]) if (Math.hypot(x - bx, z - bz) < 1.2) return true; // braziers
+    return false;
   };
+  const inDungeon = (x, z) => {
+    x -= DX;
+    if (Math.abs(x) > D.hw - 1.2 || z > D.hl - 1.5 || z < -D.hl + 10.8) return true;   // walls and cell bars
+    for (const sx of [-1, 1]) for (const pz of [-12, 0, 12]) if (Math.abs(x - sx * 15) < 1.6 && Math.abs(z - pz) < 1.6) return true;
+    return false;
+  };
+  const walker = createWalker({ hero: cmd, camera, dom: renderer.domElement, container, blocked: inHall, dist: 9, height: 2.6 });
+  walker.teleport(0, 6, 0);   // facing the great doors
+  let room = 'hall';
+  const clampHall = (p) => { p.x = Math.max(-10.5, Math.min(10.5, p.x)); p.z = Math.max(-HL + 2, Math.min(HL - 1, p.z)); p.y = Math.max(0.8, Math.min(WALL_H + 6, p.y)); };
+  const clampDungeon = (p) => { p.x = Math.max(DX - D.hw + 1, Math.min(DX + D.hw - 1, p.x)); p.z = Math.max(-D.hl + 10, Math.min(D.hl - 1, p.z)); p.y = Math.max(0.8, Math.min(14, p.y)); };
+  walker.setCameraClamp(clampHall);
+
+  // Door prompt: near the great doors (hall) or the iron door (dungeon).
+  const prompt = document.createElement('button'); prompt.className = 'door-btn'; prompt.hidden = true; container.appendChild(prompt);
+  const fade = document.createElement('div'); fade.className = 'room-fade'; container.appendChild(fade);
+  const caption = document.createElement('div'); caption.className = 'cell-caption'; caption.hidden = true; container.appendChild(caption);
+  const go = (to) => {
+    fade.classList.add('on'); creak();
+    setTimeout(() => {
+      room = to;
+      if (to === 'dungeon') { walker.teleport(DX, D.hl - 4, Math.PI); walker.setBlocked(inDungeon); walker.setCameraClamp(clampDungeon); scene.fog.color.set(0x0a0806); scene.fog.density = 0.03; chains(); }
+      else { walker.teleport(0, HL - 5, Math.PI); walker.setBlocked(inHall); walker.setCameraClamp(clampHall); scene.fog.color.set(0x1a120c); scene.fog.density = 0.012; setCry(0); }
+      onRoom?.(to);
+      setTimeout(() => fade.classList.remove('on'), 150);
+    }, 700);
+  };
+  prompt.onclick = () => go(room === 'hall' ? 'dungeon' : 'hall');
+  let childLevel = child, futureLevel = future;
+  const updatePrompts = () => {
+    const p = cmd.root.position; if (window.__nmnDebug) window.__hqPos = [p.x, p.z, room];
+    if (room === 'hall') {
+      const near = p.z > HL - 6 && Math.abs(p.x) < 5;
+      prompt.hidden = !near; prompt.textContent = '🚪 افتح الباب';
+      caption.hidden = true;
+    } else {
+      const near = p.z > D.hl - 6 && Math.abs(p.x - DX) < 4;
+      prompt.hidden = !near; prompt.textContent = '🚪 ارجع إلى القاعة';
+      const dF = p.distanceTo(dungeon.futureAt), dC = p.distanceTo(dungeon.childAt);
+      // Crying grows louder as you approach the child (only while it is sad).
+      setCry(childLevel < 0.4 ? Math.max(0, 1 - dC / 22) * (1 - childLevel * 2) : 0);
+      if (dF < 8 && dF <= dC) { caption.hidden = false; caption.innerHTML = futureText(futureLevel); }
+      else if (dC < 8) { caption.hidden = false; caption.innerHTML = childText(childLevel); }
+      else caption.hidden = true;
+    }
+  };
+  const futureText = (v) => `<b>🔮 أنت في المستقبل</b><span>${v < 0.15 ? 'مكبّل ومنهك في الظلام… ما تفعله اليوم هو ما سيعيشه.' : v < 0.4 ? 'بدأ يرفع رأسه. القيود ما زالت ثقيلة.' : v < 0.7 ? 'تحرّر من السلاسل ويقف من جديد.' : v < 0.95 ? 'قوي ومضيء. نتائج أيامك تظهر عليه.' : 'حرّ تمامًا — هذا أنت الذي بنيته.'}</span><i style="--v:${Math.round(v * 100)}%"></i>`;
+  const childText = (v) => `<b>🧒 الطفل الداخلي</b><span>${v < 0.15 ? 'يبكي وحيدًا… ينتظر أن تعرف قيمتك وتدافع عن نفسك.' : v < 0.4 ? 'ما زال حزينًا، لكنه يرفع عينيه نحوك.' : v < 0.7 ? 'هدأ. بدأ يشعر بالأمان.' : 'سعيد ويلعب — لأنك صرت الرجل الذي يحميه.'}</span><i style="--v:${Math.round(v * 100)}%"></i>`;
 
   const ray = new THREE.Raycaster(), ptr = new THREE.Vector2(); let down = null;
   renderer.domElement.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });
@@ -314,14 +355,16 @@ export function mountHQ(container, { places, hq, rankIndex, sky: skyInfo, onComm
 
   const resize = () => { const w = container.clientWidth, h = container.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); };
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
-  if (camera.aspect < 0.8) { camera.position.set(6, 6, 26); camera.fov = 62; camera.updateProjectionMatrix(); }
+  if (camera.aspect < 0.8) { camera.fov = 58; camera.updateProjectionMatrix(); }
 
   const clock = new THREE.Clock(); let raf, lastSky = 0;
   const tick = () => {
     const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
     if (t - lastSky > 30) { applySky(); lastSky = t; }
-    controls.update(); keepInside();
-    cmd.update(t, dt);
+    const mv = walker.update(dt);
+    cmd.update(t, dt, mv.walk, mv.air);
+    dungeon.tick(t, dt);
+    updatePrompts();
     for (const f of flames) {
       const k = 0.82 + Math.sin(t * 11 + f.ph) * 0.1 + Math.sin(t * 27 + f.ph) * 0.08;
       if (f.light) f.light.intensity = f.base * k; else f.m.scale.set(1, k * (f.big ? 1.3 : 1.1), 1);
@@ -337,10 +380,10 @@ export function mountHQ(container, { places, hq, rankIndex, sky: skyInfo, onComm
   tick();
 
   return {
-    update({ rankIndex: ri }) { setRank(ri); },
+    update({ rankIndex: ri, future: f, child: c }) { setRank(ri); if (f != null) { futureLevel = f; dungeon.setFuture(f); } if (c != null) { childLevel = c; dungeon.setChild(c); } },
     salute() { cmd.wave(); },
     dispose() {
-      cancelAnimationFrame(raf); ro.disconnect(); controls.dispose();
+      cancelAnimationFrame(raf); ro.disconnect(); walker.dispose(); setCry(0);
       scene.traverse((o) => { o.geometry?.dispose(); });
       renderer.dispose(); renderer.forceContextLoss?.();
       container.innerHTML = '';
