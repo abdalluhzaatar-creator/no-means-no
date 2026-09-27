@@ -328,7 +328,7 @@ function showRanks(id) {
 // Places without a 3D scene yet use the classic layout.
 const sceneFor = (charId) => charId === 'worshipper';
 let oasis = null;
-let questsCollapsed = matchMedia('(max-width: 720px)').matches;
+let questsCollapsed = true;
 const placeState = () => {
   const c = E.findCharacter(currentChar), ch = state.characters[c.id];
   return { features: E.regionFeatures(state, c.regionId), level: artLevel(ch) };
