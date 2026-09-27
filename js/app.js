@@ -110,6 +110,7 @@ function render() {
   document.body.classList.toggle('in-scene', (screen === 'character' && sceneFor(currentChar)) || screen === 'trophies' || screen === 'hq');
   document.body.classList.toggle('in-world', screen === 'world');
   document.body.classList.toggle('in-store', screen === 'shop');
+  if (screen !== 'hq') document.body.classList.remove('view-mode');
   // A live 3D place only refreshes its overlay, so animations and camera survive.
   if (screen === 'character' && oasis && oasis.char === currentChar && $('#place-view')) {
     $('#hud').innerHTML = placeHUD();
@@ -625,6 +626,7 @@ function hqHUD() {
       </div>
     </div>
   </div>
+  <button class="hud-chip view-toggle" data-view-mode title="إخفاء اللوحات لمشاهدة القاعة">👁 مشاهدة</button>
   <aside class="cup-side">
     <div class="challenge-card report">
       <b class="report-title">📋 تقرير القائد</b>
@@ -929,6 +931,7 @@ function bind() {
   on('data-open-path', showPath);
   on('data-open-atmo', showAtmosphere);
   on('data-cup-picker', showCupPicker);
+  on('data-view-mode', () => document.body.classList.toggle('view-mode'));
   on('data-cup-rules', showCupRules);
   on('data-cup-history', showCupHistory);
   on('data-cup', showCup);
