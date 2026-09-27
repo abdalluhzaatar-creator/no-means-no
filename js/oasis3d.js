@@ -57,10 +57,10 @@ const tileTexture = () => canvasTex(512, 512, (g, w) => {
 
 // ---------- character ----------
 function buildWorshipper(pal) {
-  const robe = std(pal.robe, { roughness: 0.9 });
+  const robe = std(pal.robe, { roughness: 0.75 });
   const accent = std(pal.accent, { roughness: 0.6 });
-  const skin = std(pal.skin, { roughness: 0.7 });
-  const hair = std(0x2b2018, { roughness: 1 });
+  const skin = std(pal.skin, { roughness: 0.6 });
+  const hair = std(0x2a1d14, { roughness: 1 });
 
   const root = new THREE.Group();
   // Lower robe: from feet to hips (pivot at the ground so it can compress when kneeling).
@@ -83,8 +83,17 @@ function buildWorshipper(pal) {
 
   const neck = new THREE.Group(); neck.position.y = 0.7; upper.add(neck);
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 24, 18), skin); head.position.y = 0.16; head.scale.set(0.95, 1.08, 1); neck.add(head);
-  const beard = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12), hair); beard.position.set(0, 0.07, 0.07); beard.scale.set(1, 0.9, 0.8); neck.add(beard);
-  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.165, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), std(0xfaf8f2)); cap.position.y = 0.2; cap.scale.y = 0.75; neck.add(cap);
+  // Young man: short neat beard along the jaw, short dark hair, no head covering.
+  // Beard: lower-front shell of the head (jaw and chin only).
+  const beard = new THREE.Mesh(new THREE.SphereGeometry(0.163, 24, 14, Math.PI * 0.12, Math.PI * 0.76, Math.PI * 0.6, Math.PI * 0.32), hair);
+  beard.position.set(0, 0.16, 0.006); beard.scale.set(0.97, 1.1, 1.04); neck.add(beard);
+  const hairTop = new THREE.Mesh(new THREE.SphereGeometry(0.168, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.4), hair);
+  hairTop.position.set(0, 0.165, -0.008); hairTop.scale.set(0.97, 1.1, 1.02); neck.add(hairTop);
+  const back = new THREE.Mesh(new THREE.SphereGeometry(0.166, 20, 12, Math.PI * 1.15, Math.PI * 0.7, Math.PI * 0.35, Math.PI * 0.3), hair);
+  back.position.set(0, 0.165, 0); back.scale.set(0.97, 1.1, 1.02); neck.add(back);
+  const brows = std(0x2b2018);
+  [-0.055, 0.055].forEach((x) => { const b = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.012, 0.01), brows); b.position.set(x, 0.215, 0.148); neck.add(b); });
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.008, 0.01), std(0xa4645a)); mouth.position.set(0, 0.095, 0.152); neck.add(mouth);
   const eyeM = std(0x1a1410);
   [-0.055, 0.055].forEach((x) => { const e = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 6), eyeM); e.position.set(x, 0.18, 0.145); neck.add(e); });
   const nose = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.06, 8), skin); nose.rotation.x = Math.PI / 2; nose.position.set(0, 0.15, 0.16); neck.add(nose);
@@ -182,24 +191,85 @@ function palm(rand, h = 6) {
   return g;
 }
 
-function mosque() {
+// ---------- palace ----------
+const archShape = (w, h) => { const sh = new THREE.Shape(); sh.moveTo(-w / 2, 0); sh.lineTo(-w / 2, h - w / 2); sh.absarc(0, h - w / 2, w / 2, Math.PI, 0, true); sh.lineTo(w / 2, 0); sh.lineTo(-w / 2, 0); return sh; };
+
+// A straight arcade: wall with a row of pointed arches, columns and a roof ledge.
+function arcade(length, mats) {
   const g = new THREE.Group();
-  const stone = std(0xeee3cc, { roughness: 0.7 }), green = std(0x2f6f5e, { roughness: 0.4, metalness: 0.2 }), gold = std(0xd4a53a, { roughness: 0.25, metalness: 0.9 });
-  const dark = std(0x3b2f25);
-  const base = new THREE.Mesh(new THREE.BoxGeometry(16, 7, 10), stone); base.position.y = 3.5; g.add(base);
-  const drum = new THREE.Mesh(new THREE.CylinderGeometry(4.6, 4.6, 1.6, 32), stone); drum.position.y = 7.8; g.add(drum);
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(4.6, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2), green); dome.position.y = 8.6; dome.scale.y = 1.15; g.add(dome);
-  const fin = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.8, 10), gold); fin.position.y = 14.9; g.add(fin);
-  const crescent = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.09, 8, 24, Math.PI * 1.4), gold); crescent.position.y = 16.2; crescent.rotation.z = 1.2; g.add(crescent);
-  for (const s of [-1, 1]) {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.1, 18, 16), stone); m.position.set(s * 9, 9, -2); g.add(m);
-    const b = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.3, 0.6, 16), stone); b.position.set(s * 9, 14, -2); g.add(b);
-    const c = new THREE.Mesh(new THREE.ConeGeometry(1.1, 3, 16), green); c.position.set(s * 9, 19.5, -2); g.add(c);
+  const bays = Math.round(length / 4), bw = length / bays, H = 6.5;
+  const wall = new THREE.Shape(); wall.moveTo(-length / 2, 0); wall.lineTo(length / 2, 0); wall.lineTo(length / 2, H); wall.lineTo(-length / 2, H); wall.lineTo(-length / 2, 0);
+  for (let i = 0; i < bays; i++) {
+    const cx = -length / 2 + bw * (i + 0.5), w = bw * 0.62, h = 4.6;
+    const hole = new THREE.Path(); hole.moveTo(cx - w / 2, 0.01); hole.lineTo(cx - w / 2, h - w / 2); hole.absarc(cx, h - w / 2, w / 2, Math.PI, 0, true); hole.lineTo(cx + w / 2, 0.01); hole.lineTo(cx - w / 2, 0.01);
+    wall.holes.push(hole);
   }
-  // arched door and windows
-  const arch = (w, h) => { const sh = new THREE.Shape(); sh.moveTo(-w / 2, 0); sh.lineTo(-w / 2, h - w / 2); sh.absarc(0, h - w / 2, w / 2, Math.PI, 0, true); sh.lineTo(w / 2, 0); return new THREE.ShapeGeometry(sh, 16); };
-  const door = new THREE.Mesh(arch(3, 5), dark); door.position.set(0, 0.01, 5.01); g.add(door);
-  for (const x of [-5.5, -3.2, 3.2, 5.5]) { const wdw = new THREE.Mesh(arch(1.2, 2.4), dark); wdw.position.set(x, 3, 5.01); g.add(wdw); }
+  const face = new THREE.Mesh(new THREE.ExtrudeGeometry(wall, { depth: 0.8, bevelEnabled: false, curveSegments: 10 }), mats.stone);
+  g.add(face);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(length, H, 0.4), mats.plaster); back.position.set(0, H / 2, -3.2); g.add(back);
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(length + 0.6, 0.5, 4.6), mats.stone); roof.position.set(0, H + 0.25, -1.4); g.add(roof);
+  const band = new THREE.Mesh(new THREE.BoxGeometry(length + 0.7, 0.35, 0.1), mats.tile); band.position.set(0, H - 0.6, 0.85); g.add(band);
+  for (let i = 0; i <= bays; i++) {
+    const x = -length / 2 + bw * i;
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 4.2, 14), mats.marble); col.position.set(x, 2.1, 0.95); g.add(col);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.3, 0.8), mats.gold); cap.position.set(x, 4.3, 0.95); g.add(cap);
+  }
+  // crenellations
+  for (let x = -length / 2 + 0.5; x < length / 2; x += 1.4) { const m = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 4), mats.stone); m.position.set(x, H + 0.9, 0.3); m.rotation.y = Math.PI / 4; g.add(m); }
+  shadowAll(g);
+  return g;
+}
+
+function palaceHall(mats) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(26, 11, 12), mats.plaster); body.position.y = 5.5; g.add(body);
+  const iwan = new THREE.Mesh(new THREE.BoxGeometry(11, 15, 2), mats.stone); iwan.position.set(0, 7.5, 6.2); g.add(iwan);
+  const portal = new THREE.Mesh(new THREE.ShapeGeometry(archShape(6.5, 11.5), 16), mats.tile); portal.position.set(0, 0.01, 7.22); g.add(portal);
+  const door = new THREE.Mesh(new THREE.ShapeGeometry(archShape(3, 5.5), 16), mats.wood); door.position.set(0, 0.01, 7.25); g.add(door);
+  const trim = new THREE.Mesh(new THREE.TorusGeometry(3.25, 0.18, 8, 40, Math.PI), mats.gold); trim.position.set(0, 8.25, 7.24); g.add(trim);
+  for (const x of [-9.5, -6, 6, 9.5]) for (const y of [2.6, 7.4]) { const w = new THREE.Mesh(new THREE.ShapeGeometry(archShape(1.6, 3), 12), mats.dark); w.position.set(x, y, 6.02); g.add(w); }
+  const drum = new THREE.Mesh(new THREE.CylinderGeometry(5.2, 5.2, 2.4, 40), mats.plaster); drum.position.set(0, 12.2, -1); g.add(drum);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(5.2, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2), mats.dome); dome.position.set(0, 13.4, -1); dome.scale.y = 1.25; g.add(dome);
+  const fin = new THREE.Mesh(new THREE.ConeGeometry(0.35, 2.2, 10), mats.gold); fin.position.set(0, 21, -1); g.add(fin);
+  for (const x of [-13, 13]) {
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.6, 20, 16), mats.stone); t.position.set(x, 10, 0); g.add(t);
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(2, 1.8, 0.8, 16), mats.stone); b.position.set(x, 16, 0); g.add(b);
+    const d = new THREE.Mesh(new THREE.SphereGeometry(1.6, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), mats.dome); d.position.set(x, 20, 0); d.scale.y = 1.4; g.add(d);
+    const f = new THREE.Mesh(new THREE.ConeGeometry(0.18, 1.2, 8), mats.gold); f.position.set(x, 22.8, 0); g.add(f);
+  }
+  for (const x of [-7, 7]) { const d = new THREE.Mesh(new THREE.SphereGeometry(2.2, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), mats.dome); d.position.set(x, 11, -2); g.add(d); }
+  shadowAll(g);
+  return g;
+}
+
+function cypress(rand) {
+  const g = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 1.2, 6), std(0x5b4330)); trunk.position.y = 0.6; g.add(trunk);
+  const h = 5 + rand() * 2.5;
+  const crown = new THREE.Mesh(new THREE.SphereGeometry(0.9, 14, 10), std(0x2f5a2e, { roughness: 0.9 })); crown.scale.set(1, h / 1.8, 1); crown.position.y = 1 + h / 2; g.add(crown);
+  shadowAll(g);
+  return g;
+}
+
+function orangeTree(rand) {
+  const g = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.22, 1.8, 7), std(0x5b4330)); trunk.position.y = 0.9; g.add(trunk);
+  const leaf = std(0x3e7a33, { roughness: 0.85 });
+  for (let i = 0; i < 5; i++) { const b = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8 + rand() * 0.3, 1), leaf); b.position.set((rand() - 0.5) * 1.1, 2.3 + rand() * 0.7, (rand() - 0.5) * 1.1); g.add(b); }
+  const fruit = std(0xf29a2e, { roughness: 0.5 });
+  for (let i = 0; i < 10; i++) { const f = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), fruit); const a = rand() * 6.28; f.position.set(Math.cos(a) * 0.95, 2.1 + rand() * 1.1, Math.sin(a) * 0.95); g.add(f); }
+  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.5, 0.8, 12), std(0xb8683f)); pot.position.y = 0.4; g.add(pot);
+  shadowAll(g);
+  return g;
+}
+
+function flowerBed(w, d, rand) {
+  const g = new THREE.Group();
+  const box = new THREE.Mesh(new THREE.BoxGeometry(w, 0.5, d), std(0xd9ccb0)); box.position.y = 0.25; g.add(box);
+  const soil = new THREE.Mesh(new THREE.BoxGeometry(w - 0.3, 0.1, d - 0.3), std(0x4b8a3a, { roughness: 1 })); soil.position.y = 0.52; g.add(soil);
+  const cols = [0xe0475b, 0xf5d03b, 0xffffff, 0xb05cd6, 0xf28ab2];
+  const geo = new THREE.SphereGeometry(0.1, 6, 4);
+  for (let i = 0; i < w * d * 5; i++) { const f = new THREE.Mesh(geo, std(cols[i % cols.length])); f.position.set((rand() - 0.5) * (w - 0.5), 0.65 + rand() * 0.2, (rand() - 0.5) * (d - 0.5)); g.add(f); }
   shadowAll(g);
   return g;
 }
@@ -257,9 +327,31 @@ function mihrabArch() {
   return g;
 }
 
+// ---------- weather ----------
+// kinds: clear | cloudy | overcast | fog | rain | storm | snow
+export function weatherFromCode(code) {
+  if (code == null) return 'clear';
+  if (code <= 1) return 'clear';
+  if (code === 2) return 'cloudy';
+  if (code === 3) return 'overcast';
+  if (code === 45 || code === 48) return 'fog';
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'snow';
+  if (code >= 95) return 'storm';
+  return 'rain';
+}
+const WEATHER = {
+  clear:    { cloud: 0.1,  dim: 0,    fog: 0,    rain: 0, snow: 0, turb: 3 },
+  cloudy:   { cloud: 0.55, dim: 0.15, fog: 0.1,  rain: 0, snow: 0, turb: 6 },
+  overcast: { cloud: 1,    dim: 0.45, fog: 0.3,  rain: 0, snow: 0, turb: 14 },
+  fog:      { cloud: 0.6,  dim: 0.4,  fog: 1,    rain: 0, snow: 0, turb: 18 },
+  rain:     { cloud: 1,    dim: 0.55, fog: 0.4,  rain: 1, snow: 0, turb: 16 },
+  storm:    { cloud: 1,    dim: 0.7,  fog: 0.5,  rain: 1.4, snow: 0, turb: 20 },
+  snow:     { cloud: 1,    dim: 0.35, fog: 0.45, rain: 0, snow: 1, turb: 12 },
+};
+
 // ---------- mount ----------
-export function mountOasis(container, { palette, features, level, onCharacter }) {
-  const noise = makeNoise(21);
+// opts.sky() → { elev } sun elevation in degrees, recomputed every minute.
+export function mountOasis(container, { palette, features, level, onCharacter, sky: skyInfo, weather = 'clear' }) {
   let seed = 7; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -269,90 +361,92 @@ export function mountOasis(container, { palette, features, level, onCharacter })
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 3000);
+  const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 3000);
 
-  // Sky follows the local clock: dawn, noon, sunset and night.
   const sky = new Sky(); sky.scale.setScalar(2000); scene.add(sky);
-  const su = sky.material.uniforms; su.turbidity.value = 8; su.rayleigh.value = 2; su.mieCoefficient.value = 0.006; su.mieDirectionalG.value = 0.85;
+  const su = sky.material.uniforms; su.rayleigh.value = 2; su.mieCoefficient.value = 0.006; su.mieDirectionalG.value = 0.85;
   const sun = new THREE.DirectionalLight(0xfff0d8, 2.5);
   sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, near: 1, far: 200 }); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
-  const hemi = new THREE.HemisphereLight(0xcfe3ff, 0x8a6a45, 0.9);
-  scene.add(sun, sun.target, hemi);
-  scene.fog = new THREE.Fog(0xe8d2b0, 60, 260);
+  Object.assign(sun.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 220 }); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+  const hemi = new THREE.HemisphereLight(0xdfeaff, 0x8a7a60, 1);
+  const fill = new THREE.DirectionalLight(0xffffff, 0.6);   // soft front light so the character never reads as a silhouette
+  scene.add(sun, sun.target, hemi, fill, fill.target);
+  scene.fog = new THREE.Fog(0xdfe6ea, 80, 320);
 
-  // Stars + crescent (visible at night; brighter with the "stars" upgrade).
+  const rng = rand;
   const starGeo = new THREE.BufferGeometry(); const sp = new Float32Array(1500 * 3);
-  for (let i = 0; i < 1500; i++) { const v = new THREE.Vector3().setFromSphericalCoords(900, Math.acos(rand() * 0.95), rand() * Math.PI * 2); sp.set([v.x, v.y, v.z], i * 3); }
+  for (let i = 0; i < 1500; i++) { const v = new THREE.Vector3().setFromSphericalCoords(900, Math.acos(rng() * 0.95), rng() * Math.PI * 2); sp.set([v.x, v.y, v.z], i * 3); }
   starGeo.setAttribute('position', new THREE.BufferAttribute(sp, 3));
   const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false }));
   scene.add(stars);
   const moon = new THREE.Mesh(new THREE.TorusGeometry(18, 5, 12, 40, Math.PI * 1.3), new THREE.MeshBasicMaterial({ color: 0xfff4d0, fog: false, transparent: true }));
-  moon.position.set(-250, 330, -700); moon.rotation.z = 2.2; scene.add(moon);
+  moon.position.set(-250, 330, 700); moon.rotation.z = 2.2; scene.add(moon);
 
-  // Ground: rolling dunes, flat courtyard in the middle.
-  const gg = new THREE.PlaneGeometry(600, 600, 220, 220); gg.rotateX(-Math.PI / 2);
-  const gp = gg.attributes.position, gc = new Float32Array(gp.count * 3);
-  const sandA = new THREE.Color(0xe3c48e), sandB = new THREE.Color(0xc99a5e), col = new THREE.Color();
-  const groundH = (x, z) => {
-    const d = Math.hypot(x, z + 4);
-    const dunes = (Math.abs(noise(x * 0.012, z * 0.02, 3)) * 18 + noise(x * 0.05, z * 0.05, 2) * 1.5);
-    return dunes * THREE.MathUtils.smoothstep(d, 22, 70) - (d < 20 ? 0 : 0);
+  // ---- materials ----
+  const marbleTex = canvasTex(512, 512, (g, w) => {
+    const n = 4, s = w / n;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      g.fillStyle = (i + j) % 2 ? '#f4f1ea' : '#e3ddd0'; g.fillRect(i * s, j * s, s, s);
+      g.strokeStyle = 'rgba(150,140,125,.25)'; g.lineWidth = 1.5;
+      for (let k = 0; k < 4; k++) { g.beginPath(); g.moveTo(i * s + Math.random() * s, j * s); g.bezierCurveTo(i * s + Math.random() * s, j * s + s / 3, i * s + Math.random() * s, j * s + s / 1.5, i * s + Math.random() * s, j * s + s); g.stroke(); }
+      g.fillStyle = '#3f7d6e'; g.save(); g.translate(i * s, j * s); g.rotate(Math.PI / 4); g.fillRect(-9, -9, 18, 18); g.restore();
+    }
+  });
+  marbleTex.wrapS = marbleTex.wrapT = THREE.RepeatWrapping; marbleTex.repeat.set(14, 14);
+  const floorMat = new THREE.MeshStandardMaterial({ map: marbleTex, roughness: 0.35, metalness: 0.05 });
+  const mats = {
+    stone: std(0xeadfc8, { roughness: 0.75 }), plaster: std(0xf3ece0, { roughness: 0.85 }), marble: std(0xfbf8f2, { roughness: 0.3 }),
+    gold: std(0xd4a53a, { roughness: 0.25, metalness: 0.9 }), tile: std(0x2f7a8a, { roughness: 0.35 }), dome: std(0x2f7a8a, { roughness: 0.3, metalness: 0.25 }),
+    wood: std(0x5a3a22, { roughness: 0.7 }), dark: std(0x2d2a28, { roughness: 0.6 }),
   };
-  for (let i = 0; i < gp.count; i++) {
-    const x = gp.getX(i), z = gp.getZ(i), h = groundH(x, z);
-    gp.setY(i, h);
-    col.copy(sandA).lerp(sandB, THREE.MathUtils.clamp(noise(x * 0.03 + 9, z * 0.03, 3) * 0.8 + 0.4 - h * 0.01, 0, 1));
-    gc.set([col.r, col.g, col.b], i * 3);
+
+  // ---- ground: marble courtyard inside, gardens and hills outside ----
+  const grass = new THREE.Mesh(new THREE.CircleGeometry(700, 64), std(0x6d9a4a, { roughness: 1 })); grass.rotation.x = -Math.PI / 2; grass.receiveShadow = true; scene.add(grass);
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2, r = 180 + rng() * 120;
+    const hill = new THREE.Mesh(new THREE.SphereGeometry(60 + rng() * 60, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), std(0x7fa35a, { roughness: 1 }));
+    hill.position.set(Math.cos(a) * r, -10, Math.sin(a) * r); hill.scale.y = 0.35 + rng() * 0.3; scene.add(hill);
   }
-  gg.setAttribute('color', new THREE.BufferAttribute(gc, 3)); gg.computeVertexNormals();
-  const ground = new THREE.Mesh(gg, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 })); ground.receiveShadow = true; scene.add(ground);
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(46, 0.4, 46), floorMat); floor.position.y = 0.2; floor.receiveShadow = true; scene.add(floor);
+  const snowCover = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, transparent: true, opacity: 0, depthWrite: false }));
+  snowCover.rotation.x = -Math.PI / 2; snowCover.position.y = 0.42; snowCover.receiveShadow = true; snowCover.renderOrder = 1; scene.add(snowCover);
 
-  // Courtyard
-  const tiles = tileTexture(); tiles.wrapS = tiles.wrapT = THREE.RepeatWrapping; tiles.repeat.set(4, 4);
-  const court = new THREE.Mesh(new THREE.CylinderGeometry(15, 15.6, 0.3, 64), new THREE.MeshStandardMaterial({ map: tiles, roughness: 0.7 }));
-  court.position.set(0, 0.15, -4); court.receiveShadow = true; scene.add(court);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(15.3, 0.25, 8, 80), std(0xcdbb95)); rim.rotation.x = Math.PI / 2; rim.position.set(0, 0.3, -4); scene.add(rim);
-
-  // Oasis pond with reeds
-  const pond = new THREE.Mesh(new THREE.CircleGeometry(7, 48), new THREE.MeshPhysicalMaterial({ color: 0x2e8aa3, roughness: 0.05, transparent: true, opacity: 0.9, clearcoat: 1 }));
-  pond.rotation.x = -Math.PI / 2; pond.position.set(22, 0.12, 6); pond.scale.set(1.4, 1, 1); scene.add(pond);
-  const shore = new THREE.Mesh(new THREE.RingGeometry(7, 8.5, 48), std(0x9aa66a)); shore.rotation.x = -Math.PI / 2; shore.position.set(22, 0.1, 6); shore.scale.set(1.4, 1, 1); scene.add(shore);
-  for (let i = 0; i < 40; i++) {
-    const a = rand() * Math.PI * 2, r = 7 + rand() * 1.2;
-    const reed = new THREE.Mesh(new THREE.ConeGeometry(0.06, 1 + rand(), 4), std(0x5e7a36)); reed.position.set(22 + Math.cos(a) * r * 1.4, 0.5, 6 + Math.sin(a) * r); scene.add(reed);
+  // Arcades on three sides, palace hall on the fourth (behind the player's back).
+  const sides = [[0, -23, 0], [-23, 0, Math.PI / 2], [23, 0, -Math.PI / 2]];
+  for (const [x, z, ry] of sides) { const a = arcade(46, mats); a.position.set(x, 0.4, z); a.rotation.y = ry; scene.add(a); }
+  const hall = palaceHall(mats); hall.position.set(0, 0.4, 30); hall.rotation.y = Math.PI; scene.add(hall);
+  for (const x of [-23, 23]) for (const z of [-23, 23]) {
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2, 11, 12), mats.stone); t.position.set(x, 5.9, z);
+    const d = new THREE.Mesh(new THREE.SphereGeometry(2, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), mats.dome); d.position.set(x, 11.4, z); d.scale.y = 1.3;
+    shadowAll(t); shadowAll(d); scene.add(t, d);
   }
 
-  const mq = mosque(); mq.position.set(0, 0.2, -38); scene.add(mq);
-  // Base palms always present; the "palms" upgrade adds a grove.
-  [[16, -6], [28, 12], [-18, -16]].forEach(([x, z]) => { const p = palm(rand, 7 + rand() * 2); p.position.set(x, 0, z); p.rotation.y = rand() * 6; scene.add(p); });
-  const grove = new THREE.Group(); scene.add(grove);
-  [[-14, 4], [-20, -4], [12, -16], [-10, -20], [30, -2], [18, 16], [-24, 10], [26, 20]].forEach(([x, z]) => { const p = palm(rand, 6 + rand() * 3); p.position.set(x, 0, z); p.rotation.y = rand() * 6; grove.add(p); });
-  // rocks
-  for (let i = 0; i < 30; i++) {
-    const a = rand() * Math.PI * 2, r = 20 + rand() * 40;
-    const rk = new THREE.Mesh(new THREE.DodecahedronGeometry(0.4 + rand() * 1.2, 0), std(0xa38660, { flatShading: true }));
-    const x = Math.cos(a) * r, z = Math.sin(a) * r; rk.position.set(x, groundH(x, z), z); rk.rotation.set(rand(), rand(), rand()); rk.castShadow = true; scene.add(rk);
-  }
+  // Reflecting pool from the hall toward the prayer spot.
+  const poolRim = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.5, 14.4), mats.marble); poolRim.position.set(0, 0.45, 13.5); scene.add(poolRim);
+  const water = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.1, 13.6), new THREE.MeshPhysicalMaterial({ color: 0x2c8aa6, roughness: 0.04, clearcoat: 1, transparent: true, opacity: 0.9 }));
+  water.position.set(0, 0.68, 13.5); scene.add(water);
+  // Gardens around the pool
+  [[-8, 12, 6, 4], [8, 12, 6, 4], [-8, -14, 7, 3], [8, -14, 7, 3]].forEach(([x, z, w, d]) => { const f = flowerBed(w, d, rng); f.position.set(x, 0.4, z); scene.add(f); });
+  [[-19, -19], [19, -19], [-19, 19], [19, 19], [-19, 0], [19, 0]].forEach(([x, z]) => { const c = cypress(rng); c.position.set(x, 0.4, z); scene.add(c); });
+  // Outside the walls: tall cypress rows and trees.
+  for (let i = 0; i < 60; i++) { const a = rng() * Math.PI * 2, r = 32 + rng() * 60; const c = cypress(rng); c.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); c.scale.setScalar(1.4 + rng()); scene.add(c); }
 
-  // Prayer spot: rug + character facing the mosque (−z).
+  // Prayer spot: rug + character facing the mihrab (−z).
   const rug = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.04, 3.2), [0, 0, new THREE.MeshStandardMaterial({ map: rugTexture(palette.accent), roughness: 1 }), 0, 0, 0].map((m) => m || std(0x7a1f24)));
-  rug.position.set(0, 0.32, -1); rug.rotation.y = Math.PI; rug.receiveShadow = true; scene.add(rug);
+  rug.position.set(0, 0.42, -1); rug.rotation.y = Math.PI; rug.receiveShadow = true; scene.add(rug);
   const hero = buildWorshipper(palette);
-  hero.root.position.set(0, 0.34, 0); hero.root.rotation.y = Math.PI; scene.add(hero.root);
+  hero.root.position.set(0, 0.44, 0); hero.root.rotation.y = Math.PI; scene.add(hero.root);
 
-  // Aura grows with the character's progress.
   const aura = new THREE.Mesh(new THREE.RingGeometry(1.3, 1.9, 64), new THREE.MeshBasicMaterial({ color: palette.glow, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide }));
-  aura.rotation.x = -Math.PI / 2; aura.position.set(0, 0.36, -0.3); scene.add(aura);
+  aura.rotation.x = -Math.PI / 2; aura.position.set(0, 0.46, -0.3); scene.add(aura);
   const motes = (() => {
-    const n = 80, p = new Float32Array(n * 3), s = Array.from({ length: n }, () => [rand() * 6.28, 0.8 + rand() * 1.6, rand()]);
+    const n = 80, p = new Float32Array(n * 3), s = Array.from({ length: n }, () => [rng() * 6.28, 0.8 + rng() * 1.6, rng()]);
     const pts = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(p, 3)),
       new THREE.PointsMaterial({ color: palette.glow, size: 0.08, transparent: true, opacity: 0.9, depthWrite: false }));
     pts.userData.tick = (t, count, burst) => {
       s.forEach(([a, r, o], i) => {
-        const on = i < count;
-        const k = (t * (burst ? 0.5 : 0.12) + o) % 1;
-        p.set(on ? [Math.cos(a + t * 0.3) * r * (burst ? 1 + k : 1), 0.4 + k * (burst ? 5 : 3), -0.3 + Math.sin(a + t * 0.3) * r * (burst ? 1 + k : 1)] : [0, -99, 0], i * 3);
+        const k = (t * (burst ? 0.5 : 0.12) + o) % 1, f = burst ? 1 + k : 1;
+        p.set(i < count ? [Math.cos(a + t * 0.3) * r * f, 0.5 + k * (burst ? 5 : 3), -0.3 + Math.sin(a + t * 0.3) * r * f] : [0, -99, 0], i * 3);
       });
       pts.geometry.attributes.position.needsUpdate = true;
     };
@@ -361,9 +455,11 @@ export function mountOasis(container, { palette, features, level, onCharacter })
 
   // Upgrades
   const lanterns = new THREE.Group(); scene.add(lanterns);
-  [[-3.5, 1.5], [3.5, 1.5], [-3.5, -4], [3.5, -4], [-8, -10], [8, -10]].forEach(([x, z]) => { const l = lantern(); l.position.set(x, 0.3, z); lanterns.add(l); });
-  const fnt = fountain(); fnt.position.set(-8, 0.3, 2); scene.add(fnt);
-  const arch = mihrabArch(); arch.position.set(0, 0.3, -4.2); scene.add(arch);
+  [[-3.5, 1.5], [3.5, 1.5], [-3.5, -4], [3.5, -4], [-10, 6], [10, 6], [-10, -8], [10, -8]].forEach(([x, z]) => { const l = lantern(); l.position.set(x, 0.4, z); lanterns.add(l); });
+  const grove = new THREE.Group(); scene.add(grove);
+  [[-14, 6], [14, 6], [-14, -6], [14, -6], [-6, 20], [6, 20], [-14, 18], [14, 18]].forEach(([x, z]) => { const t = orangeTree(rng); t.position.set(x, 0.4, z); grove.add(t); });
+  const fnt = fountain(); fnt.position.set(0, 0.4, 5); fnt.scale.setScalar(1.2); scene.add(fnt);
+  const arch = mihrabArch(); arch.position.set(0, 0.4, -4.2); scene.add(arch);
 
   const setFeatures = (f, lvl) => {
     lanterns.visible = f.has('lanterns');
@@ -371,47 +467,94 @@ export function mountOasis(container, { palette, features, level, onCharacter })
     fnt.visible = f.has('fountain');
     arch.visible = f.has('arch');
     moon.visible = f.has('stars');
-    stars.userData.boost = f.has('stars') ? 1 : 0.45;
+    stars.userData.boost = f.has('stars') ? 1 : 0.5;
     aura.userData.level = lvl;
   };
   setFeatures(features, level);
 
-  // Time of day from the local clock.
-  const sunDir = new THREE.Vector3();
-  let night = 0;
-  const setTime = (date = new Date()) => {
-    const h = date.getHours() + date.getMinutes() / 60;
-    const elev = Math.sin(((h - 6) / 12) * Math.PI) * 62;   // degrees
-    const az = 90 + ((h - 6) / 12) * 180;
-    sunDir.setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - Math.max(elev, -12)), THREE.MathUtils.degToRad(az + 150));
-    su.sunPosition.value.copy(sunDir);
-    night = THREE.MathUtils.clamp((4 - elev) / 14, 0, 1);
-    const lightDir = elev > 4 ? sunDir : new THREE.Vector3(-0.3, 0.8, -0.5).normalize();   // moonlight
-    sun.position.copy(lightDir).multiplyScalar(80); sun.target.position.set(0, 0, 0);
-    sun.color.set(night > 0.5 ? 0x9fb4e6 : elev < 15 ? 0xffb47a : 0xfff0d8);
-    sun.intensity = lerp(2.6, 0.35, night);
-    hemi.intensity = lerp(0.9, 0.18, night);
-    hemi.color.set(night > 0.5 ? 0x3a4a78 : 0xcfe3ff);
-    renderer.toneMappingExposure = lerp(0.5, 0.9, night);
-    scene.fog.color.set(night > 0.5 ? 0x141c33 : elev < 15 ? 0xe6b48a : 0xe8d2b0);
-    sky.visible = night < 0.95;
-    scene.background = night >= 0.95 ? new THREE.Color(0x0b1026) : null;
-    return { elev, night };
-  };
-  setTime();
+  // ---- clouds ----
+  const puffTex = canvasTex(128, 128, (g) => {
+    const grd = g.createRadialGradient(64, 64, 4, 64, 64, 64); grd.addColorStop(0, 'rgba(255,255,255,1)'); grd.addColorStop(0.5, 'rgba(255,255,255,.65)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
+  });
+  const cloudMat = new THREE.SpriteMaterial({ map: puffTex, color: 0xffffff, transparent: true, depthWrite: false, fog: false, opacity: 0.9 });
+  const clouds = new THREE.Group(); scene.add(clouds);
+  for (let i = 0; i < 70; i++) {
+    const cx = (rng() - 0.5) * 700, cz = (rng() - 0.5) * 700, cy = 90 + rng() * 60;
+    for (let j = 0; j < 6; j++) {
+      const s = new THREE.Sprite(cloudMat); const r = 40 + rng() * 50;
+      s.position.set(cx + (rng() - 0.5) * 80, cy + (rng() - 0.5) * 12, cz + (rng() - 0.5) * 50); s.scale.set(r * 1.8, r, 1);
+      s.userData.rank = rng(); clouds.add(s);
+    }
+  }
 
-  // Camera
-  camera.position.set(9, 5, 12);
+  // ---- precipitation (particles follow the camera) ----
+  const RAIN_N = 6000, rainPos = new Float32Array(RAIN_N * 6);
+  for (let i = 0; i < RAIN_N; i++) { const x = (rng() - 0.5) * 80, y = rng() * 40, z = (rng() - 0.5) * 80; rainPos.set([x, y, z, x + 0.05, y - 0.7, z], i * 6); }
+  const rain = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(rainPos, 3)),
+    new THREE.LineBasicMaterial({ color: 0xaec4d6, transparent: true, opacity: 0.55 }));
+  rain.frustumCulled = false; scene.add(rain);
+  const SNOW_N = 5000, snowPos = new Float32Array(SNOW_N * 3), snowSeed = new Float32Array(SNOW_N);
+  for (let i = 0; i < SNOW_N; i++) { snowPos.set([(rng() - 0.5) * 80, rng() * 40, (rng() - 0.5) * 80], i * 3); snowSeed[i] = rng() * 6.28; }
+  const flakeTex = canvasTex(32, 32, (g) => { const grd = g.createRadialGradient(16, 16, 0, 16, 16, 16); grd.addColorStop(0, '#fff'); grd.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = grd; g.fillRect(0, 0, 32, 32); });
+  const snow = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(snowPos, 3)),
+    new THREE.PointsMaterial({ map: flakeTex, color: 0xffffff, size: 0.38, transparent: true, depthWrite: false, opacity: 0.95 }));
+  snow.frustumCulled = false; scene.add(snow);
+  const flash = new THREE.AmbientLight(0xdfe8ff, 0); scene.add(flash);
+
+  // ---- time of day + weather ----
+  let W = WEATHER[weather] || WEATHER.clear, kind = weather in WEATHER ? weather : 'clear';
+  let night = 0, snowAcc = 0;
+  const sunDir = new THREE.Vector3();
+  const skyTop = new THREE.Color(), tmp = new THREE.Color();
+  const applySky = () => {
+    const { elev } = skyInfo();
+    const az = 110 + (elev > 0 ? 0 : 0);
+    sunDir.setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - Math.max(elev, -14)), THREE.MathUtils.degToRad(az + (skyInfo().pm ? 120 : -60)));
+    su.sunPosition.value.copy(sunDir);
+    su.turbidity.value = W.turb;
+    su.rayleigh.value = lerp(2, 0.6, W.dim);
+    night = THREE.MathUtils.clamp((3 - elev) / 13, 0, 1);
+    const golden = THREE.MathUtils.clamp(1 - Math.abs(elev - 4) / 12, 0, 1) * (1 - night);
+    const lightDir = elev > 3 ? sunDir : new THREE.Vector3(-0.3, 0.8, 0.5).normalize();
+    sun.position.copy(lightDir).multiplyScalar(90);
+    sun.color.set(night > 0.5 ? 0x9fb4e6 : 0xfff0d8).lerp(tmp.set(0xff9c5a), golden * 0.8);
+    sun.intensity = lerp(2.8, 0.35, night) * (1 - W.dim * 0.8);
+    sun.castShadow = W.dim < 0.5;
+    hemi.intensity = lerp(1.1, 0.25, night) * (1 - W.dim * 0.3);
+    hemi.color.set(night > 0.5 ? 0x4a5a88 : 0xdfeaff);
+    fill.intensity = lerp(0.7, 0.25, night);
+    renderer.toneMappingExposure = lerp(0.55, 1, night) + W.dim * 0.15;
+    // Weather greys the sky; night makes it deep blue.
+    skyTop.set(0xb9c2c9).lerp(tmp.set(0x10172c), night);
+    sky.visible = W.dim < 0.4 && night < 0.95;
+    scene.background = sky.visible ? null : skyTop.clone();
+    const fogCol = tmp.set(0xdfe6ea).lerp(new THREE.Color(0xe8b48c), golden * (1 - W.dim)).lerp(new THREE.Color(0x0e1426), night).lerp(new THREE.Color(0xaab4bc).multiplyScalar(1 - night * 0.8), W.dim);
+    scene.fog.color.copy(fogCol);
+    scene.fog.near = lerp(80, 4, W.fog); scene.fog.far = lerp(320, 60, W.fog);
+    // clouds: amount by weather, tint by time
+    const cloudTint = new THREE.Color(0xffffff).lerp(new THREE.Color(0x6f7880), W.dim).lerp(new THREE.Color(0xffb88a), golden * 0.6).lerp(new THREE.Color(0x2a3350), night);
+    cloudMat.color.copy(cloudTint);
+    for (const c of clouds.children) c.visible = c.userData.rank < W.cloud;
+    rain.visible = W.rain > 0; snow.visible = W.snow > 0;
+    rain.material.opacity = 0.35 + W.rain * 0.25;
+    floorMat.roughness = W.rain ? 0.08 : 0.35;   // wet marble
+    floorMat.color.set(W.rain ? 0xbfc4c6 : 0xffffff);
+  };
+  applySky();
+
+  // Camera: front three-quarter view, the palace hall behind the character.
+  camera.position.set(6, 3.2, -8);
+  fill.position.copy(camera.position).add(new THREE.Vector3(0, 6, 0)); fill.target.position.set(0, 1, 0);
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, 1.6, -1);
+  controls.target.set(0, 2.4, 0);
   controls.enableDamping = true; controls.dampingFactor = 0.07;
   controls.enablePan = false;
-  controls.minDistance = 4; controls.maxDistance = 45;
-  controls.maxPolarAngle = THREE.MathUtils.degToRad(84);
-  controls.autoRotate = true; controls.autoRotateSpeed = 0.35;
+  controls.minDistance = 2.5; controls.maxDistance = 18;
+  controls.maxPolarAngle = THREE.MathUtils.degToRad(86);
+  controls.autoRotate = true; controls.autoRotateSpeed = 0.3;
   renderer.domElement.addEventListener('pointerdown', () => { controls.autoRotate = false; }, { once: true });
 
-  // Tap the character.
   const ray = new THREE.Raycaster(), ptr = new THREE.Vector2(); let down = null;
   renderer.domElement.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });
   renderer.domElement.addEventListener('pointerup', (e) => {
@@ -426,11 +569,12 @@ export function mountOasis(container, { palette, features, level, onCharacter })
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
 
   const clock = new THREE.Clock();
-  let raf, burstUntil = 0, lastTime = 0;
+  let raf, burstUntil = 0, lastSky = 0, nextBolt = 4;
   const tick = () => {
     const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
-    if (t - lastTime > 60) { setTime(); lastTime = t; }
+    if (t - lastSky > 30) { applySky(); lastSky = t; }
     controls.update();
+    fill.position.copy(camera.position).add(new THREE.Vector3(0, 6, 0));
     hero.update(t, dt);
     fnt.userData.tick(t);
     const lvl = aura.userData.level || 0;
@@ -438,20 +582,48 @@ export function mountOasis(container, { palette, features, level, onCharacter })
     aura.scale.setScalar(1 + Math.sin(t * 1.3) * 0.04);
     const burst = t < burstUntil;
     motes.userData.tick(t, burst ? 80 : 10 + lvl * 6, burst);
-    stars.material.opacity = night * (stars.userData.boost ?? 0.45);
-    moon.material.opacity = Math.max(0.15, night);
+    stars.material.opacity = night * (stars.userData.boost ?? 0.5) * (1 - W.cloud * 0.9);
+    moon.material.opacity = Math.max(0.15, night) * (1 - W.dim * 0.8);
+    for (const c of clouds.children) { c.position.x += dt * 3; if (c.position.x > 380) c.position.x -= 760; }
     for (const l of lanterns.children) {
       const f = 0.85 + Math.sin(t * 9 + l.position.x) * 0.08 + Math.sin(t * 23 + l.position.z) * 0.05;
-      l.userData.light.intensity = (2 + night * 10) * f;
+      l.userData.light.intensity = (2 + (night + W.dim * 0.5) * 10) * f;
     }
+    const cx = camera.position.x, cz = camera.position.z;
+    if (rain.visible) {
+      const speed = 38 * dt, wind = W.rain > 1 ? 0.25 : 0.05;
+      for (let i = 0; i < RAIN_N; i++) {
+        const o = i * 6; let y = rainPos[o + 1] - speed;
+        if (y < 0) { y = 40; rainPos[o] = cx + (Math.random() - 0.5) * 80; rainPos[o + 2] = cz + (Math.random() - 0.5) * 80; }
+        rainPos[o + 1] = y; rainPos[o + 3] = rainPos[o] + wind; rainPos[o + 4] = y - 0.7; rainPos[o + 5] = rainPos[o + 2];
+        rainPos[o] += wind * speed * 0.05;
+      }
+      rain.geometry.attributes.position.needsUpdate = true;
+    }
+    if (snow.visible) {
+      for (let i = 0; i < SNOW_N; i++) {
+        const o = i * 3; let y = snowPos[o + 1] - dt * 1.6;
+        if (y < 0.4) { y = 40; snowPos[o] = cx + (Math.random() - 0.5) * 80; snowPos[o + 2] = cz + (Math.random() - 0.5) * 80; }
+        snowPos[o + 1] = y; snowPos[o] += Math.sin(t + snowSeed[i]) * dt * 0.6;
+      }
+      snow.geometry.attributes.position.needsUpdate = true;
+    }
+    // Snow settles over time; melts when the weather changes.
+    snowAcc = THREE.MathUtils.clamp(snowAcc + (W.snow ? dt * 0.04 : -dt * 0.05), 0, 0.85);
+    snowCover.material.opacity = snowAcc;
+    if (kind === 'storm' && t > nextBolt) { flash.intensity = 6; nextBolt = t + 4 + Math.random() * 8; }
+    flash.intensity *= 0.86;
     renderer.render(scene, camera);
     raf = requestAnimationFrame(tick);
   };
+  if (kind === 'snow') snowAcc = 0.6;
   tick();
 
   return {
     pray() { hero.pray(); burstUntil = clock.elapsedTime + 9; controls.autoRotate = false; },
     update({ features: f, level: l }) { setFeatures(f, l); },
+    setWeather(k) { kind = k in WEATHER ? k : 'clear'; W = WEATHER[kind]; applySky(); },
+    refreshSky() { applySky(); },
     dispose() {
       cancelAnimationFrame(raf); ro.disconnect(); controls.dispose();
       scene.traverse((o) => { o.geometry?.dispose(); });

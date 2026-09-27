@@ -14,7 +14,7 @@ export const CHARACTERS = [
     id: 'worshipper',
     name: 'المُصلّي',
     title: 'رجل يصلّي',
-    desc: 'هادئ ومنضبط. يبدأ رحلته بسجادة صلاة وقلب حاضر.',
+    desc: 'شاب متديّن، هادئ ومنضبط. يبدأ رحلته بسجادة صلاة وقلب حاضر.',
     regionId: 'sanctuary',
     cost: {},
     starter: true,
@@ -46,7 +46,7 @@ export const CHARACTERS = [
       ] },
       ...RANKS.map((r) => ({ ...r, levels: null })),
     ],
-    palette: { robe: '#e9e4d8', accent: '#3f7d6e', skin: '#c89a74', glow: '#f4d58d' },
+    palette: { robe: '#fbfaf6', accent: '#3f7d6e', skin: '#f3d3b6', glow: '#f4d58d' },
   },
   {
     id: 'scholar',
@@ -70,8 +70,8 @@ export const CHARACTERS = [
 export const REGIONS = [
   {
     id: 'sanctuary',
-    name: 'الواحة الهادئة',
-    desc: 'ساحة صلاة في واحة ساكنة، تنمو كلما التزمت.',
+    name: 'قصر السكينة',
+    desc: 'ساحة صلاة في قصر هادئ بين الحدائق، يزدهر كلما التزمت.',
     characterId: 'worshipper',
     cost: {},
     starter: true,
@@ -82,7 +82,7 @@ export const REGIONS = [
     theme: { sky: ['#1d3b4f', '#e8c89a'], ground: '#d9c7a3' },
     upgrades: [
       { level: 2, cost: 60, adds: 'lanterns', label: 'فوانيس مضيئة' },
-      { level: 3, cost: 120, adds: 'palms', label: 'نخيل الواحة' },
+      { level: 3, cost: 120, adds: 'palms', label: 'أشجار الحديقة' },
       { level: 4, cost: 200, adds: 'fountain', label: 'نافورة الوضوء' },
       { level: 5, cost: 320, adds: 'arch', label: 'قوس المحراب' },
       { level: 6, cost: 480, adds: 'stars', label: 'سماء مرصّعة' },

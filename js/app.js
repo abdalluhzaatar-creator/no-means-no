@@ -174,7 +174,7 @@ function pickLocation() {
       <select id="method">${Object.entries(METHODS).map(([k, m]) => `<option value="${k}" ${cur?.method === k ? 'selected' : ''}>${m.name}</option>`).join('')}</select>
     </label>`);
   // `since`: prayers that ended before the player set up times are not counted as missed.
-  const save = (loc) => { state.location = { since: state.location?.since ?? Date.now(), ...loc }; scheduleSave(); closeModal(); autoMissPrayers(); render(); FX.toast(`📍 ${loc.name}`); };
+  const save = (loc) => { state.location = { since: state.location?.since ?? Date.now(), ...loc }; scheduleSave(); closeModal(); autoMissPrayers(); oasis?.scene.refreshSky(); loadWeather(true); render(); FX.toast(`📍 ${loc.name}`); };
   document.querySelectorAll('[data-city]').forEach((b) => (b.onclick = () => save({ ...CITIES[+b.dataset.city] })));
   $('#method').onchange = (e) => { if (state.location) { state.location.method = e.target.value; scheduleSave(); render(); } };
   $('#geo').onclick = () => {
@@ -341,8 +341,10 @@ async function bindPlace() {
     const { mountOasis } = await import('./oasis3d.js');
     if (!v.isConnected) return;
     v.querySelector('.w3-loading')?.remove();
-    const scene = mountOasis(v, { palette: c.palette, ...placeState(), onCharacter: () => FX.toast(`${c.name}: ${randomLine()}`) });
+    const scene = mountOasis(v, { palette: c.palette, ...placeState(), sky: skyInfo, weather: currentWeather(),
+      onCharacter: () => FX.toast(`${c.name}: ${randomLine()}`) });
     oasis = { char: c.id, scene };
+    loadWeather();
   } catch (err) {
     console.warn('3D place unavailable', err);
     v.innerHTML = `<div class="hero-scene">${regionSVG(E.findRegion(c.regionId), E.regionFeatures(state, c.regionId), characterSVG(c, artLevel(state.characters[c.id]), { size: 80 }))}</div>`;
@@ -350,6 +352,64 @@ async function bindPlace() {
 }
 const LINES = ['الحمد لله', 'حيّ على الصلاة', 'اللهم أعنّي على ذكرك وشكرك', 'سبحان الله وبحمده', 'الصلاة نور'];
 const randomLine = () => LINES[Math.floor(Math.random() * LINES.length)];
+
+// ---------- Sky & weather ----------
+// Sun elevation follows the real prayer times of the chosen city: dawn at Fajr,
+// sunrise, noon at Dhuhr, sunset at Maghrib, full night after Isha.
+const PERIODS = { auto: 'تلقائي', fajr: 'الفجر', morning: 'الصباح', dhuhr: 'الظهر', asr: 'العصر', maghrib: 'المغرب', night: 'الليل' };
+const PREVIEW_ELEV = { fajr: [-8, false], morning: [18, false], dhuhr: [62, true], asr: [30, true], maghrib: [1, true], night: [-25, true] };
+let timeOverride = 'auto';
+function skyInfo(now = new Date()) {
+  if (timeOverride !== 'auto') { const [elev, pm] = PREVIEW_ELEV[timeOverride]; return { elev, pm, period: timeOverride }; }
+  const pd = prayerNow();
+  const hr = (d) => d.getHours() + d.getMinutes() / 60;
+  let fajr, sunrise, dhuhr, asr, maghrib, isha;
+  if (pd) { ({ fajr: { start: fajr, end: sunrise }, dhuhr: { start: dhuhr }, asr: { start: asr }, maghrib: { start: maghrib }, isha: { start: isha } } = pd.windows); [fajr, sunrise, dhuhr, asr, maghrib, isha] = [fajr, sunrise, dhuhr, asr, maghrib, isha].map(hr); }
+  else [fajr, sunrise, dhuhr, asr, maghrib, isha] = [4.5, 6, 12, 15.3, 18, 19.5];
+  let h = hr(now); if (h < fajr - 3) h += 24;
+  const k = (a, b) => THREE_clamp((h - a) / (b - a));
+  let elev;
+  if (h < fajr) elev = -25;
+  else if (h < sunrise) elev = -18 + 18 * k(fajr, sunrise);
+  else if (h < dhuhr) elev = 62 * Math.sin((k(sunrise, dhuhr) * Math.PI) / 2);
+  else if (h < maghrib) elev = 62 * Math.cos((k(dhuhr, maghrib) * Math.PI) / 2);
+  else if (h < isha) elev = -18 * k(maghrib, isha);
+  else elev = -25;
+  const period = h < fajr ? 'night' : h < sunrise ? 'fajr' : h < dhuhr ? 'morning' : h < asr ? 'dhuhr' : h < maghrib ? 'asr' : h < isha ? 'maghrib' : 'night';
+  return { elev, pm: h >= dhuhr, period };
+}
+const THREE_clamp = (x) => Math.max(0, Math.min(1, x));
+
+const WEATHER_NAMES = { auto: 'تلقائي', clear: '☀️ صافٍ', cloudy: '⛅ غائم جزئيًا', overcast: '☁️ غائم', fog: '🌫 ضباب', rain: '🌧 مطر', storm: '⛈ عاصفة', snow: '❄️ ثلج' };
+let weatherOverride = 'auto', liveWeather = null, weatherFetchedAt = 0;
+const currentWeather = () => (weatherOverride !== 'auto' ? weatherOverride : liveWeather?.kind || 'clear');
+// Live weather for the chosen city (Open-Meteo, no key). Silently stays "clear" if unreachable.
+async function loadWeather(force = false) {
+  const loc = state.location;
+  if (!loc || (!force && Date.now() - weatherFetchedAt < 10 * 60e3)) return;
+  weatherFetchedAt = Date.now();
+  try {
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lng}&current=weather_code,temperature_2m`);
+    const j = await r.json();
+    const { weatherFromCode } = await import('./oasis3d.js');
+    liveWeather = { kind: weatherFromCode(j.current.weather_code), temp: Math.round(j.current.temperature_2m) };
+  } catch (e) { console.warn('weather unavailable', e); liveWeather = liveWeather || { kind: 'clear', offline: true }; }
+  oasis?.scene.setWeather(currentWeather());
+  if ($('#hud')) $('#hud').innerHTML = placeHUD(), bind();
+}
+
+function showAtmosphere() {
+  const chips = (names, cur, attr) => Object.entries(names).map(([k, v]) => `<button class="chip ${k === cur ? 'on' : ''}" ${attr}="${k}">${v}</button>`).join('');
+  const live = liveWeather && !liveWeather.offline ? `الطقس الحقيقي في ${esc(state.location?.name || '')}: <b>${WEATHER_NAMES[liveWeather.kind]}</b>${liveWeather.temp != null ? ` · ${liveWeather.temp}°` : ''}` : 'تعذّر جلب الطقس الحقيقي — اختره يدويًا.';
+  modal(`
+    <h2>🌤 الجو والوقت</h2>
+    <p class="muted">المكان يتبع وقتك الحقيقي (حسب أوقات الصلاة في مدينتك) وطقس مدينتك تلقائيًا. تقدر تجرّب غيره هنا.</p>
+    <p>${live}</p>
+    <h3>الطقس</h3><div class="row wrap">${chips(WEATHER_NAMES, weatherOverride, 'data-set-weather')}</div>
+    <h3>الوقت</h3><div class="row wrap">${chips(PERIODS, timeOverride, 'data-set-time')}</div>`);
+  modalRefresh = showAtmosphere;
+  bind();
+}
 
 const PRAYER_NAMES = { fajr: 'الفجر', dhuhr: 'الظهر', asr: 'العصر', maghrib: 'المغرب', isha: 'العشاء' };
 function prayerNowLine() {
@@ -388,6 +448,7 @@ function placeHUD() {
       </div>
     </div>
     ${prayerNowLine()}
+    <button class="hud-chip atmo" data-open-atmo>${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}${liveWeather?.temp != null && weatherOverride === 'auto' ? ` · ${liveWeather.temp}°` : ''}</button>
   </div>
 
   <aside class="quests ${questsCollapsed ? 'collapsed' : ''}" id="quests">
@@ -530,6 +591,9 @@ function bind() {
   });
   on('data-open-upgrades', showUpgrades);
   on('data-open-path', showPath);
+  on('data-open-atmo', showAtmosphere);
+  on('data-set-weather', (k) => { weatherOverride = k; oasis?.scene.setWeather(currentWeather()); render(); });
+  on('data-set-time', (k) => { timeOverride = k; oasis?.scene.refreshSky(); render(); });
   on('data-toggle-quests', () => { questsCollapsed = !questsCollapsed; $('#quests')?.classList.toggle('collapsed', questsCollapsed); });
   on('data-pick-location', pickLocation);
   on('data-task-fail', (v) => {

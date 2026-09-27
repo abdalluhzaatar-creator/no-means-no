@@ -281,3 +281,6 @@ body.in-scene .foot { display: none; }
   .dock { bottom: 12px; gap: 6px; }
   .dock-btn { min-width: 0; padding: 8px 10px; font-size: 1.2rem; }
 }
+
+.hud-chip.atmo { cursor: pointer; }
+.chip.on { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
