@@ -136,7 +136,8 @@ function buildWorshipper(pal) {
   // Sequence player.
   let seq = null;
   const play = (steps) => { seq = { steps, i: 0, t: 0, from: { ...pose } }; };
-  const update = (t, dt) => {
+  let phase = 0;
+  const update = (t, dt, walk = 0, air = false) => {
     if (seq) {
       const st = seq.steps[seq.i];
       seq.t += dt;
@@ -148,10 +149,23 @@ function buildWorshipper(pal) {
         if (seq.i >= seq.steps.length) seq = null;
       }
     } else {
-      // idle: slight sway of the head
-      neck.rotation.y = Math.sin(t * 0.4) * 0.12;
+      // idle / walk / jump
+      phase += dt * (6 + walk * 5) * (walk > 0.05 ? 1 : 0);
+      const target = air ? { ...P.stand, sx: -0.6, sz: 0.7, ex: -0.6, neck: -0.1 } : P.stand;
+      const k = 1 - Math.exp(-dt * 12);
+      for (const key in pose) pose[key] = lerp(pose[key], target[key], k);
+      neck.rotation.y = walk > 0.05 ? 0 : Math.sin(t * 0.4) * 0.12;
     }
     apply(t);
+    if (!seq && !air && walk > 0.05) {
+      const sw = Math.sin(phase) * 0.55 * walk;
+      armL.sh.rotation.x = sw; armR.sh.rotation.x = -sw;
+      armL.el.rotation.x = armR.el.rotation.x = -0.25 * walk;
+      lower.rotation.x = Math.sin(phase * 2) * 0.03 * walk;
+      upper.rotation.z = Math.sin(phase) * 0.04 * walk;
+      const bob = Math.abs(Math.sin(phase)) * 0.05 * walk;
+      lower.position.y = bob; upper.position.y += bob;
+    } else { lower.rotation.x = 0; upper.rotation.z = 0; lower.position.y = 0; }
   };
   const busy = () => !!seq;
   const rakah = [
@@ -568,6 +582,80 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
   const resize = () => { const w = container.clientWidth, h = container.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); };
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
 
+  // ---------- player movement ----------
+  // Keyboard (WASD / arrows, Space to jump) and on-screen joystick + jump button.
+  const RUG = new THREE.Vector3(0, 0.44, 0);
+  const keys = new Set();
+  const joy = new THREE.Vector2();
+  let vy = 0, grounded = true, walkAmt = 0, facing = Math.PI;
+  const onKey = (e) => {
+    if (e.target.closest?.('input, textarea, select')) return;
+    const k = e.key.toLowerCase();
+    if (!['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) return;
+    e.preventDefault();
+    if (e.type === 'keydown') { keys.add(k); if (k === ' ') jump(); } else keys.delete(k);
+  };
+  window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey);
+  const jump = () => { if (grounded && !hero.busy()) { vy = 7.5; grounded = false; controls.autoRotate = false; } };
+  const blocked = (x, z) => {
+    if (Math.abs(x) > 20.3 || Math.abs(z) > 20.3) return true;
+    if (Math.abs(x) < 2.6 && z > 6 && z < 21) return true;                           // reflecting pool
+    if (fnt.visible && Math.hypot(x, z - 5) < 2.6) return true;                        // fountain
+    for (const [bx, bz, w, d] of [[-8, 12, 6, 4], [8, 12, 6, 4], [-8, -14, 7, 3], [8, -14, 7, 3]])
+      if (Math.abs(x - bx) < w / 2 + 0.5 && Math.abs(z - bz) < d / 2 + 0.5) return true; // flower beds
+    return false;
+  };
+  const pad = document.createElement('div'); pad.className = 'move-pad';
+  pad.innerHTML = '<div class="joy"><div class="joy-knob"></div></div><button class="jump-btn" aria-label="نط">⤒</button>';
+  container.appendChild(pad);
+  const joyEl = pad.querySelector('.joy'), knob = pad.querySelector('.joy-knob');
+  let joyId = null;
+  const joyMove = (e) => {
+    const r = joyEl.getBoundingClientRect(), R = r.width / 2;
+    let x = e.clientX - (r.left + R), y = e.clientY - (r.top + R);
+    const l = Math.hypot(x, y); if (l > R) { x *= R / l; y *= R / l; }
+    knob.style.transform = `translate(${x}px, ${y}px)`;
+    joy.set(x / R, y / R);
+  };
+  joyEl.addEventListener('pointerdown', (e) => { joyId = e.pointerId; joyEl.setPointerCapture(e.pointerId); joyMove(e); controls.autoRotate = false; });
+  joyEl.addEventListener('pointermove', (e) => { if (e.pointerId === joyId) joyMove(e); });
+  const joyEnd = () => { joyId = null; joy.set(0, 0); knob.style.transform = ''; };
+  joyEl.addEventListener('pointerup', joyEnd); joyEl.addEventListener('pointercancel', joyEnd);
+  pad.querySelector('.jump-btn').addEventListener('pointerdown', (e) => { e.preventDefault(); jump(); });
+
+  const fwd = new THREE.Vector3(), right = new THREE.Vector3(), move = new THREE.Vector3(), prevPos = new THREE.Vector3();
+  const stepPlayer = (dt) => {
+    const p = hero.root.position;
+    prevPos.copy(p);
+    let ix = joy.x, iy = joy.y;
+    if (keys.has('w') || keys.has('arrowup')) iy -= 1;
+    if (keys.has('s') || keys.has('arrowdown')) iy += 1;
+    if (keys.has('a') || keys.has('arrowleft')) ix -= 1;
+    if (keys.has('d') || keys.has('arrowright')) ix += 1;
+    const mag = Math.min(1, Math.hypot(ix, iy));
+    if (!hero.busy() && mag > 0.08) {
+      camera.getWorldDirection(fwd); fwd.y = 0; fwd.normalize();
+      right.crossVectors(fwd, camera.up).normalize();
+      move.copy(fwd).multiplyScalar(-iy).addScaledVector(right, ix).normalize().multiplyScalar(mag * 5.5 * dt);
+      if (!blocked(p.x + move.x, p.z)) p.x += move.x;
+      if (!blocked(p.x, p.z + move.z)) p.z += move.z;
+      const want = Math.atan2(move.x, move.z);
+      let d = want - facing; d = Math.atan2(Math.sin(d), Math.cos(d));
+      facing += d * Math.min(1, dt * 12);
+    }
+    walkAmt = lerp(walkAmt, hero.busy() ? 0 : mag, Math.min(1, dt * 10));
+    if (!grounded) {
+      vy -= 22 * dt; p.y += vy * dt;
+      if (p.y <= 0.44) { p.y = 0.44; vy = 0; grounded = true; }
+    }
+    hero.root.rotation.y = facing;
+    aura.position.set(p.x, 0.46, p.z - 0.3 * Math.cos(facing));
+    // Camera follows the character.
+    const dx = p.x - prevPos.x, dz = p.z - prevPos.z;
+    camera.position.x += dx; camera.position.z += dz;
+    controls.target.x += dx; controls.target.z += dz;
+  };
+
   const clock = new THREE.Clock();
   let raf, burstUntil = 0, lastSky = 0, nextBolt = 4;
   const tick = () => {
@@ -575,7 +663,8 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
     if (t - lastSky > 30) { applySky(); lastSky = t; }
     controls.update();
     fill.position.copy(camera.position).add(new THREE.Vector3(0, 6, 0));
-    hero.update(t, dt);
+    stepPlayer(dt);
+    hero.update(t, dt, walkAmt, !grounded);
     fnt.userData.tick(t);
     const lvl = aura.userData.level || 0;
     aura.material.opacity = 0.12 + lvl * 0.03 + Math.sin(t * 2) * 0.05;
@@ -620,12 +709,19 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
   tick();
 
   return {
-    pray() { hero.pray(); burstUntil = clock.elapsedTime + 9; controls.autoRotate = false; },
+    pray() {
+      // Step back onto the rug and face the mihrab before praying.
+      const p = hero.root.position, dx = RUG.x - p.x, dz = RUG.z - p.z;
+      p.copy(RUG); vy = 0; grounded = true; facing = Math.PI; hero.root.rotation.y = facing;
+      camera.position.x += dx; camera.position.z += dz; controls.target.x += dx; controls.target.z += dz;
+      hero.pray(); burstUntil = clock.elapsedTime + 9; controls.autoRotate = false;
+    },
     update({ features: f, level: l }) { setFeatures(f, l); },
     setWeather(k) { kind = k in WEATHER ? k : 'clear'; W = WEATHER[kind]; applySky(); },
     refreshSky() { applySky(); },
     dispose() {
       cancelAnimationFrame(raf); ro.disconnect(); controls.dispose();
+      window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey);
       scene.traverse((o) => { o.geometry?.dispose(); });
       renderer.dispose(); renderer.forceContextLoss?.();
       container.innerHTML = '';
