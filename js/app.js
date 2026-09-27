@@ -444,7 +444,12 @@ function placeHUD() {
           ${stage ? `<button class="rank" data-ranks="${c.id}" style="--rank:${stage.color || 'var(--primary)'}">${esc(stage.name)} · ${ch.level}</button>` : ''}
           <span class="plate-streak" title="أطول سلسلة">🔥 ${best}</span>
         </div>
-        ${live ? `<div class="xp" title="أيام كاملة متتالية للمستوى"><span style="width:${Math.round(((ch.levelReady ? c.daysPerLevel : live.levelDays) / c.daysPerLevel) * 100)}%"></span></div>` : ''}
+        ${live ? (() => {
+          const lv = ch.levelReady ? c.daysPerLevel : live.levelDays;
+          const row = (icon, label, cur, max) => `<div class="meter" data-open-path title="${label}"><span class="meter-label">${icon} ${label}</span><b><bdi>${cur}/${max}</bdi></b><div class="xp"><span style="width:${Math.round((cur / max) * 100)}%"></span></div></div>`;
+          return row('📅', ch.levelReady ? 'المستوى جاهز ✔' : 'أيام للمستوى', lv, c.daysPerLevel)
+            + (c.keyEveryDays ? row('🗝', 'أيام للمفتاح', live.keyDays, c.keyEveryDays) : '');
+        })() : ''}
       </div>
     </div>
     ${prayerNowLine()}

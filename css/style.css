@@ -320,3 +320,8 @@ body.in-world .foot { display: none; }
   .map-help { display: none; }
   main { padding-top: 60px; padding-bottom: 20px; }
 }
+
+.meter { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; font-size: .78rem; cursor: pointer; }
+.meter .xp { grid-column: 1 / -1; }
+.meter-label { opacity: .85; white-space: nowrap; }
+.meter b { color: #ffe7a8; }
