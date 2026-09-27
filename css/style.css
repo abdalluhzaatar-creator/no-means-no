@@ -169,11 +169,15 @@ main { max-width: 980px; margin: 0 auto; padding: 20px 16px 100px; }
 .sub { margin-top: 16px; }
 
 /* World map */
-.world-view { position: relative; width: 100vw; margin: -20px calc(50% - 50vw) 0; height: calc(100vh - 110px); min-height: 420px; overflow: auto; direction: ltr; cursor: grab; scrollbar-width: none; background: #3f7f99; overscroll-behavior: contain; }
-.world-view::-webkit-scrollbar { display: none; }
-.world-view.dragging { cursor: grabbing; user-select: none; }
-.world-map { display: block; width: 2800px; height: auto; max-width: none; }
-@media (max-width: 720px) { .world-map { width: 1900px; } }
+.world-view { position: relative; width: 100vw; margin: -20px calc(50% - 50vw) 0; height: calc(100vh - 110px); min-height: 420px; overflow: hidden; background: linear-gradient(#9cc3dd, #dfe9ef); touch-action: none; }
+.world-view canvas { display: block; cursor: grab; }
+.world-view canvas:active { cursor: grabbing; }
+.world-view.flat { overflow: auto; }
+.world-view.flat .world-map { width: 2800px; height: auto; max-width: none; }
+.w3-loading { position: absolute; inset: 0; display: grid; place-items: center; color: #1f2a2e; font-weight: 700; }
+.w3-labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.w3-label { position: absolute; left: 0; top: 0; pointer-events: auto; font: 700 15px 'Tajawal', sans-serif; padding: 6px 14px; border-radius: 99px; border: 2px solid #c9962c; background: #fffdf8ee; color: #1f2a2e; cursor: pointer; white-space: nowrap; box-shadow: 0 4px 14px #0003; }
+.w3-label.teaser { background: #c9962c; color: #fff; }
 .spot { cursor: pointer; }
 .spot:hover .spot-glow, .spot:focus .spot-glow { opacity: .7; }
 .spot:focus { outline: none; }

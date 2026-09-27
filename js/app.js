@@ -2,7 +2,7 @@
 import { CHARACTERS, REGIONS } from './content.js';
 import * as E from './engine.js';
 import { createStorage } from './storage.js';
-import { characterSVG, regionSVG, worldMapSVG, WORLD } from './scenes.js';
+import { characterSVG, regionSVG, worldMapSVG } from './scenes.js';
 import * as FX from './effects.js';
 import { CITIES, METHODS, prayerDay, windowState, fmtTime } from './prayer.js';
 
@@ -209,38 +209,29 @@ function renderWorld() {
     }
     return { def, vis, scene };
   });
+  worldSpots = spots;
   return `
-  <div class="world-view" id="world-view">${worldMapSVG(spots)}</div>
-  <p class="muted map-help">اسحب لتستكشف العالم · اضغط على مكان لتدخله</p>`;
+  <div class="world-view" id="world-view"><div class="w3-loading">جارٍ تحميل العالم…</div></div>
+  <p class="muted map-help">اسحب لتتنقّل · كبّر وصغّر بعجلة الماوس أو بإصبعين · زر الماوس الأيمن للدوران · اضغط على مكان لتدخله</p>`;
 }
 
-// Drag-to-pan for the world; starts centred on the player's places.
-let worldScroll = null;
-function bindWorld() {
+// The 3D world is mounted after the screen HTML is in place; falls back to the flat map.
+let worldSpots = [], disposeWorld = null;
+async function bindWorld() {
+  disposeWorld?.(); disposeWorld = null;
   const v = $('#world-view');
   if (!v) return;
-  const svg = v.querySelector('svg');
-  const scale = svg.getBoundingClientRect().width / WORLD.w;
-  if (worldScroll) { v.scrollLeft = worldScroll[0]; v.scrollTop = worldScroll[1]; } else {
-    const pts = REGIONS.filter((r) => r.map && state.regions[r.id]).map((r) => r.map);
-    const mx = pts.length ? pts.reduce((a, p) => a + p.x, 0) / pts.length : 500;
-    const my = pts.length ? pts.reduce((a, p) => a + p.y, 0) / pts.length : 350;
-    // scrollLeft is negative in RTL documents; the map itself is LTR.
-    v.scrollLeft = (mx + WORLD.ox) * scale - v.clientWidth / 2;
-    v.scrollTop = (my + WORLD.oy) * scale - v.clientHeight / 2;
+  try {
+    const { mountWorld } = await import('./world3d.js');
+    if (!v.isConnected) return;
+    v.innerHTML = '';
+    disposeWorld = mountWorld(v, worldSpots, openSpot);
+  } catch (err) {
+    console.warn('3D world unavailable', err);
+    v.classList.add('flat');
+    v.innerHTML = worldMapSVG(worldSpots);
+    v.querySelectorAll('[data-spot]').forEach((el) => (el.onclick = () => openSpot(el.dataset.spot)));
   }
-  let start = null, moved = false;
-  v.onpointerdown = (e) => { if (e.pointerType !== 'mouse') return; start = [e.clientX, e.clientY, v.scrollLeft, v.scrollTop]; moved = false; };
-  v.onpointermove = (e) => {
-    if (!start) return;
-    const dx = e.clientX - start[0], dy = e.clientY - start[1];
-    if (Math.abs(dx) + Math.abs(dy) > 5) { moved = true; v.classList.add('dragging'); }
-    v.scrollLeft = start[2] - dx; v.scrollTop = start[3] - dy;
-  };
-  const end = () => { start = null; v.classList.remove('dragging'); };
-  v.onpointerup = end; v.onpointerleave = end;
-  v.addEventListener('click', (e) => { if (moved) { e.stopPropagation(); moved = false; } }, true);
-  v.onscroll = () => { worldScroll = [v.scrollLeft, v.scrollTop]; };
 }
 
 function openSpot(id) {
