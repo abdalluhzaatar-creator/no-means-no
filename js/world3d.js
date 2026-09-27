@@ -189,6 +189,37 @@ export function mountWorld(container, spots, onPick) {
     return g;
   }
 
+  // Miniature of the palace courtyard seen inside the place.
+  function palace() {
+    const g = new THREE.Group();
+    const wallM = new THREE.MeshStandardMaterial({ color: 0xeadfc8, roughness: 0.75 });
+    const plaster = new THREE.MeshStandardMaterial({ color: 0xf3ece0, roughness: 0.85 });
+    const dome = new THREE.MeshStandardMaterial({ color: 0x2f7a8a, roughness: 0.3, metalness: 0.25 });
+    const marble = new THREE.MeshStandardMaterial({ color: 0xf1ede4, roughness: 0.4 });
+    const court = new THREE.Mesh(new THREE.BoxGeometry(18, 0.5, 18), marble); court.position.y = 0.25; g.add(court);
+    const lawn = new THREE.Mesh(new THREE.BoxGeometry(12, 0.3, 12), new THREE.MeshStandardMaterial({ color: 0x5f9443 })); lawn.position.y = 0.5; g.add(lawn);
+    const pool = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.35, 7), new THREE.MeshStandardMaterial({ color: 0x2c8aa6, roughness: 0.1 })); pool.position.set(0, 0.55, 1.5); g.add(pool);
+    for (const [x, z, ry] of [[0, -8.5, 0], [-8.5, 0, Math.PI / 2], [8.5, 0, Math.PI / 2]]) {
+      const w = new THREE.Mesh(new THREE.BoxGeometry(18, 3, 1), wallM); w.position.set(x, 1.5, z); w.rotation.y = ry; g.add(w);
+    }
+    const hall = new THREE.Mesh(new THREE.BoxGeometry(11, 5, 4.5), plaster); hall.position.set(0, 2.5, 8); g.add(hall);
+    const iwan = new THREE.Mesh(new THREE.BoxGeometry(4.5, 6.5, 1), wallM); iwan.position.set(0, 3.25, 5.6); g.add(iwan);
+    const d = new THREE.Mesh(new THREE.SphereGeometry(2.4, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), dome); d.position.set(0, 5, 8); d.scale.y = 1.25; g.add(d);
+    for (const x of [-5.5, 5.5]) {
+      const t = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.7, 9, 12), wallM); t.position.set(x, 4.5, 8); g.add(t);
+      const c = new THREE.Mesh(new THREE.SphereGeometry(0.75, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), dome); c.position.set(x, 9, 8); c.scale.y = 1.4; g.add(c);
+    }
+    for (const [x, z] of [[-8.5, -8.5], [8.5, -8.5]]) {
+      const t = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.9, 5, 10), wallM); t.position.set(x, 2.5, z); g.add(t);
+      const c = new THREE.Mesh(new THREE.SphereGeometry(0.9, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), dome); c.position.set(x, 5, z); g.add(c);
+    }
+    const cyp = new THREE.MeshStandardMaterial({ color: 0x2f5a2e, roughness: 0.9 });
+    for (const [x, z] of [[-4.5, -4.5], [4.5, -4.5], [-4.5, 3], [4.5, 3]]) { const c = new THREE.Mesh(new THREE.SphereGeometry(0.6, 10, 8), cyp); c.scale.y = 3; c.position.set(x, 2.3, z); g.add(c); }
+    g.rotation.y = Math.PI;
+    addShadow(g);
+    return g;
+  }
+
   function ruin() {
     const g = new THREE.Group();
     const mat = new THREE.MeshStandardMaterial({ color: 0x6b6f76, roughness: 0.9, transparent: true, opacity: 0.9 });
@@ -206,7 +237,7 @@ export function mountWorld(container, spots, onPick) {
   let glow;
   for (const s of shown) {
     const y = height(s.x, s.z);
-    const obj = s.vis === 'owned' ? mosque() : ruin();
+    const obj = s.vis === 'owned' ? palace() : ruin();
     obj.scale.setScalar(1.5);
     obj.position.set(s.x, y - 0.2, s.z);
     obj.userData.spot = s.def.id;
