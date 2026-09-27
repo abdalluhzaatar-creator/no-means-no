@@ -113,7 +113,8 @@ export function mountTrophies(container, { cups, sky: skyInfo, onPick }) {
   const su = sky.material.uniforms; su.turbidity.value = 4; su.rayleigh.value = 1.6; su.mieCoefficient.value = 0.005; su.mieDirectionalG.value = 0.85;
   const sun = new THREE.DirectionalLight(0xfff0d8, 2.6); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, near: 1, far: 200 }); sun.shadow.bias = -0.0005;
-  const hemi = new THREE.HemisphereLight(0xdfeaff, 0x6b5a40, 1.1);
+  const hemi = new THREE.HemisphereLight(0xfff4e0, 0x8a7a60, 1.5);
+  const front = new THREE.DirectionalLight(0xfff2dc, 1.2); front.position.set(0, 30, 60); scene.add(front);
   scene.add(sun, sun.target, hemi);
   let night = 0;
   const applySky = () => {
@@ -123,7 +124,7 @@ export function mountTrophies(container, { cups, sky: skyInfo, onPick }) {
     night = THREE.MathUtils.clamp((3 - elev) / 13, 0, 1);
     sun.position.copy(elev > 3 ? dir : new THREE.Vector3(-0.3, 0.8, 0.5).normalize()).multiplyScalar(90);
     sun.intensity = THREE.MathUtils.lerp(2.6, 0.4, night); sun.color.set(night > 0.5 ? 0x9fb4e6 : 0xfff0d8);
-    hemi.intensity = THREE.MathUtils.lerp(1.1, 0.3, night);
+    hemi.intensity = THREE.MathUtils.lerp(1.5, 0.45, night);
     renderer.toneMappingExposure = THREE.MathUtils.lerp(0.55, 1, night);
     sky.visible = night < 0.95; scene.background = sky.visible ? null : new THREE.Color(0x0e1530);
   };
@@ -137,7 +138,7 @@ export function mountTrophies(container, { cups, sky: skyInfo, onPick }) {
   const rock = new THREE.MeshStandardMaterial({ color: 0x7d6a58, roughness: 1, flatShading: true });
   const island = new THREE.Group(); scene.add(island);
   const under = new THREE.Mesh(new THREE.ConeGeometry(24, 38, 14, 4), rock); under.rotation.x = Math.PI; under.position.y = -19.5; island.add(under);
-  for (let i = 0; i < 12; i++) { const a = rand() * 6.28, r = 10 + rand() * 12; const c = new THREE.Mesh(new THREE.ConeGeometry(2 + rand() * 3, 8 + rand() * 10, 6), rock); c.rotation.x = Math.PI; c.position.set(Math.cos(a) * r, -5 - rand() * 6, Math.sin(a) * r); island.add(c); }
+  for (let i = 0; i < 12; i++) { const a = rand() * 6.28, r = 10 + rand() * 12, h = 8 + rand() * 10; const c = new THREE.Mesh(new THREE.ConeGeometry(2 + rand() * 3, h, 6), rock); c.rotation.x = Math.PI; c.position.set(Math.cos(a) * r, -h / 2 - 1.6, Math.sin(a) * r); island.add(c); }
   const grass = new THREE.Mesh(new THREE.CylinderGeometry(25, 24, 2, 40), new THREE.MeshStandardMaterial({ color: 0x69a64a, roughness: 1 })); grass.position.y = -0.9; grass.receiveShadow = true; island.add(grass);
   const plaza = new THREE.Mesh(new THREE.CylinderGeometry(18.5, 18.5, 0.3, 64), new THREE.MeshStandardMaterial({ color: 0xf3efe6, roughness: 0.35 })); plaza.position.y = 0.15; plaza.receiveShadow = true; island.add(plaza);
   const inlay = new THREE.Mesh(new THREE.RingGeometry(5, 5.6, 64), new THREE.MeshStandardMaterial({ color: 0xd4a53a, metalness: 1, roughness: 0.3 })); inlay.rotation.x = -Math.PI / 2; inlay.position.y = 0.32; island.add(inlay);
@@ -146,35 +147,68 @@ export function mountTrophies(container, { cups, sky: skyInfo, onPick }) {
     const f = new THREE.Mesh(new THREE.PlaneGeometry(3, 60), new THREE.MeshBasicMaterial({ color: 0xd9f3ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
     f.position.set(Math.cos(a) * 24.5, -30, Math.sin(a) * 24.5); f.lookAt(0, -30, 0); island.add(f);
   }
-  // Central monument: a tall arch over the stairway of cups.
+  // ---- Hall of Champions: a stepped marble temple, one terrace per group of ranks ----
   const stone = new THREE.MeshStandardMaterial({ color: 0xeadfc8, roughness: 0.7 });
   const goldM = new THREE.MeshStandardMaterial({ color: 0xffc83d, metalness: 1, roughness: 0.25 });
-  const obelisk = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 2, 11, 8), stone); obelisk.position.y = 5.8; island.add(obelisk);
-  const orb = new THREE.Mesh(new THREE.SphereGeometry(1.4, 32, 16), new THREE.MeshStandardMaterial({ color: 0xffe7a8, emissive: 0xffb84d, emissiveIntensity: 1.2 })); orb.position.y = 12.8; island.add(orb);
-  const orbLight = new THREE.PointLight(0xffc56b, 30, 40, 1.8); orbLight.position.y = 12.8; island.add(orbLight);
-  const crown = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.18, 8, 40), goldM); crown.position.y = 12.8; crown.rotation.x = Math.PI / 2; island.add(crown);
-  shadowAll(obelisk);
-  // cypresses around the rim
-  for (let i = 0; i < 18; i++) { const a = (i / 18) * Math.PI * 2 + 0.17; const t = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 8), new THREE.MeshStandardMaterial({ color: 0x2f5a2e })); t.scale.y = 3; t.position.set(Math.cos(a) * 21.5, 2.4, Math.sin(a) * 21.5); t.castShadow = true; island.add(t); }
-
-  // ---- pedestals: an ascending spiral, one per cup ----
-  const labelLayer = document.createElement('div'); labelLayer.className = 'w3-labels'; container.appendChild(labelLayer);
-  const slots = [], pick = [];
   const marbleM = new THREE.MeshStandardMaterial({ color: 0xfbf8f2, roughness: 0.25 });
   const darkM = new THREE.MeshStandardMaterial({ color: 0x1d1830, roughness: 0.3, metalness: 0.4 });
   const bronzeM = new THREE.MeshStandardMaterial({ color: 0xb87333, metalness: 1, roughness: 0.3 });
-  const R = 13.5;
+  const blueM = new THREE.MeshStandardMaterial({ color: 0x2f5aa8, roughness: 0.5 });
+  // terraces: [radius, top height, material]
+  const TERR = [[12.8, 2.3, marbleM], [8.4, 4.4, marbleM], [4, 6.6, darkM]];
+  TERR.forEach(([r, top, m], i) => {
+    const prev = i ? TERR[i - 1][1] : 0.3;
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(r, r + 0.4, top - prev, 64), m); t.position.y = prev + (top - prev) / 2; t.castShadow = t.receiveShadow = true; island.add(t);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(r + 0.05, 0.13, 8, 96), goldM); rim.rotation.x = Math.PI / 2; rim.position.y = top; island.add(rim);
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(r + 0.42, r + 0.42, 0.25, 64, 1, true), blueM); band.position.y = prev + 0.35; island.add(band);
+  });
+  // Grand stairway on the front (+z) up to the summit
+  for (let i = 0; i < 28; i++) {
+    const y = 0.3 + i * 0.225, z = 16.5 - i * 0.44;
+    if (z < 3.2) break;
+    const st = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.225, 0.46), i % 2 ? marbleM : stone); st.position.set(0, y + 0.11, z); st.receiveShadow = true; island.add(st);
+  }
+  const carpet = new THREE.Mesh(new THREE.PlaneGeometry(2, 14.5), new THREE.MeshStandardMaterial({ color: 0x8e1b24, roughness: 1 }));
+  carpet.position.set(0, 3.7, 10); carpet.rotation.x = -Math.PI / 2 + Math.atan(0.225 / 0.44); island.add(carpet);
+  for (const sx of [-1, 1]) {
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 14.6), goldM); rail.position.set(sx * 1.9, 4.6, 10); rail.rotation.x = Math.atan(0.225 / 0.44); island.add(rail);
+    for (const z of [16.4, 4]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 2.4, 10), goldM); post.position.set(sx * 1.9, (z > 10 ? 0.3 : 6.1) + 1.2, z); island.add(post); const fl = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 8), new THREE.MeshBasicMaterial({ color: 0xffb13b, toneMapped: false })); fl.position.set(sx * 1.9, (z > 10 ? 0.3 : 6.1) + 2.7, z); island.add(fl); }
+  }
+  // Crown of light above the summit
+  const orb = new THREE.Mesh(new THREE.SphereGeometry(0.9, 32, 16), new THREE.MeshStandardMaterial({ color: 0xffe7a8, emissive: 0xffb84d, emissiveIntensity: 1.2 })); orb.position.y = 15.5; island.add(orb);
+  const orbLight = new THREE.PointLight(0xffc56b, 40, 50, 1.6); orbLight.position.y = 15; island.add(orbLight);
+  const crown = new THREE.Group(); crown.position.y = 15.5; island.add(crown);
+  for (let i = 0; i < 3; i++) { const r = new THREE.Mesh(new THREE.TorusGeometry(2.2 + i * 0.6, 0.07, 8, 64), goldM); r.rotation.set(Math.PI / 2 + i * 0.5, i * 0.7, 0); crown.add(r); }
+  // Outer colonnade with a golden ring and banners
+  const colM = marbleM;
+  for (let i = 0; i < 20; i++) {
+    const a = (i / 20) * Math.PI * 2; if (Math.abs(Math.atan2(Math.sin(a - Math.PI / 2), Math.cos(a - Math.PI / 2))) < 1.35) continue;
+    const x = Math.cos(a) * 21, z = Math.sin(a) * 21;
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.65, 8, 14), colM); c.position.set(x, 4.3, z); c.castShadow = true; island.add(c);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.4, 1.6), goldM); cap.position.set(x, 8.4, z); island.add(cap);
+    const ban = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 3.8), new THREE.MeshStandardMaterial({ color: [0x8e1b24, 0x2f5aa8, 0x6b3fa0][i % 3], side: THREE.DoubleSide })); ban.position.set(x * 0.97, 5.6, z * 0.97); ban.lookAt(0, 5.6, 0); island.add(ban);
+  }
+  // Floating crystals around the temple
+  const crystals = [];
+  for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; const c = new THREE.Mesh(new THREE.OctahedronGeometry(0.6), new THREE.MeshStandardMaterial({ color: 0x9fe3ff, emissive: 0x3aa8ff, emissiveIntensity: 0.8, transparent: true, opacity: 0.85 })); c.position.set(Math.cos(a) * 23, 6 + (i % 3) * 2, Math.sin(a) * 23); c.scale.y = 1.8; island.add(c); crystals.push(c); }
+
+  // ---- pedestals: lower ranks on the ground ring, higher ranks on the terraces, legendary on the summit ----
+  const labelLayer = document.createElement('div'); labelLayer.className = 'w3-labels'; container.appendChild(labelLayer);
+  const slots = [], pick = [];
+  const GROUPS = [[0, 5, 15.6, 0.3], [5, 9, 10.6, 2.3], [9, 12, 6.2, 4.4], [12, 13, 0, 6.6]]; // [from, to, radius, floor]
   cups.forEach((cup, i) => {
-    const a = Math.PI / 2 + (i / cups.length) * Math.PI * 2;
-    const h = 0.6 + i * 0.28;
-    const slot = new THREE.Group(); slot.position.set(Math.cos(a) * R, 0, Math.sin(a) * R); island.add(slot);
-    const ped = new THREE.Mesh(new THREE.CylinderGeometry(1.2 + i * 0.03, 1.45 + i * 0.03, h, i < 2 ? 7 : 16), i < 2 ? rock : i < 5 ? stone : i < 8 ? marbleM : darkM); ped.position.y = h / 2 + 0.3; slot.add(ped); shadowAll(ped);
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(1.35 + i * 0.03, 1.35 + i * 0.03, 0.18, 16), i < 2 ? rock : i < 5 ? bronzeM : goldM); cap.position.y = h + 0.35; slot.add(cap);
-    const ring = new THREE.Mesh(new THREE.RingGeometry(1.7, 2, 64, 1, 0, 0.001), new THREE.MeshBasicMaterial({ color: new THREE.Color(cup.glow || cup.color), transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
-    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.35; slot.add(ring);
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 8, 24, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(cup.glow || cup.color), transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }));
-    beam.position.y = h + 4.4; slot.add(beam);
-    slot.userData = { cup, i, top: h + 0.45, ring, beam, trophy: null };
+    const [from, to, R, floor] = GROUPS.find(([f, t]) => i >= f && i < t);
+    const n = to - from, k = i - from;
+    const a = R ? Math.PI / 2 + 0.55 + (k + 0.5) / n * (Math.PI * 2 - 1.1) : 0;
+    const h = 0.7 + (R ? 0 : 0.6);
+    const slot = new THREE.Group(); slot.position.set(Math.cos(a) * R, floor, Math.sin(a) * R); island.add(slot);
+    const ped = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.35, h, i < 2 ? 7 : 16), i < 2 ? rock : i < 5 ? stone : i < 9 ? marbleM : darkM); ped.position.y = h / 2; slot.add(ped); shadowAll(ped);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.25, 0.16, 16), i < 2 ? rock : i < 5 ? bronzeM : goldM); cap.position.y = h + 0.05; slot.add(cap);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(1.55, 1.85, 64, 1, 0, 0.001), new THREE.MeshBasicMaterial({ color: new THREE.Color(cup.glow || cup.color), transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04; slot.add(ring);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 10, 24, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(cup.glow || cup.color), transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    beam.position.y = h + 5; slot.add(beam);
+    slot.userData = { cup, i, top: h + 0.13, ring, beam, trophy: null };
     ped.userData.cupId = cup.id; cap.userData.cupId = cup.id; pick.push(ped, cap);
     const el = document.createElement('button'); el.className = 'w3-label cup-label'; el.onclick = () => onPick(cup.id);
     labelLayer.appendChild(el);
@@ -227,11 +261,11 @@ export function mountTrophies(container, { cups, sky: skyInfo, onPick }) {
   }
 
   // ---- camera ----
-  camera.position.set(0, 20, 44);
+  camera.position.set(0, 24, 50);
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, 3, 0);
+  controls.target.set(0, 5, 0);
   controls.enableDamping = true; controls.dampingFactor = 0.07; controls.enablePan = false;
-  controls.minDistance = 12; controls.maxDistance = 90; controls.maxPolarAngle = THREE.MathUtils.degToRad(82);
+  controls.minDistance = 8; controls.maxDistance = 90; controls.maxPolarAngle = THREE.MathUtils.degToRad(82);
   controls.autoRotate = true; controls.autoRotateSpeed = 0.25;
   renderer.domElement.addEventListener('pointerdown', () => { controls.autoRotate = false; }, { once: true });
 
@@ -250,14 +284,15 @@ export function mountTrophies(container, { cups, sky: skyInfo, onPick }) {
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
   if (camera.aspect < 0.8) camera.position.set(0, 30, 70);
 
-  const clock = new THREE.Clock(); const v = new THREE.Vector3(); let raf, lastSky = 0;
+  const clock = new THREE.Clock(); const v = new THREE.Vector3(), tmpV = new THREE.Vector3(); let raf, lastSky = 0;
   const tick = () => {
     const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
     if (t - lastSky > 30) { applySky(); lastSky = t; }
     controls.update();
     island.position.y = Math.sin(t * 0.5) * 0.4;
     orb.material.emissiveIntensity = 1 + Math.sin(t * 2) * 0.3;
-    crown.rotation.z = t * 0.4;
+    crown.rotation.y = t * 0.4; crown.rotation.x = Math.sin(t * 0.3) * 0.2;
+    crystals.forEach((c, i) => { c.rotation.y = t + i; c.position.y += Math.sin(t * 1.2 + i) * 0.004; });
     stars.material.opacity = night;
     for (const { slot } of slots) {
       const u = slot.userData;
@@ -277,7 +312,8 @@ export function mountTrophies(container, { cups, sky: skyInfo, onPick }) {
     for (const s of slots) {
       s.slot.getWorldPosition(v); v.y += s.slot.userData.top + 3.2;
       v.project(camera);
-      const vis = v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
+      const far = s.slot.userData.state !== 'active' && camera.position.distanceTo(s.slot.getWorldPosition(tmpV)) > 24;
+      const vis = !far && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
       s.el.style.display = vis ? '' : 'none';
       if (vis) s.el.style.transform = `translate(-50%, -100%) translate(${(v.x * 0.5 + 0.5) * w}px, ${(-v.y * 0.5 + 0.5) * h}px)`;
     }
