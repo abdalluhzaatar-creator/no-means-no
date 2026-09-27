@@ -2,7 +2,6 @@
 // fully animated worshipper. Upgrades appear in the scene as they are bought,
 // and the sky follows the real time of day.
 import * as THREE from './vendor/three.module.min.js';
-import { OrbitControls } from './vendor/OrbitControls.js';
 import { Sky } from './vendor/Sky.js';
 
 // ---------- helpers ----------
@@ -558,16 +557,58 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
   applySky();
 
   // Camera: front three-quarter view, the palace hall behind the character.
-  camera.position.set(6, 3.2, -8);
-  fill.position.copy(camera.position).add(new THREE.Vector3(0, 6, 0)); fill.target.position.set(0, 1, 0);
-  const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(0, 2.4, 0);
-  controls.enableDamping = true; controls.dampingFactor = 0.07;
-  controls.enablePan = false;
-  controls.minDistance = 2.5; controls.maxDistance = 18;
-  controls.maxPolarAngle = THREE.MathUtils.degToRad(86);
-  controls.autoRotate = true; controls.autoRotateSpeed = 0.3;
-  renderer.domElement.addEventListener('pointerdown', () => { controls.autoRotate = false; }, { once: true });
+  // Third-person camera: sits behind the character's shoulders and follows him.
+  // Drag to look around, wheel / pinch to zoom; while walking it swings back behind him.
+  const cam = { yaw: Math.PI * 0.82, pitch: 0.3, dist: 10, tYaw: Math.PI * 0.82, tPitch: 0.3, tDist: 10, idle: 0 };
+  const focus = new THREE.Vector3(0, 2.6, 0), camGoal = new THREE.Vector3();
+  const el = renderer.domElement;
+  const drags = new Map(); let pinch0 = 0;
+  el.addEventListener('pointerdown', (e) => { drags.set(e.pointerId, [e.clientX, e.clientY]); el.setPointerCapture(e.pointerId); });
+  el.addEventListener('pointermove', (e) => {
+    const prev = drags.get(e.pointerId); if (!prev) return;
+    if (drags.size === 1) {
+      cam.tYaw -= (e.clientX - prev[0]) * 0.006;
+      cam.tPitch = THREE.MathUtils.clamp(cam.tPitch + (e.clientY - prev[1]) * 0.004, -0.05, 1.2);
+      cam.idle = 0;
+    }
+    drags.set(e.pointerId, [e.clientX, e.clientY]);
+    if (drags.size === 2) {
+      const [p1, p2] = [...drags.values()], d = Math.hypot(p1[0] - p2[0], p1[1] - p2[1]);
+      if (pinch0) cam.tDist = THREE.MathUtils.clamp(cam.tDist * (pinch0 / d), 3.5, 20);
+      pinch0 = d;
+    }
+  });
+  const dragEnd = (e) => { drags.delete(e.pointerId); if (drags.size < 2) pinch0 = 0; };
+  el.addEventListener('pointerup', dragEnd); el.addEventListener('pointercancel', dragEnd);
+  el.addEventListener('wheel', (e) => { e.preventDefault(); cam.tDist = THREE.MathUtils.clamp(cam.tDist * (1 + Math.sign(e.deltaY) * 0.12), 3.5, 20); }, { passive: false });
+  const updateCamera = (dt, walking) => {
+    // Swing gently behind the character while he walks (not while the player is dragging).
+    cam.idle += dt;
+    if (walking && drags.size === 0) {
+      const behind = facing + Math.PI;
+      let d = behind - cam.tYaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+      cam.tYaw += d * Math.min(1, dt * 1.8);
+    }
+    const k = 1 - Math.exp(-dt * 8);
+    let dy = cam.tYaw - cam.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    cam.yaw += dy * k; cam.pitch += (cam.tPitch - cam.pitch) * k; cam.dist += (cam.tDist - cam.dist) * k;
+    const p = hero.root.position;
+    focus.lerp(new THREE.Vector3(p.x, p.y + 2.1, p.z), 1 - Math.exp(-dt * 10));
+    // Pull the camera in so it never goes through the courtyard walls.
+    let dist = cam.dist;
+    for (let i = 0; i < 8; i++) {
+      const x = focus.x + Math.sin(cam.yaw) * Math.cos(cam.pitch) * dist, z = focus.z + Math.cos(cam.yaw) * Math.cos(cam.pitch) * dist;
+      if (Math.abs(x) < 21.5 && Math.abs(z) < 21.5) break;
+      dist *= 0.85;
+    }
+    camGoal.set(
+      focus.x + Math.sin(cam.yaw) * Math.cos(cam.pitch) * dist,
+      Math.max(0.9, focus.y + Math.sin(cam.pitch) * dist),
+      focus.z + Math.cos(cam.yaw) * Math.cos(cam.pitch) * dist,
+    );
+    camera.position.copy(camGoal);
+    camera.lookAt(focus);
+  };
 
   const ray = new THREE.Raycaster(), ptr = new THREE.Vector2(); let down = null;
   renderer.domElement.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });
@@ -581,6 +622,7 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
 
   const resize = () => { const w = container.clientWidth, h = container.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); };
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
+  if (camera.aspect < 0.8) { cam.dist = cam.tDist = 15; cam.pitch = cam.tPitch = 0.34; }   // phones: pull back to fit him in the tall frame
 
   // ---------- player movement ----------
   // Keyboard (WASD / arrows, Space to jump) and on-screen joystick + jump button.
@@ -596,7 +638,7 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
     if (e.type === 'keydown') { keys.add(k); if (k === ' ') jump(); } else keys.delete(k);
   };
   window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey);
-  const jump = () => { if (grounded && !hero.busy()) { vy = 7.5; grounded = false; controls.autoRotate = false; } };
+  const jump = () => { if (grounded && !hero.busy()) { vy = 7.5; grounded = false; } };
   const blocked = (x, z) => {
     if (Math.abs(x) > 20.3 || Math.abs(z) > 20.3) return true;
     if (Math.abs(x) < 2.6 && z > 6 && z < 21) return true;                           // reflecting pool
@@ -617,7 +659,7 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
     knob.style.transform = `translate(${x}px, ${y}px)`;
     joy.set(x / R, y / R);
   };
-  joyEl.addEventListener('pointerdown', (e) => { joyId = e.pointerId; joyEl.setPointerCapture(e.pointerId); joyMove(e); controls.autoRotate = false; });
+  joyEl.addEventListener('pointerdown', (e) => { joyId = e.pointerId; joyEl.setPointerCapture(e.pointerId); joyMove(e); });
   joyEl.addEventListener('pointermove', (e) => { if (e.pointerId === joyId) joyMove(e); });
   const joyEnd = () => { joyId = null; joy.set(0, 0); knob.style.transform = ''; };
   joyEl.addEventListener('pointerup', joyEnd); joyEl.addEventListener('pointercancel', joyEnd);
@@ -650,10 +692,6 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
     }
     hero.root.rotation.y = facing;
     aura.position.set(p.x, 0.46, p.z - 0.3 * Math.cos(facing));
-    // Camera follows the character.
-    const dx = p.x - prevPos.x, dz = p.z - prevPos.z;
-    camera.position.x += dx; camera.position.z += dz;
-    controls.target.x += dx; controls.target.z += dz;
   };
 
   const clock = new THREE.Clock();
@@ -661,9 +699,9 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
   const tick = () => {
     const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
     if (t - lastSky > 30) { applySky(); lastSky = t; }
-    controls.update();
     fill.position.copy(camera.position).add(new THREE.Vector3(0, 6, 0));
     stepPlayer(dt);
+    updateCamera(dt, walkAmt > 0.2);
     hero.update(t, dt, walkAmt, !grounded);
     fnt.userData.tick(t);
     const lvl = aura.userData.level || 0;
@@ -711,16 +749,15 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
   return {
     pray() {
       // Step back onto the rug and face the mihrab before praying.
-      const p = hero.root.position, dx = RUG.x - p.x, dz = RUG.z - p.z;
-      p.copy(RUG); vy = 0; grounded = true; facing = Math.PI; hero.root.rotation.y = facing;
-      camera.position.x += dx; camera.position.z += dz; controls.target.x += dx; controls.target.z += dz;
-      hero.pray(); burstUntil = clock.elapsedTime + 9; controls.autoRotate = false;
+      hero.root.position.copy(RUG); vy = 0; grounded = true; facing = Math.PI; hero.root.rotation.y = facing;
+      cam.tYaw = Math.PI * 0.75; cam.tPitch = 0.3; cam.tDist = 7;   // side-front view to watch the prayer
+      hero.pray(); burstUntil = clock.elapsedTime + 9;
     },
     update({ features: f, level: l }) { setFeatures(f, l); },
     setWeather(k) { kind = k in WEATHER ? k : 'clear'; W = WEATHER[kind]; applySky(); },
     refreshSky() { applySky(); },
     dispose() {
-      cancelAnimationFrame(raf); ro.disconnect(); controls.dispose();
+      cancelAnimationFrame(raf); ro.disconnect();
       window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey);
       scene.traverse((o) => { o.geometry?.dispose(); });
       renderer.dispose(); renderer.forceContextLoss?.();
