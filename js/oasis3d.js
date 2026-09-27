@@ -502,12 +502,12 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
   }
 
   // ---- precipitation (particles follow the camera) ----
-  const RAIN_N = 6000, rainPos = new Float32Array(RAIN_N * 6);
+  const RAIN_N = 2500, rainPos = new Float32Array(RAIN_N * 6);
   for (let i = 0; i < RAIN_N; i++) { const x = (rng() - 0.5) * 80, y = rng() * 40, z = (rng() - 0.5) * 80; rainPos.set([x, y, z, x + 0.05, y - 0.7, z], i * 6); }
   const rain = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(rainPos, 3)),
     new THREE.LineBasicMaterial({ color: 0xaec4d6, transparent: true, opacity: 0.55 }));
   rain.frustumCulled = false; scene.add(rain);
-  const SNOW_N = 5000, snowPos = new Float32Array(SNOW_N * 3), snowSeed = new Float32Array(SNOW_N);
+  const SNOW_N = 2500, snowPos = new Float32Array(SNOW_N * 3), snowSeed = new Float32Array(SNOW_N);
   for (let i = 0; i < SNOW_N; i++) { snowPos.set([(rng() - 0.5) * 80, rng() * 40, (rng() - 0.5) * 80], i * 3); snowSeed[i] = rng() * 6.28; }
   const flakeTex = canvasTex(32, 32, (g) => { const grd = g.createRadialGradient(16, 16, 0, 16, 16, 16); grd.addColorStop(0, '#fff'); grd.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = grd; g.fillRect(0, 0, 32, 32); });
   const snow = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(snowPos, 3)),
@@ -533,7 +533,6 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
     sun.position.copy(lightDir).multiplyScalar(90);
     sun.color.set(night > 0.5 ? 0x9fb4e6 : 0xfff0d8).lerp(tmp.set(0xff9c5a), golden * 0.8);
     sun.intensity = lerp(2.8, 0.35, night) * (1 - W.dim * 0.8);
-    sun.castShadow = W.dim < 0.5;
     hemi.intensity = lerp(1.1, 0.25, night) * (1 - W.dim * 0.3);
     hemi.color.set(night > 0.5 ? 0x4a5a88 : 0xdfeaff);
     fill.intensity = lerp(0.7, 0.25, night);

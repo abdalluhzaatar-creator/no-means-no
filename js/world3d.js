@@ -615,11 +615,11 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   const fireflies = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(ffPos, 3)), new THREE.PointsMaterial({ color: 0xfff08a, size: 1.4, map: starTex, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
   scene.add(fireflies);
   // Rain / snow around the camera target
-  const PR = 7000, prPos = new Float32Array(PR * 6);
+  const PR = 2500, prPos = new Float32Array(PR * 6);
   for (let i = 0; i < PR; i++) { const x = (rand() - 0.5) * 260, y = rand() * 140, z = (rand() - 0.5) * 260; prPos.set([x, y, z, x, y - 3, z], i * 6); }
   const rainL = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(prPos, 3)), new THREE.LineBasicMaterial({ color: 0xb4c8d8, transparent: true, opacity: 0.5 }));
   rainL.frustumCulled = false; scene.add(rainL);
-  const SN = 6000, snPos = new Float32Array(SN * 3);
+  const SN = 2500, snPos = new Float32Array(SN * 3);
   for (let i = 0; i < SN; i++) snPos.set([(rand() - 0.5) * 260, rand() * 140, (rand() - 0.5) * 260], i * 3);
   const snowP = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(snPos, 3)), new THREE.PointsMaterial({ color: 0xffffff, size: 1.1, map: starTex, transparent: true, depthWrite: false }));
   snowP.frustumCulled = false; scene.add(snowP);
@@ -638,7 +638,6 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     sun.position.copy(dir).multiplyScalar(300);
     sun.color.set(0xfff1d6).lerp(tmpC.set(0xff9a5a), golden * 0.85);
     sun.intensity = 2.6 * (1 - night) * (1 - WX.dim * 0.75);
-    sun.castShadow = night < 0.6 && WX.dim < 0.5;
     moonLight.intensity = 0.9 * night * (1 - WX.dim * 0.7);
     hemi.intensity = THREE.MathUtils.lerp(0.8, 0.22, night) * (1 - WX.dim * 0.2);
     hemi.color.set(night > 0.5 ? 0x3a4a80 : 0xcfe6ff);
@@ -650,7 +649,9 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     scene.fog.color.copy(fogC); scene.fog.density = 0.0026 + WX.fog * 0.006;
     cloudMats.forEach((m, i) => m.color.copy(baseCloud[i]).lerp(tmpC.set(0x6f7880), WX.dim).lerp(tmpC.set(0xffb48a), golden * 0.5).lerp(tmpC.set(0x121828), night));
     moon.visible = moonGlow.visible = night > 0.05;
-    scene.environment = night > 0.6 ? null : envTex;
+    // Dim the sky reflection at night without swapping it (swapping recompiles every material).
+    const envK = (1 - night * 0.9) * (1 - WX.dim * 0.4);
+    scene.traverse((o) => { const m = o.material; if (m && m.isMeshStandardMaterial) m.envMapIntensity = envK; });
     hemi.intensity *= 1 - night * 0.3;
     rainL.visible = WX.rain > 0; snowP.visible = WX.snow > 0;
     water.material.color.set(night > 0.5 ? 0x0e2a3a : 0x1f6f8b);

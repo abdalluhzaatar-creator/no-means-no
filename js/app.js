@@ -134,7 +134,7 @@ function render() {
     return;
   }
   isle?.dispose(); isle = null;
-  if (screen === 'world' && disposeWorld && worldKey === worldSignature() && $('#world-view')) { const a = $('.world-atmo'); if (a) a.textContent = `${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}`; bind(); return; }
+  if (screen === 'world' && disposeWorld && worldKey === worldSignature() && $('#world-view')) { const a = $('.world-atmo'); if (a) a.textContent = `${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}${timeOverride === "auto" ? ` · ${fmtTime(new Date())}` : ""}`; bind(); return; }
   oasis?.scene.dispose(); oasis = null;
   const view = { world: renderWorld, character: renderCharacter, shop: renderShop, trophies: renderTrophies, hq: renderHQ }[screen];
   $('#screen').innerHTML = view();
@@ -252,7 +252,7 @@ function renderWorld() {
   worldSpots = spots;
   return `
   <div class="world-view" id="world-view"><div class="w3-loading">جارٍ تحميل العالم…</div></div>
-  <button class="hud-chip atmo world-atmo" data-open-atmo>${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}</button>
+  <button class="hud-chip atmo world-atmo" data-open-atmo>${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}${timeOverride === "auto" ? ` · ${fmtTime(new Date())}` : ""}</button>
   <p class="map-help">اسحب لتتنقّل · كبّر وصغّر بعجلة الماوس أو بإصبعين · زر الماوس الأيمن للدوران · اضغط على مكان لتدخله</p>`;
 }
 
@@ -404,7 +404,9 @@ function skyInfo(now = new Date()) {
   else if (h < maghrib) elev = 62 * Math.cos((k(dhuhr, maghrib) * Math.PI) / 2);
   else if (h < isha) elev = -18 * k(maghrib, isha);
   else elev = -25;
-  const period = h < fajr ? 'night' : h < sunrise ? 'fajr' : h < dhuhr ? 'morning' : h < asr ? 'dhuhr' : h < maghrib ? 'asr' : h < isha ? 'maghrib' : 'night';
+  // Label by what the sky looks like: after dusk (sun well below the horizon) it is night
+  // even though the Maghrib prayer time lasts until Isha; likewise before first light.
+  const period = h < fajr ? 'night' : h < sunrise ? 'fajr' : h < dhuhr ? 'morning' : h < asr ? 'dhuhr' : h < maghrib ? 'asr' : h < isha ? (elev < -6 ? 'night' : 'maghrib') : 'night';
   return { elev, pm: h >= dhuhr, period };
 }
 const THREE_clamp = (x) => Math.max(0, Math.min(1, x));
@@ -482,7 +484,7 @@ function placeHUD() {
       </div>
     </div>
     ${prayerNowLine()}
-    <button class="hud-chip atmo" data-open-atmo>${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}${liveWeather?.temp != null && weatherOverride === 'auto' ? ` · ${liveWeather.temp}°` : ''}</button>
+    <button class="hud-chip atmo" data-open-atmo>${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}${timeOverride === "auto" ? ` · ${fmtTime(new Date())}` : ""}${liveWeather?.temp != null && weatherOverride === 'auto' ? ` · ${liveWeather.temp}°` : ''}</button>
   </div>
 
   <aside class="quests ${questsCollapsed ? 'collapsed' : ''}" id="quests">
