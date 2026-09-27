@@ -1,6 +1,6 @@
 // Challenge cups ("نظام الكؤوس"): pure state logic, no DOM.
 // Money here is real money the player tracks by hand in dollars (state.cups.wallet).
-import { CUPS, CHANNEL_UNLOCK_CUP, JOD_TO_USD } from './content.js';
+import { CUPS, CHANNEL_UNLOCK_CUP, JOD_TO_USD, REGIONS } from './content.js';
 
 export const findCup = (id) => CUPS.find((c) => c.id === id);
 export const stakeJod = (cup) => cup.days;                       // rule 7: dinars = days
@@ -12,6 +12,8 @@ export function ensure(s) {
   s.cups.wallet = +s.cups.wallet || 0;
   s.cups.walletLog = Array.isArray(s.cups.walletLog) ? s.cups.walletLog : [];
   s.cups.challenges = Array.isArray(s.cups.challenges) ? s.cups.challenges : [];
+  // Channels are places: older saves stored free text, which becomes the first place.
+  for (const c of s.cups.challenges) if (!REGIONS.some((r) => r.id === c.channel)) c.channel = 'sanctuary';
   return s.cups;
 }
 
@@ -28,8 +30,13 @@ export const active = (s) => ensure(s).challenges.filter((c) => c.status === 'ac
 export const wonCups = (s) => ensure(s).challenges.filter((c) => c.status === 'won');
 export const ownsCup = (s, cupId) => wonCups(s).some((c) => c.cupId === cupId);
 
-// Rule 6: a new channel needs the silver cup (the first channel is free).
+// Channels are the player's places (regions that have a character).
+export const channelRegions = () => REGIONS.filter((r) => r.characterId);
+export const regionName = (id) => REGIONS.find((r) => r.id === id)?.name || id;
+
+// Rule 6: challenging in another place needs the silver cup (the first place is free).
 export function canOpenChannel(s, name) {
+  if (name !== '__new__' && !s.regions?.[name]) return { ok: false, reason: 'افتح هذا المكان أولًا' };
   const list = channels(s);
   if (list.includes(name)) return { ok: true };
   if (list.length === 0) return { ok: true };
@@ -54,12 +61,12 @@ export function startChallenge(s, { channel, cupId, partner, pin, now = Date.now
   const cup = findCup(cupId);
   channel = (channel || '').trim(); partner = (partner || '').trim(); pin = String(pin || '').trim();
   if (!cup) return fail('اختر كأسًا');
-  if (!channel) return fail('اكتب اسم القناة');
+  if (!channel) return fail('اختر المكان');
   if (!partner) return fail('اكتب اسم الطرف الثاني');
   if (!/^\d{4}$/.test(pin)) return fail('رمز الطرف الثاني 4 أرقام');
   const ch = canOpenChannel(s, channel);
   if (!ch.ok) return fail(ch.reason);
-  if (active(s).some((x) => x.channel === channel)) return fail('في تحدٍّ شغّال بهاي القناة');
+  if (active(s).some((x) => x.channel === channel)) return fail('في تحدٍّ شغّال بهذا المكان');
   const usd = stakeUsd(cup);
   if (c.wallet < usd) return fail(`الرصيد لا يكفي — تحتاج $${usd}`);
   c.wallet = round2(c.wallet - usd);
@@ -70,6 +77,9 @@ export function startChallenge(s, { channel, cupId, partner, pin, now = Date.now
 }
 
 // Rule 4: only the second party (who knows the PIN) decides. Win → stake returns; loss → it's theirs.
+// Winning a cup pays keys at the same rate as the level path: one key per 15 days.
+export const keyReward = (cup) => Math.floor(cup.days / 15);
+
 export function judge(s, id, pin, won, now = Date.now()) {
   const c = ensure(s);
   const ch = c.challenges.find((x) => x.id === id);
@@ -81,6 +91,9 @@ export function judge(s, id, pin, won, now = Date.now()) {
   if (won) {
     c.wallet = round2(c.wallet + ch.stakeUsd);
     c.walletLog.unshift({ at: now, delta: ch.stakeUsd, note: `استرجاع مبلغ ${findCup(ch.cupId).name}` });
+    const k = keyReward(findCup(ch.cupId));
+    if (k) { s.keys = (s.keys || 0) + k; if (s.stats) s.stats.keysEarned = (s.stats.keysEarned || 0) + k; }
+    ch.keys = k;
   } else {
     c.walletLog.unshift({ at: now, delta: 0, note: `خسارة ${findCup(ch.cupId).name} — المبلغ صار لـ ${ch.partner}` });
   }

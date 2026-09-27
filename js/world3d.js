@@ -220,6 +220,29 @@ export function mountWorld(container, spots, onPick) {
     return g;
   }
 
+  // Headquarters: a stone keep with corner towers and a banner.
+  function fortress() {
+    const g = new THREE.Group();
+    const stone = new THREE.MeshStandardMaterial({ color: 0x8a7e70, roughness: 0.9 });
+    const dark = new THREE.MeshStandardMaterial({ color: 0x5a4f45, roughness: 1 });
+    const base = new THREE.Mesh(new THREE.BoxGeometry(14, 0.6, 14), dark); base.position.y = 0.3; g.add(base);
+    for (const [x, z, ry] of [[0, -6, 0], [0, 6, 0], [-6, 0, Math.PI / 2], [6, 0, Math.PI / 2]]) {
+      const w = new THREE.Mesh(new THREE.BoxGeometry(12, 3.5, 1), stone); w.position.set(x, 2, z); w.rotation.y = ry; g.add(w);
+      for (let i = -5; i <= 5; i += 2) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.8, 1.1), stone); m.position.set(x + (ry ? 0 : i), 4.1, z + (ry ? i : 0)); g.add(m); }
+    }
+    for (const x of [-6, 6]) for (const z of [-6, 6]) {
+      const t = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.6, 6.5, 12), stone); t.position.set(x, 3.3, z); g.add(t);
+      const r = new THREE.Mesh(new THREE.ConeGeometry(1.8, 2.2, 12), new THREE.MeshStandardMaterial({ color: 0x7a1f24 })); r.position.set(x, 7.6, z); g.add(r);
+    }
+    const keep = new THREE.Mesh(new THREE.BoxGeometry(6, 8, 6), stone); keep.position.y = 4.3; g.add(keep);
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(4.6, 3, 4), new THREE.MeshStandardMaterial({ color: 0x7a1f24 })); roof.position.y = 9.8; roof.rotation.y = Math.PI / 4; g.add(roof);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 4, 6), new THREE.MeshStandardMaterial({ color: 0xdddddd })); pole.position.y = 13; g.add(pole);
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.3), new THREE.MeshStandardMaterial({ color: 0xffc83d, side: THREE.DoubleSide, emissive: 0x6a4a00, emissiveIntensity: 0.4 })); flag.position.set(1.1, 14.2, 0); g.add(flag);
+    const door = new THREE.Mesh(new THREE.BoxGeometry(2, 2.6, 0.2), new THREE.MeshStandardMaterial({ color: 0x3a2618 })); door.position.set(0, 1.6, 6.55); g.add(door);
+    addShadow(g);
+    return g;
+  }
+
   // Floating island that holds the challenge cups.
   function skyIsland() {
     const g = new THREE.Group();
@@ -258,7 +281,7 @@ export function mountWorld(container, spots, onPick) {
   for (const s of shown) {
     const floating = !!s.def.floating;
     const y = floating ? height(s.x, s.z) + 34 : height(s.x, s.z);
-    const obj = floating ? skyIsland() : s.vis === 'owned' ? palace() : ruin();
+    const obj = floating ? skyIsland() : s.def.kind === 'hq' ? fortress() : s.vis === 'owned' ? palace() : ruin();
     obj.scale.setScalar(1.5);
     obj.position.set(s.x, y - 0.2, s.z);
     if (floating) obj.userData.float = y;

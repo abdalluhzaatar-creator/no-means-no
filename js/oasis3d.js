@@ -55,7 +55,7 @@ const tileTexture = () => canvasTex(512, 512, (g, w) => {
 });
 
 // ---------- character ----------
-function buildWorshipper(pal) {
+export function buildWorshipper(pal) {
   const robe = std(pal.robe, { roughness: 0.75 });
   const accent = std(pal.accent, { roughness: 0.6 });
   const skin = std(pal.skin, { roughness: 0.6 });

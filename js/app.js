@@ -1,6 +1,7 @@
 // UI layer: renders screens from state, calls engine actions, saves, plays effects.
 import { CHARACTERS, REGIONS, CUPS, JOD_TO_USD } from './content.js';
 import * as C from './cups.js';
+import { commander } from './hq.js';
 import * as E from './engine.js';
 import { createStorage } from './storage.js';
 import { characterSVG, regionSVG, worldMapSVG } from './scenes.js';
@@ -101,11 +102,12 @@ function ask(text, onYes) {
 let currentChar = null;
 
 function render() {
+  checkCommander();
   $('#gold').textContent = state.gold;
   $('#keys').textContent = state.keys;
   const navScreen = screen === 'character' ? 'world' : screen;
   document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.screen === navScreen));
-  document.body.classList.toggle('in-scene', (screen === 'character' && sceneFor(currentChar)) || screen === 'trophies');
+  document.body.classList.toggle('in-scene', (screen === 'character' && sceneFor(currentChar)) || screen === 'trophies' || screen === 'hq');
   document.body.classList.toggle('in-world', screen === 'world');
   document.body.classList.toggle('in-store', screen === 'shop');
   // A live 3D place only refreshes its overlay, so animations and camera survive.
@@ -115,6 +117,13 @@ function render() {
     bind(); refreshModal();
     return;
   }
+  if (screen === 'hq' && hqScene && $('#hq-view')) {
+    $('#hud').innerHTML = hqHUD();
+    hqScene.update(commander(state));
+    bind(); refreshModal();
+    return;
+  }
+  hqScene?.dispose(); hqScene = null;
   if (screen === 'trophies' && isle && $('#trophy-view')) {
     $('#hud').innerHTML = trophyHUD();
     isle.update(cupList());
@@ -124,12 +133,13 @@ function render() {
   isle?.dispose(); isle = null;
   if (screen === 'world' && disposeWorld && worldKey === worldSignature() && $('#world-view')) { bind(); return; }
   oasis?.scene.dispose(); oasis = null;
-  const view = { world: renderWorld, character: renderCharacter, shop: renderShop, trophies: renderTrophies }[screen];
+  const view = { world: renderWorld, character: renderCharacter, shop: renderShop, trophies: renderTrophies, hq: renderHQ }[screen];
   $('#screen').innerHTML = view();
   bind();
   bindWorld();
   bindPlace();
   bindTrophies();
+  bindHQ();
   refreshModal();
 }
 
@@ -267,6 +277,7 @@ async function bindWorld() {
 function openSpot(id) {
   const def = E.findRegion(id);
   if (def.kind === 'trophies') return go('trophies');
+  if (def.kind === 'hq') return go('hq');
   if (state.regions[id]) return enter(def.characterId);
   const st = E.shopStatus(state, 'region', def);
   const c = E.findCharacter(def.characterId);
@@ -575,17 +586,89 @@ function renderShop() {
   </div>`;
 }
 
+// ---------- Headquarters ----------
+let hqScene = null, lastCmdLevel = null;
+function renderHQ() {
+  return `
+  <div class="place-view" id="hq-view"><div class="w3-loading">جارٍ الدخول إلى مقر القيادة…</div></div>
+  <div class="hud" id="hud">${hqHUD()}</div>`;
+}
+async function bindHQ() {
+  const v = $('#hq-view');
+  if (!v) return;
+  const cm = commander(state);
+  try {
+    const { mountHQ } = await import('./hq3d.js');
+    if (!v.isConnected) return;
+    v.querySelector('.w3-loading')?.remove();
+    const places = REGIONS.filter((r) => r.map && r.kind !== 'hq').map((r) => ({ map: r.map, owned: !!state.regions[r.id] }));
+    hqScene = mountHQ(v, { places, rankIndex: cm.rankIndex, sky: skyInfo, onCommander: () => FX.toast(`القائد: ${cm.toNext ? `باقي ${cm.toNext} مستوى للرتبة ${cm.nextRank}` : 'أعلى رتبة! 🫡'}`) });
+  } catch (err) { console.warn('3D HQ unavailable', err); v.innerHTML = ''; }
+}
+// Celebrate when the commander's level went up since the last look.
+function checkCommander() {
+  const cm = commander(state);
+  if (lastCmdLevel != null && cm.level > lastCmdLevel) FX.banner(`ترقية القائد — ${cm.rank}`, `وصل القائد للمستوى ${cm.level}`, '🫡');
+  lastCmdLevel = cm.level;
+}
+function hqHUD() {
+  const cm = commander(state);
+  const won = C.wonCups(state).length;
+  return `
+  <div class="hud-top">
+    <div class="plate">
+      <div class="plate-avatar" style="--glow:#ffc83d">🫡</div>
+      <div class="plate-body">
+        <div class="plate-name">القائد <span class="plate-place">· مقر القيادة</span></div>
+        <div class="plate-row"><span class="rank" style="--rank:#7a5a1f">${cm.rank} · ${cm.level}</span></div>
+        <div class="meter"><span class="meter-label">${cm.nextRank ? `🎖 نحو ${cm.nextRank}` : '🎖 أعلى رتبة'}</span><b><bdi>${cm.nextRank ? `باقي ${cm.toNext}` : '✔'}</bdi></b><div class="xp"><span style="width:${Math.round(cm.rankProgress * 100)}%"></span></div></div>
+      </div>
+    </div>
+  </div>
+  <aside class="cup-side">
+    <div class="challenge-card report">
+      <b class="report-title">📋 تقرير القائد</b>
+      <small class="muted-w">مستواه يرتفع لحاله: +2 لكل مكان تفتحه، و+1 لكل مستوى تطوّره بأي شخصية.</small>
+      <div class="report-row"><span>🗺 الأماكن المفتوحة</span><b>${cm.opened.length} / ${cm.places.length}</b><em>+${cm.fromPlaces}</em></div>
+      <ul class="report-list">${cm.places.map((r) => `<li class="${state.regions[r.id] ? 'on' : ''}">${state.regions[r.id] ? '✔' : '🔒'} ${r.name}</li>`).join('')}</ul>
+      <div class="report-row"><span>⬆ تطوير الشخصيات</span><b>${cm.fromChars}</b><em>+${cm.fromChars}</em></div>
+      <ul class="report-list">${cm.chars.map((c) => `<li class="on">${c.def.name} — ${c.def.stages?.[c.ch.stage]?.name ? `${c.def.stages[c.ch.stage].name} · ` : ''}مستوى ${c.ch.level}</li>`).join('')}</ul>
+      <div class="report-row"><span>🏆 كؤوس</span><b>${won}</b></div>
+      <div class="report-row"><span>🗝 مفاتيح جاهزة</span><b>${state.keys}</b></div>
+    </div>
+  </aside>
+  <div class="dock">
+    <button class="dock-btn" data-go="shop">🛒<span>افتح مكانًا</span></button>
+    <button class="dock-btn" data-go="trophies">🏆<span>الكؤوس</span></button>
+    <button class="dock-btn" data-go="world">🗺<span>العالم</span></button>
+  </div>`;
+}
+
 // ---------- Trophy island (challenge cups) ----------
 let isle = null, cupChannel = null;
 const usd = (n) => `$${(+n).toFixed(2).replace(/\.00$/, '')}`;
-const cupIcon = (cup, size = 44, dim = false) => `
-  <svg viewBox="0 0 48 48" width="${size}" height="${size}" aria-hidden="true" style="${dim ? 'opacity:.35;filter:grayscale(1)' : `filter:drop-shadow(0 0 6px ${cup.glow || cup.color}88)`}">
-    <path d="M14 6h20v8c0 7-4 12-10 12S14 21 14 14z" fill="${cup.color}"/>
-    <path d="M14 9H7c0 6 3 9 8 9M34 9h7c0 6-3 9-8 9" fill="none" stroke="${cup.color}" stroke-width="3"/>
-    <rect x="21" y="26" width="6" height="8" fill="${cup.color}"/><rect x="14" y="34" width="20" height="6" rx="2" fill="#3a2f28"/>
-    <path d="M18 9h3v9h-3z" fill="#fff" opacity=".35"/>
-    ${cup.glow ? `<path d="M24 1l2 3-2 2-2-2z" fill="${cup.glow}"/>` : ''}
+// Trophy icon whose shape grows with the cup's rank.
+function cupIcon(cup, size = 44, dim = false) {
+  const t = CUPS.findIndex((c) => c.id === cup.id), c = cup.color, g = cup.glow || '#ffe07a';
+  const simple = t <= 1;
+  return `
+  <svg viewBox="0 0 64 64" width="${size}" height="${size}" aria-hidden="true" style="${dim ? 'opacity:.35;filter:grayscale(1)' : `filter:drop-shadow(0 0 ${3 + t}px ${g}${t >= 5 ? 'cc' : '55'})`}">
+    ${t === 12 ? `<path d="M22 24 C10 20 4 10 2 4 C10 10 14 12 20 14 M42 24 C54 20 60 10 62 4 C54 10 50 12 44 14" fill="none" stroke="#ffe3a0" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="4" r="3" fill="none" stroke="#ffe9a8" stroke-width="1.5"/>` : ''}
+    ${t >= 11 ? `<ellipse cx="32" cy="24" rx="27" ry="7" fill="none" stroke="${g}" stroke-width="1.6" transform="rotate(-12 32 24)"/>` : ''}
+    ${t === 7 ? `<path d="M14 38 Q6 24 14 12 M50 38 Q58 24 50 12" fill="none" stroke="#8fd6a0" stroke-width="3" stroke-dasharray="4 2"/>` : ''}
+    ${simple
+      ? `<path d="M19 12h26v12c0 9-5 14-13 14s-13-5-13-14z" fill="${c}" ${t === 0 ? 'stroke="#5d5a55" stroke-width="1.5"' : ''}/>${t === 1 ? `<path d="M19 18h26M20 25h24" stroke="#3a2a1a" stroke-width="1.5"/>` : ''}<rect x="27" y="38" width="10" height="8" fill="${c}"/>`
+      : `<path d="M${20 - t * 0.4} 10h${24 + t * 0.8}v10c0 ${9 + t * 0.3}-6 ${15 + t * 0.2}-${12 + t * 0.4} ${15 + t * 0.2}S${20 - t * 0.4} ${29 + t * 0.3} ${20 - t * 0.4} 20z" fill="${c}"/>
+         <path d="M${20 - t * 0.4} 13H11c0 8 4 12 10 12M${44 + t * 0.4} 13H53c0 8-4 12-10 12" fill="none" stroke="${t >= 5 ? '#ffd66b' : c}" stroke-width="3"/>
+         <rect x="29" y="${35 + t * 0.2}" width="6" height="${8 - t * 0.2}" fill="${c}"/><circle cx="32" cy="${37 + t * 0.2}" r="3" fill="${t >= 5 ? '#ffd66b' : c}"/>`}
+    <rect x="${simple ? 18 : 20 - Math.floor(t / 4) * 2}" y="46" width="${simple ? 28 : 24 + Math.floor(t / 4) * 4}" height="${6 + Math.floor(t / 4) * 2}" rx="2" fill="${t >= 9 ? '#1b1030' : '#3a2f28'}"/>
+    ${t >= 5 ? `<rect x="22" y="48" width="20" height="2" fill="#ffd66b"/>` : ''}
+    ${!simple ? `<path d="M${24 - t * 0.3} 13h3v10h-3z" fill="#fff" opacity=".4"/>` : ''}
+    ${t >= 6 && t <= 7 ? `<path d="M32 1l2.5 5 5.5.8-4 3.8 1 5.4-5-2.6-5 2.6 1-5.4-4-3.8 5.5-.8z" fill="#ffd66b"/>` : ''}
+    ${t >= 8 ? `<path d="M32 0l5 5-5 5-5-5z" fill="${g}" stroke="#fff" stroke-width=".8"/>` : ''}
+    ${t >= 10 ? `<path d="M20 10l3-6 3 6 3-7 3 7 3-7 3 7 3-6 3 6z" fill="#ffd66b"/>` : ''}
   </svg>`;
+}
 
 function cupList() {
   const ch = currentCupChannel();
@@ -635,7 +718,7 @@ function trophyHUD() {
     const cup = C.findCup(act.cupId), done = Math.min(cup.days, C.daysDone(act)), complete = C.isComplete(act);
     card = `
     <div class="challenge-card ${complete ? 'complete' : ''}">
-      <div class="cc-top">${cupIcon(cup, 52)}<div><b>${cup.name}</b><small>قناة: ${esc(act.channel)}</small></div></div>
+      <div class="cc-top">${cupIcon(cup, 52)}<div><b>${cup.name}</b><small>📍 ${esc(C.regionName(act.channel))}</small></div></div>
       <div class="cc-days"><span>اليوم</span><b><bdi>${done}</bdi></b><span>من <bdi>${cup.days}</bdi></span></div>
       <div class="xp big"><span style="width:${Math.round((done / cup.days) * 100)}%"></span></div>
       <div class="cc-meta">💰 ${act.stakeJod} دينار (${usd(act.stakeUsd)}) · مؤمَّن عند <b>${esc(act.partner)}</b></div>
@@ -645,7 +728,7 @@ function trophyHUD() {
   } else {
     card = `
     <div class="challenge-card empty">
-      <b>${ch ? `لا يوجد تحدٍّ في قناة «${esc(ch)}»` : 'ابدأ أول تحدٍّ لك'}</b>
+      <b>${ch ? `لا يوجد تحدٍّ في «${esc(C.regionName(ch))}»` : 'ابدأ أول تحدٍّ لك'}</b>
       <small>اختر كأسًا، أمّن مبلغه عند الطرف الثاني، والتزم بالمدة.</small>
       <button class="store-btn owned" data-cup-picker>🏆 ابدأ تحدّي</button>
     </div>`;
@@ -662,7 +745,7 @@ function trophyHUD() {
     <button class="hud-chip wallet" data-wallet>💵 ${usd(cups.wallet)}</button>
   </div>
   <aside class="cup-side">
-    ${chans.length ? `<div class="chan-tabs">${chans.map((c) => `<button class="chan ${c === ch ? 'on' : ''}" data-channel="${esc(c)}">${esc(c)}</button>`).join('')}</div>` : ''}
+    ${chans.length ? `<div class="chan-tabs">${chans.map((c) => `<button class="chan ${c === ch ? 'on' : ''}" data-channel="${esc(c)}">${esc(C.regionName(c))}</button>`).join('')}</div>` : ''}
     ${card}
   </aside>
   <div class="dock">
@@ -678,9 +761,9 @@ function showCup(cupId) {
   const wins = C.wonCups(state).filter((x) => x.cupId === cupId);
   isle?.focus(cupId);
   modal(`
-    <div class="cup-hero">${cupIcon(cup, 96)}<h2>${cup.name}</h2><p class="muted">${cup.days} يوم · تأمين ${cup.days} دينار (${usd(C.stakeUsd(cup))})</p></div>
-    ${wins.length ? `<p class="ok-text">🏆 فزت فيه ${wins.length} مرة (${wins.map((w) => esc(w.channel)).join('، ')})</p>` : ''}
-    ${act ? `<p>⏳ شغّال في قناة «${esc(act.channel)}» — اليوم ${Math.min(cup.days, C.daysDone(act))} من ${cup.days}</p><button class="store-btn buy" data-judge="${act.id}">⚖️ حكم الطرف الثاني</button>`
+    <div class="cup-hero">${cupIcon(cup, 96)}<h2>${cup.name}</h2><p class="muted">${cup.days} يوم · تأمين ${cup.days} دينار (${usd(C.stakeUsd(cup))})${C.keyReward(cup) ? ` · الجائزة 🗝 ${C.keyReward(cup)}` : ''}</p></div>
+    ${wins.length ? `<p class="ok-text">🏆 فزت فيه ${wins.length} مرة (${wins.map((w) => esc(C.regionName(w.channel))).join('، ')})</p>` : ''}
+    ${act ? `<p>⏳ شغّال في «${esc(C.regionName(act.channel))}» — اليوم ${Math.min(cup.days, C.daysDone(act))} من ${cup.days}</p><button class="store-btn buy" data-judge="${act.id}">⚖️ حكم الطرف الثاني</button>`
       : `<button class="store-btn owned" data-start-cup="${cup.id}">ابدأ تحدّي ${cup.name}</button>`}`);
   bind();
 }
@@ -692,7 +775,7 @@ function showCupPicker() {
     <p class="muted">المبلغ بالدينار = عدد أيام الكأس، ويُخصم من رصيدك الحقيقي (💵 ${usd(state.cups.wallet)}).</p>
     <div class="cup-grid">${CUPS.map((c) => `
       <button class="cup-tile ${has(c.id) ? 'won' : ''}" data-start-cup="${c.id}" style="--c:${c.glow || c.color}">
-        ${cupIcon(c, 54)}<b>${c.name}</b><span>${c.days} يوم</span><small>${c.days} دينار · ${usd(C.stakeUsd(c))}</small>${has(c.id) ? '<i>✔</i>' : ''}
+        ${cupIcon(c, 54)}<b>${c.name}</b><span>${c.days} يوم</span><small>${c.days} دينار · ${usd(C.stakeUsd(c))}</small>${C.keyReward(c) ? `<em>🗝 ${C.keyReward(c)}</em>` : ''}${has(c.id) ? '<i>✔</i>' : ''}
       </button>`).join('')}</div>`);
   bind();
 }
@@ -703,13 +786,16 @@ function startCupFlow(cupId) {
   const canNew = C.canOpenChannel(state, '__new__').ok;
   const busy = new Set(C.active(state).map((x) => x.channel));
   const cost = C.stakeUsd(cup);
+  let picked = 0;
   modal(`
     <div class="cup-hero">${cupIcon(cup, 72)}<h2>تحدّي ${cup.name}</h2><p class="muted">${cup.days} يوم · تأمين <b>${cup.days} دينار</b> (${usd(cost)})</p></div>
     <form id="cup-form" class="cup-form">
-      <label>القناة (العادة اللي بدك تتركها)
-        ${chans.length ? `<div class="chips">${chans.map((c) => `<button type="button" class="chip ${busy.has(c) ? '' : ''}" data-fill-channel="${esc(c)}" ${busy.has(c) ? 'disabled title="فيها تحدٍّ شغّال"' : ''}>${esc(c)}${busy.has(c) ? ' ⏳' : ''}</button>`).join('')}</div>` : ''}
-        <input name="channel" required placeholder="${chans.length ? 'اختر قناة أو اكتب قناة جديدة' : 'مثال: ترك التدخين'}" value="${chans.find((c) => !busy.has(c)) ? esc(chans.find((c) => !busy.has(c))) : ''}">
-        ${chans.length && !canNew ? `<small class="muted">🔒 فتح قناة جديدة يحتاج ${C.findCup('silver').name}</small>` : ''}
+      <label>المكان (القناة)
+        <div class="chips place-pick">${C.channelRegions().map((r) => {
+          const owned = !!state.regions[r.id], ok = owned && C.canOpenChannel(state, r.id).ok && !busy.has(r.id);
+          return `<label class="chip ${ok ? '' : 'off'}"><input type="radio" name="channel" value="${r.id}" ${ok ? '' : 'disabled'} ${ok && !picked++ ? 'checked' : ''}> ${esc(r.name)} ${!owned ? '🔒' : busy.has(r.id) ? '⏳' : !C.canOpenChannel(state, r.id).ok ? '🥈' : ''}</label>`;
+        }).join('')}</div>
+        ${!canNew && chans.length ? `<small class="muted">🥈 التحدي بمكان ثاني يحتاج ${C.findCup('silver').name}</small>` : ''}
       </label>
       <label>اسم الطرف الثاني (اللي بيأمّن المبلغ عنده)<input name="partner" required placeholder="مثال: أحمد"></label>
       <label>رمز الطرف الثاني — 4 أرقام يدخلها هو بنفسه<input name="pin" required inputmode="numeric" pattern="\\d{4}" maxlength="4" type="password" placeholder="••••"></label>
@@ -717,7 +803,6 @@ function startCupFlow(cupId) {
       <button class="store-btn buy" type="submit" ${state.cups.wallet < cost ? 'disabled' : ''}>${state.cups.wallet < cost ? `الرصيد لا يكفي — أضف ${usd(cost - state.cups.wallet)}` : `ابدأ — أمّن ${usd(cost)}`}</button>
       ${state.cups.wallet < cost ? '<button type="button" class="btn ghost" data-wallet>💵 أضف رصيد</button>' : ''}
     </form>`);
-  document.querySelectorAll('[data-fill-channel]').forEach((b) => (b.onclick = () => { $('#cup-form').channel.value = b.dataset.fillChannel; }));
   $('#cup-form').onsubmit = (e) => {
     e.preventDefault();
     const f = e.currentTarget;
@@ -751,7 +836,7 @@ function judgeFlow(id) {
     const r = C.judge(state, id, e.currentTarget.pin.value, won);
     if (!r.ok) return FX.toast(r.reason, 'err');
     scheduleSave(); closeModal(); render();
-    if (won) { FX.banner(`🏆 ${cup.name}`, 'مبروك! فزت بالكأس ورجع المبلغ لرصيدك.', '🏆'); FX.confetti(); }
+    if (won) { FX.banner(`🏆 ${cup.name}`, `مبروك! رجع المبلغ لرصيدك${C.keyReward(cup) ? ` وربحت 🗝 ${C.keyReward(cup)}` : ''}.`, '🏆'); FX.confetti(); }
     else FX.toast(`خسارة ${cup.name} — المبلغ صار لـ ${ch.partner}`, 'err');
   };
 }
@@ -789,7 +874,8 @@ function showCupRules() {
       <li>إذا خسر المتحدي يصبح المبلغ كاملًا ملكًا للطرف الثاني، ولا يحق له المطالبة به.</li>
       <li>الطرف الثاني هو من يحدد الفوز أو الخسارة (برمزه السري).</li>
       <li>يُمنع منعًا باتًا بعد بدء التحدي المطالبة بالأموال تحت أي ظرف.</li>
-      <li>لفتح قناة أخرى يجب امتلاك ${C.findCup('silver').name}؛ بناء العادات بالتدريج. ويمكن اختيار القناة التي تبدأ منها.</li>
+      <li>القنوات هي الأماكن. للتحدي في مكان ثانٍ يجب امتلاك ${C.findCup('silver').name}؛ بناء العادات بالتدريج. ويمكن اختيار المكان الذي تبدأ منه.</li>
+      <li>الفوز بكأس يعطي مفاتيح 🗝 (مفتاح لكل 15 يومًا) — نفس المفاتيح التي تفتح الأماكن وترفع مستوى الشخصيات.</li>
       <li>مبلغ التأمين بالدينار = عدد أيام الكأس (الحجري 5 أيام = 5 دنانير).</li>
     </ol>
     <div class="cup-grid small">${CUPS.map((c) => `<div class="cup-tile" style="--c:${c.glow || c.color}">${cupIcon(c, 36)}<b>${c.name}</b><span>${c.days} يوم</span></div>`).join('')}</div>`);
@@ -800,7 +886,7 @@ function showCupHistory() {
   const label = { active: '⏳ شغّال', won: '🏆 فاز', lost: '✘ خسر' };
   modal(`
     <h2>🗂 سجل التحديات</h2>
-    ${list.length ? `<ul class="wallet-log">${list.map((x) => `<li><span>${cupIcon(C.findCup(x.cupId), 26)} ${C.findCup(x.cupId).name} · ${esc(x.channel)} · ${esc(x.partner)}</span><b class="${x.status === 'won' ? 'plus' : x.status === 'lost' ? 'minus' : ''}">${label[x.status]}</b></li>`).join('')}</ul>` : '<p class="muted">لا يوجد تحديات بعد.</p>'}`);
+    ${list.length ? `<ul class="wallet-log">${list.map((x) => `<li><span>${cupIcon(C.findCup(x.cupId), 26)} ${C.findCup(x.cupId).name} · ${esc(C.regionName(x.channel))} · ${esc(x.partner)}</span><b class="${x.status === 'won' ? 'plus' : x.status === 'lost' ? 'minus' : ''}">${label[x.status]}</b></li>`).join('')}</ul>` : '<p class="muted">لا يوجد تحديات بعد.</p>'}`);
 }
 
 // Failure: the player chooses whether to apply the penalty on themselves.

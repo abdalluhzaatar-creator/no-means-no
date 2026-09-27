@@ -7,38 +7,94 @@ import { Sky } from './vendor/Sky.js';
 
 const shadowAll = (o) => o.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
 
-// A trophy whose size and ornament grow with its tier (0..12).
+// Each cup is built to show its rank: humble stone and wood at the bottom,
+// polished metals in the middle, crystal, crowns, orbiting rings and wings at the top.
+function cupMaterial(cup, tier, look) {
+  if (look !== 'won') {
+    const col = new THREE.Color(cup.color);
+    return new THREE.MeshStandardMaterial({ color: look === 'active' ? col : 0xcfe6ff, transparent: true, opacity: look === 'active' ? 0.55 : 0.16, emissive: look === 'active' ? col : 0x000000, emissiveIntensity: look === 'active' ? 0.8 : 0, depthWrite: false });
+  }
+  if (cup.id === 'stone') return new THREE.MeshStandardMaterial({ color: cup.color, roughness: 1, flatShading: true });
+  if (cup.id === 'wood') {
+    const cv = document.createElement('canvas'); cv.width = 64; cv.height = 128; const g = cv.getContext('2d');
+    g.fillStyle = '#8b5a2b'; g.fillRect(0, 0, 64, 128);
+    for (let y = 0; y < 128; y += 6) { g.strokeStyle = `rgba(60,35,15,${0.25 + (y % 18) / 40})`; g.lineWidth = 2; g.beginPath(); g.moveTo(0, y); g.bezierCurveTo(20, y + 3, 44, y - 3, 64, y + 1); g.stroke(); }
+    const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return new THREE.MeshStandardMaterial({ map: t, roughness: 0.85 });
+  }
+  if (cup.id === 'diamond') return new THREE.MeshPhysicalMaterial({ color: cup.color, roughness: 0.02, metalness: 0, transmission: 0.9, thickness: 0.6, ior: 2.4, clearcoat: 1, emissive: new THREE.Color(cup.glow), emissiveIntensity: 0.25 });
+  return new THREE.MeshStandardMaterial({
+    color: cup.color, metalness: cup.metal, roughness: Math.max(0.08, 0.45 - tier * 0.03),
+    emissive: cup.glow ? new THREE.Color(cup.glow) : new THREE.Color(cup.color), emissiveIntensity: cup.glow ? 0.35 : tier >= 6 ? 0.12 : 0,
+  });
+}
+
 function trophy(cup, tier, look) {
   const g = new THREE.Group();
-  const col = new THREE.Color(cup.color);
-  const mat = look === 'won'
-    ? new THREE.MeshStandardMaterial({ color: col, metalness: cup.metal, roughness: cup.metal > 0.5 ? 0.22 : 0.8, emissive: cup.glow ? new THREE.Color(cup.glow) : 0x000000, emissiveIntensity: cup.glow ? 0.35 : 0 })
-    : new THREE.MeshStandardMaterial({ color: look === 'active' ? col : 0xcfe6ff, transparent: true, opacity: look === 'active' ? 0.55 : 0.18, emissive: look === 'active' ? col : 0x000000, emissiveIntensity: look === 'active' ? 0.8 : 0, depthWrite: false });
-  const s = 0.8 + tier * 0.05;
-  const base = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.35, 1.1), look === 'won' ? new THREE.MeshStandardMaterial({ color: 0x2b2522, roughness: 0.5 }) : mat);
-  base.position.y = 0.17; g.add(base);
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.22, 0.7, 12), mat); stem.position.y = 0.7; g.add(stem);
-  const bowl = new THREE.Mesh(new THREE.LatheGeometry([
-    new THREE.Vector2(0.05, 0), new THREE.Vector2(0.3, 0.05), new THREE.Vector2(0.55, 0.35), new THREE.Vector2(0.68, 0.8), new THREE.Vector2(0.72, 1.05), new THREE.Vector2(0.66, 1.08),
-  ], 28), mat);
-  bowl.position.y = 1.02; g.add(bowl);
-  for (const sx of [-1, 1]) { const h = new THREE.Mesh(new THREE.TorusGeometry(0.28, 0.06, 8, 16, Math.PI * 1.2), mat); h.position.set(sx * 0.7, 1.65, 0); h.rotation.z = sx > 0 ? -0.6 : Math.PI + 0.6; g.add(h); }
-  if (tier >= 8) { // diamond and above: a gem on top
-    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.28), new THREE.MeshStandardMaterial({ color: cup.glow || cup.color, emissive: cup.glow || cup.color, emissiveIntensity: look === 'won' ? 1.2 : 0.3, transparent: look !== 'won', opacity: look === 'won' ? 1 : 0.4, roughness: 0.1 }));
-    gem.position.y = 2.45; g.add(gem); g.userData.gem = gem;
+  const mat = cupMaterial(cup, tier, look);
+  const won = look === 'won';
+  const trim = won && tier >= 5 ? new THREE.MeshStandardMaterial({ color: tier >= 6 ? 0xffd66b : 0xf2f4f7, metalness: 1, roughness: 0.15 }) : mat;
+  const plinthMat = won ? new THREE.MeshStandardMaterial({ color: tier >= 9 ? 0x1b1030 : 0x2b2522, roughness: 0.4, metalness: tier >= 6 ? 0.3 : 0 }) : mat;
+  const simple = tier <= 1;                    // stone / wood: chunky, no handles
+  // plinth: taller and stepped for higher ranks
+  const steps = 1 + Math.floor(tier / 4);
+  let y = 0;
+  for (let i = 0; i < steps; i++) {
+    const w = 1.2 - i * 0.18, h = 0.22;
+    const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, w), i === steps - 1 && tier >= 5 ? trim : plinthMat); b.position.y = y + h / 2; g.add(b); y += h;
+  }
+  const stemH = simple ? 0.35 : 0.5 + tier * 0.04;
+  const stem = new THREE.Mesh(simple ? new THREE.CylinderGeometry(0.22, 0.3, stemH, 7) : new THREE.CylinderGeometry(0.09, 0.2, stemH, 16), mat); stem.position.y = y + stemH / 2; g.add(stem); y += stemH;
+  if (!simple) { const knot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 10), trim); knot.position.y = y - stemH * 0.45; g.add(knot); }
+  const flare = simple ? 0.55 : 0.68 + Math.min(tier, 8) * 0.02;
+  const bowl = new THREE.Mesh(new THREE.LatheGeometry(simple
+    ? [new THREE.Vector2(0.1, 0), new THREE.Vector2(0.45, 0.05), new THREE.Vector2(0.55, 0.6), new THREE.Vector2(0.58, 0.75), new THREE.Vector2(0.5, 0.78)]
+    : [new THREE.Vector2(0.05, 0), new THREE.Vector2(0.3, 0.05), new THREE.Vector2(0.55, 0.35), new THREE.Vector2(flare, 0.8), new THREE.Vector2(flare + 0.05, 1.05 + tier * 0.02), new THREE.Vector2(flare - 0.03, 1.08 + tier * 0.02)],
+    simple ? 8 : 32), mat);
+  bowl.position.y = y; g.add(bowl);
+  const top = y + (simple ? 0.78 : 1.08 + tier * 0.02);
+  if (!simple) {
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(flare + 0.03, 0.035, 8, 40), trim); rim.rotation.x = Math.PI / 2; rim.position.y = top - 0.02; g.add(rim);
+    const hs = 0.22 + tier * 0.015;
+    for (const sx of [-1, 1]) { const h = new THREE.Mesh(new THREE.TorusGeometry(hs, 0.055, 8, 20, Math.PI * 1.2), tier >= 5 ? trim : mat); h.position.set(sx * (flare + 0.02), y + 0.6, 0); h.rotation.z = sx > 0 ? -0.6 : Math.PI + 0.6; g.add(h); }
+  }
+  if (cup.id === 'wood') { const band = new THREE.Mesh(new THREE.TorusGeometry(0.56, 0.03, 6, 20), new THREE.MeshStandardMaterial({ color: 0x3a2a1a })); band.rotation.x = Math.PI / 2; band.position.y = y + 0.4; g.add(band); }
+  if (tier === 4) { for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; const r = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 4), mat); r.position.set(Math.cos(a) * 0.62, y + 0.55, Math.sin(a) * 0.62); g.add(r); } } // iron rivets
+  if (tier >= 6 && tier <= 7) { // gold/platinum: star or laurel on top
+    const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.2), trim); star.scale.set(1, 1.5, 0.4); star.position.y = top + 0.3; g.add(star); g.userData.spin = star;
+  }
+  if (tier === 7) { const laurel = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.05, 6, 40, Math.PI * 1.6), new THREE.MeshStandardMaterial({ color: 0x8fd6a0, metalness: 0.8, roughness: 0.2 })); laurel.rotation.set(Math.PI / 2, 0, Math.PI * 0.7); laurel.position.y = y + 0.5; g.add(laurel); }
+  if (tier >= 8) { // diamond and above: a floating gem
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.3), new THREE.MeshStandardMaterial({ color: cup.glow || cup.color, emissive: cup.glow || cup.color, emissiveIntensity: won ? 1.3 : 0.3, transparent: !won, opacity: won ? 1 : 0.4, roughness: 0.05 }));
+    gem.position.y = top + 0.5; g.add(gem); g.userData.gem = gem;
   }
   if (tier >= 10) { // grandmaster and above: crown of spikes
-    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; const sp = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.35, 6), mat); sp.position.set(Math.cos(a) * 0.62, 2.25, Math.sin(a) * 0.62); g.add(sp); }
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; const sp = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.4, 6), trim); sp.position.set(Math.cos(a) * (flare + 0.02), top + 0.18, Math.sin(a) * (flare + 0.02)); g.add(sp); }
   }
-  if (tier === 12) { // legendary: wings
+  if (tier >= 11) { // challenger and above: orbiting rings
+    const orbit = new THREE.Group();
+    for (let i = 0; i < 2; i++) { const r = new THREE.Mesh(new THREE.TorusGeometry(1.05 + i * 0.2, 0.025, 6, 60), new THREE.MeshBasicMaterial({ color: i ? 0xffe07a : cup.glow || cup.color, transparent: !won, opacity: won ? 1 : 0.4 })); r.rotation.set(Math.PI / 2 + (i ? 0.5 : -0.4), 0, 0); orbit.add(r); }
+    orbit.position.y = y + 0.6; g.add(orbit); g.userData.orbit = orbit;
+  }
+  if (tier === 12) { // legendary: golden wings and a halo
+    const wingM = new THREE.MeshStandardMaterial({ color: 0xffe3a0, metalness: 1, roughness: 0.25, side: THREE.DoubleSide, emissive: 0x7a4a00, emissiveIntensity: won ? 0.5 : 0.1, transparent: !won, opacity: won ? 1 : 0.35 });
     for (const sx of [-1, 1]) {
-      const sh = new THREE.Shape(); sh.moveTo(0, 0); sh.quadraticCurveTo(0.9 * sx, 0.6, 1.4 * sx, 1.4); sh.quadraticCurveTo(0.9 * sx, 0.8, 0.5 * sx, 0.9); sh.quadraticCurveTo(0.4 * sx, 0.4, 0, 0);
-      const w = new THREE.Mesh(new THREE.ShapeGeometry(sh), new THREE.MeshStandardMaterial({ color: 0xffe3a0, metalness: 1, roughness: 0.3, side: THREE.DoubleSide, emissive: 0x7a4a00, emissiveIntensity: 0.4 }));
-      w.position.set(sx * 0.6, 1.4, 0); g.add(w);
+      const sh = new THREE.Shape(); sh.moveTo(0, 0);
+      sh.bezierCurveTo(0.6 * sx, 0.3, 1.3 * sx, 0.9, 1.7 * sx, 1.8); sh.bezierCurveTo(1.2 * sx, 1.3, 0.9 * sx, 1.2, 0.7 * sx, 1.25);
+      sh.bezierCurveTo(0.8 * sx, 0.9, 0.5 * sx, 0.7, 0.4 * sx, 0.75); sh.bezierCurveTo(0.35 * sx, 0.45, 0.2 * sx, 0.3, 0, 0);
+      const w = new THREE.Mesh(new THREE.ShapeGeometry(sh, 12), wingM); w.position.set(sx * (flare - 0.1), y + 0.3, -0.1); w.rotation.y = -sx * 0.35; g.add(w);
     }
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.04, 8, 40), new THREE.MeshBasicMaterial({ color: 0xffe9a8, transparent: !won, opacity: won ? 1 : 0.4 })); halo.rotation.x = Math.PI / 2; halo.position.y = top + 1.05; g.add(halo);
   }
-  g.scale.setScalar(s);
-  if (look === 'won') shadowAll(g);
+  // Sparkles around higher won cups.
+  if (won && tier >= 5) {
+    const n = 10 + tier * 5, pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, r = 0.8 + Math.random() * 0.8; pos.set([Math.cos(a) * r, 0.3 + Math.random() * (top + 0.8), Math.sin(a) * r], i * 3); }
+    const sp = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(pos, 3)), new THREE.PointsMaterial({ color: cup.glow || 0xfff1b8, size: 0.07 + tier * 0.005, transparent: true, opacity: 0.9, depthWrite: false }));
+    g.add(sp); g.userData.sparkle = sp;
+  }
+  g.scale.setScalar(1.15 + tier * 0.1);
+  if (won) shadowAll(g);
   return g;
 }
 
@@ -104,13 +160,16 @@ export function mountTrophies(container, { cups, sky: skyInfo, onPick }) {
   // ---- pedestals: an ascending spiral, one per cup ----
   const labelLayer = document.createElement('div'); labelLayer.className = 'w3-labels'; container.appendChild(labelLayer);
   const slots = [], pick = [];
+  const marbleM = new THREE.MeshStandardMaterial({ color: 0xfbf8f2, roughness: 0.25 });
+  const darkM = new THREE.MeshStandardMaterial({ color: 0x1d1830, roughness: 0.3, metalness: 0.4 });
+  const bronzeM = new THREE.MeshStandardMaterial({ color: 0xb87333, metalness: 1, roughness: 0.3 });
   const R = 13.5;
   cups.forEach((cup, i) => {
     const a = Math.PI / 2 + (i / cups.length) * Math.PI * 2;
     const h = 0.6 + i * 0.28;
     const slot = new THREE.Group(); slot.position.set(Math.cos(a) * R, 0, Math.sin(a) * R); island.add(slot);
-    const ped = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.45, h, 16), stone); ped.position.y = h / 2 + 0.3; slot.add(ped); shadowAll(ped);
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.35, 0.18, 16), goldM); cap.position.y = h + 0.35; slot.add(cap);
+    const ped = new THREE.Mesh(new THREE.CylinderGeometry(1.2 + i * 0.03, 1.45 + i * 0.03, h, i < 2 ? 7 : 16), i < 2 ? rock : i < 5 ? stone : i < 8 ? marbleM : darkM); ped.position.y = h / 2 + 0.3; slot.add(ped); shadowAll(ped);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(1.35 + i * 0.03, 1.35 + i * 0.03, 0.18, 16), i < 2 ? rock : i < 5 ? bronzeM : goldM); cap.position.y = h + 0.35; slot.add(cap);
     const ring = new THREE.Mesh(new THREE.RingGeometry(1.7, 2, 64, 1, 0, 0.001), new THREE.MeshBasicMaterial({ color: new THREE.Color(cup.glow || cup.color), transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
     ring.rotation.x = -Math.PI / 2; ring.position.y = 0.35; slot.add(ring);
     const beam = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 8, 24, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(cup.glow || cup.color), transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }));
@@ -205,7 +264,11 @@ export function mountTrophies(container, { cups, sky: skyInfo, onPick }) {
       if (!u.trophy) continue;
       u.trophy.rotation.y = t * (u.state === 'won' ? 0.5 : 0.25) + u.i;
       if (u.state === 'active') { u.trophy.position.y = u.top + 0.2 + Math.sin(t * 2 + u.i) * 0.15; u.beam.material.opacity = 0.18 + Math.sin(t * 3) * 0.08; }
-      if (u.trophy.userData.gem) u.trophy.userData.gem.rotation.y = t * 2;
+      const d = u.trophy.userData;
+      if (d.gem) { d.gem.rotation.y = t * 2; d.gem.position.y += Math.sin(t * 2 + u.i) * 0.002; }
+      if (d.spin) d.spin.rotation.y = t * 1.5;
+      if (d.orbit) { d.orbit.children[0].rotation.z = t * 1.2; d.orbit.children[1].rotation.z = -t * 0.9; }
+      if (d.sparkle) d.sparkle.rotation.y = -t * 0.6;
     }
     for (const c of clouds.children) if (c.userData.drift) { c.position.x += dt * c.userData.drift; if (c.position.x > 260) c.position.x -= 520; }
     for (const r of rocks) r.position.y += Math.sin(t * 0.6 + r.userData.ph) * dt * 0.6;

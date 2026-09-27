@@ -105,6 +105,18 @@ export const REGIONS = [
     ],
   },
   {
+    // Headquarters: the commander's level rises by itself from opened places and developed characters.
+    id: 'hq',
+    kind: 'hq',
+    name: 'مقر القيادة',
+    desc: 'قلعة القائد: من هنا تتابع تقدّمك كله.',
+    cost: {},
+    starter: true,
+    requires: [],
+    map: { x: 290, y: 540 },
+    upgrades: [],
+  },
+  {
     // A special floating island: not a character's home but the challenge arena.
     id: 'trophies',
     kind: 'trophies',
@@ -140,3 +152,9 @@ export const CUPS = [
 export const CHANNEL_UNLOCK_CUP = 'silver';
 export const JOD_TO_USD = 1.41;
 
+
+// Commander ranks by level (مقر القيادة).
+export const COMMAND_RANKS = [
+  [1, 'جندي'], [3, 'عريف'], [5, 'رقيب'], [8, 'ملازم'], [11, 'نقيب'],
+  [15, 'رائد'], [20, 'عقيد'], [26, 'عميد'], [33, 'لواء'], [41, 'فريق'],
+];
