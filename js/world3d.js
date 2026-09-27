@@ -50,6 +50,13 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     // Flatten gently around every place so buildings sit on a plateau.
     for (const s of shown) {
       if (s.def.floating) continue;   // the trophy island floats over open sea
+      if (s.def.kind === 'hq') {
+        // The fortress sits on top of a high plateau (hill with a flat crown).
+        const d2 = Math.hypot(x - s.x, z - s.z);
+        const hill = 22 * (1 - THREE.MathUtils.smoothstep(d2, 14, 46));
+        h = Math.max(h, hill);
+        continue;
+      }
       const k = Math.exp(-((x - s.x) ** 2 + (z - s.z) ** 2) / 260);
       h = h * (1 - k) + 6 * k;
     }

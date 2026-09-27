@@ -208,25 +208,30 @@ export function setCry(level) {
     loop();
   }
 }
-// Old wooden door: stick-slip creaks of an iron hinge, a groan, then the heavy thud.
+// Old wooden door: a slow, groaning hinge — friction noise through a resonant
+// band that glides down in pitch with an irregular "stick-slip" tremble — then the
+// heavy wooden thump as it swings shut behind you.
 export const creak = () => {
   if (!ensure()) return;
-  const t0 = now();
-  const o = ctx.createOscillator(), bp = ctx.createBiquadFilter(), g = ctx.createGain();
-  o.type = 'sawtooth'; bp.type = 'bandpass'; bp.Q.value = 9; g.gain.value = 0;
-  o.connect(bp); bp.connect(g); g.connect(bus.effects);
-  // stick-slip: rapid little bursts with wandering pitch
-  let t = t0;
-  for (let i = 0; i < 38; i++) {
-    const f = 55 + Math.sin(i * 0.35) * 25 + Math.random() * 20;
-    o.frequency.setValueAtTime(f, t); bp.frequency.setValueAtTime(700 + Math.sin(i * 0.2) * 300 + Math.random() * 200, t);
-    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.35 + Math.random() * 0.2, t + 0.012); g.gain.exponentialRampToValueAtTime(0.02, t + 0.035 + Math.random() * 0.02);
-    t += 0.035 + Math.random() * 0.03 + (i > 25 ? 0.02 : 0);
+  const t = now(), len = 1.6;
+  const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 18;
+  const bp2 = ctx.createBiquadFilter(); bp2.type = 'bandpass'; bp2.Q.value = 12;
+  const g = ctx.createGain(); g.gain.value = 0;
+  src.connect(bp); src.connect(bp2); bp.connect(g); bp2.connect(g); g.connect(bus.effects);
+  bp.frequency.setValueAtTime(620, t); bp.frequency.exponentialRampToValueAtTime(260, t + len);
+  bp2.frequency.setValueAtTime(1240, t); bp2.frequency.exponentialRampToValueAtTime(540, t + len);
+  // stick-slip tremble: amplitude pulses ~18-30 Hz, uneven
+  let tt = t;
+  while (tt < t + len) {
+    const a = 0.9 + Math.random() * 0.8 * Math.sin(((tt - t) / len) * Math.PI);
+    g.gain.setValueAtTime(0.05, tt); g.gain.linearRampToValueAtTime(a, tt + 0.008); g.gain.exponentialRampToValueAtTime(0.05, tt + 0.03);
+    tt += 0.035 + Math.random() * 0.025;
   }
-  o.start(t0); o.stop(t + 0.2);
-  noise({ dur: 1.4, vol: 0.08, freq: 350, q: 2, attack: 0.3 });                                  // wood groan
-  noise({ dur: 0.7, vol: 0.5, freq: 110, q: 0.7, filter: 'lowpass', at: t - t0 + 0.05 });        // thud
-  tone({ f: 70, f2: 40, dur: 0.5, vol: 0.3, at: t - t0 + 0.05, type: 'sine' });
-  tone({ f: 1900, dur: 0.25, vol: 0.04, at: t - t0 + 0.08, type: 'triangle' });                  // latch clink
+  g.gain.linearRampToValueAtTime(0, t + len + 0.05);
+  src.start(t); src.stop(t + len + 0.1);
+  noise({ dur: 0.9, vol: 0.55, freq: 90, q: 0.8, filter: 'lowpass', at: len + 0.05 });           // heavy wooden thump
+  tone({ f: 60, f2: 38, dur: 0.6, vol: 0.35, at: len + 0.05, type: 'sine' });
+  noise({ dur: 1.2, vol: 0.05, freq: 500, q: 0.6, filter: 'lowpass', at: len + 0.2 });          // echo in the stone hall
 };
 export const chains = () => { if (!ensure()) return; for (let i = 0; i < 5; i++) tone({ f: 2000 + Math.random() * 1500, dur: 0.12, vol: 0.05, at: i * 0.07, type: 'square', b: 'ambience' }); };

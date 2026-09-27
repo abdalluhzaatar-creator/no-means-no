@@ -313,7 +313,7 @@ export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 
   // One interaction prompt: press E (or tap it on touch screens).
   let action = null;
   prompt.onclick = () => action?.();
-  const onE = (e) => { if (e.key.toLowerCase() === 'e' || e.key === 'ث') { if (action && !prompt.hidden && document.getElementById('modal')?.hidden !== false) { e.preventDefault(); action(); } } };
+  const onE = (e) => { if (e.key.toLowerCase() === 'e' || e.key === 'ث') { if (action && !prompt.hidden && document.getElementById('modal')?.hidden === true) { e.preventDefault(); action(); } } };
   window.addEventListener('keydown', onE);
   const showPrompt = (text, fn) => { action = fn; prompt.hidden = false; prompt.innerHTML = `<kbd>E</kbd> ${text}`; };
   let childLevel = child, futureLevel = future;
@@ -338,7 +338,7 @@ export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 
     }
   };
   const futureText = (v) => `<b>🔮 أنت في المستقبل</b><span>${v < 0.15 ? 'مكبّل ومنهك في الظلام… ما تفعله اليوم هو ما سيعيشه.' : v < 0.4 ? 'بدأ يرفع رأسه. القيود ما زالت ثقيلة.' : v < 0.7 ? 'تحرّر من السلاسل ويقف من جديد.' : v < 0.95 ? 'قوي ومضيء. نتائج أيامك تظهر عليه.' : 'حرّ تمامًا — هذا أنت الذي بنيته.'}</span><i style="--v:${Math.round(v * 100)}%"></i>`;
-  const childText = (v) => `<b>🧒 الطفل الداخلي</b><span>${v < 0.15 ? 'يبكي وحيدًا… ينتظر أن تعرف قيمتك وتدافع عن نفسك.' : v < 0.4 ? 'ما زال حزينًا، لكنه يرفع عينيه نحوك.' : v < 0.7 ? 'هدأ. بدأ يشعر بالأمان.' : 'سعيد ويلعب — لأنك صرت الرجل الذي يحميه.'}</span><i style="--v:${Math.round(v * 100)}%"></i>`;
+  const childText = (v) => `<b>🧒 ${v < 0.4 ? 'طفلك الداخلي يبكي' : 'طفلك الداخلي'}</b><span>${v < 0.15 ? '' : v < 0.4 ? '' : v < 0.7 ? 'هدأ. بدأ يشعر بالأمان.' : 'سعيد ويلعب — لأنك صرت الرجل الذي يحميه.'}</span><i style="--v:${Math.round(v * 100)}%"></i>`;
 
   const ray = new THREE.Raycaster(), ptr = new THREE.Vector2(); let down = null;
   renderer.domElement.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; });

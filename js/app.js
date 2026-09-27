@@ -665,7 +665,7 @@ function showWarMap() {
   modal(`
     <div class="war-wrap">${warMapSVG(places, E.findRegion('hq').map)}</div>
     <div class="war-legend">${Object.entries(WAR).map(([id, w]) => `<span style="--c:${w.color}">${w.icon} ${w.name} <b>${count(id)}</b></span>`).join('')}</div>
-    <p class="muted small-text">اضغط على أي جبهة لترى حالتها.</p>`);
+    <p class="muted small-text">اضغط على أي جبهة لترى حالتها · <kbd>E</kbd> للخروج</p>`);
   $('#modal').classList.add('wide');
   modalRefresh = showWarMap;
   document.querySelectorAll('.war-map [data-war]').forEach((el) => (el.onclick = () => showFront(el.dataset.war)));
@@ -1073,6 +1073,10 @@ function go(s) { if (s !== screen) SND.sfx.whoosh(); screen = s; closeModal(); r
 document.querySelectorAll('.nav-btn').forEach((b) => (b.onclick = () => go(b.dataset.screen)));
 $('#modal-close').onclick = closeModal;
 $('#settings').onclick = showSettings;
+// E closes the war map (the same key that opened it at the table).
+window.addEventListener('keydown', (e) => {
+  if ((e.key.toLowerCase() === 'e' || e.key === 'ث') && !$('#modal').hidden && $('.war-wrap, .front')) { e.preventDefault(); e.stopImmediatePropagation(); closeModal(); }
+}, true);
 $('#modal').onclick = (e) => { if (e.target.id === 'modal' && e.currentTarget.dataset.closable === 'true') closeModal(); };
 $('#account').onclick = () => {
   modal(`
