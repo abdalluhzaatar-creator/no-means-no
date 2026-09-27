@@ -500,3 +500,4 @@ body.in-store { min-height: 100vh; background-attachment: fixed; }
 .cell-caption i { display: block; height: 6px; border-radius: 99px; background: linear-gradient(90deg, #ffc83d var(--v), #ffffff22 var(--v)); }
 body.in-dungeon .hud .cup-side, body.in-dungeon .hud .dock, body.in-dungeon .hud .view-toggle { display: none; }
 .cell-caption[hidden], .door-btn[hidden] { display: none; } .view-toggle { bottom: 130px; }
+.door-btn kbd { display: inline-block; min-width: 28px; padding: 2px 8px; margin-inline-end: 6px; border-radius: 6px; background: #ffe7a8; color: #2a1c10; font: 800 1rem system-ui; box-shadow: 0 3px 0 #9a6d1d; }

@@ -174,36 +174,59 @@ export function setScene(patch) {
   updateAmbience();
 }
 
-// ---------- inner child crying (continuous, volume by distance) ----------
-let cry = null;
+// ---------- inner child crying (volume follows distance) ----------
+// Each sob is a short voiced "waa" (sawtooth through two vocal formants with a
+// trembling pitch), followed by a breathy gasp. A scheduler keeps them coming
+// while the level is above zero; the level sets the bus volume.
+let cryBus = null, cryLevel = 0, cryTimer = null;
+function sobOnce() {
+  const t = now(), len = 0.8 + Math.random() * 0.7, base = 430 + Math.random() * 90;
+  const o = ctx.createOscillator(), vib = ctx.createOscillator(), vg = ctx.createGain();
+  const f1 = ctx.createBiquadFilter(), f2 = ctx.createBiquadFilter(), env = ctx.createGain();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(base * 0.9, t); o.frequency.linearRampToValueAtTime(base * 1.3, t + 0.2); o.frequency.exponentialRampToValueAtTime(base * 0.75, t + len);
+  vib.frequency.value = 7; vg.gain.value = 22; vib.connect(vg); vg.connect(o.frequency);
+  f1.type = 'peaking'; f1.frequency.value = 1000; f1.Q.value = 3; f1.gain.value = 14;
+  f2.type = 'peaking'; f2.frequency.value = 2700; f2.Q.value = 4; f2.gain.value = 10;
+  env.gain.setValueAtTime(0, t); env.gain.linearRampToValueAtTime(0.35, t + 0.08); env.gain.setValueAtTime(0.35, t + len * 0.55); env.gain.exponentialRampToValueAtTime(0.001, t + len);
+  o.connect(f1); f1.connect(f2); f2.connect(env); env.connect(cryBus);
+  o.start(t); vib.start(t); o.stop(t + len + 0.05); vib.stop(t + len + 0.05);
+  // gasp
+  const src = ctx.createBufferSource(), nf = ctx.createBiquadFilter(), ng = ctx.createGain();
+  src.buffer = noiseBuf; nf.type = 'bandpass'; nf.frequency.value = 1600; nf.Q.value = 1.2;
+  const g0 = t + len + 0.12; ng.gain.setValueAtTime(0, g0); ng.gain.linearRampToValueAtTime(0.25, g0 + 0.06); ng.gain.exponentialRampToValueAtTime(0.001, g0 + 0.3);
+  src.connect(nf); nf.connect(ng); ng.connect(cryBus); src.start(g0, Math.random()); src.stop(g0 + 0.35);
+  return len + 0.45 + Math.random() * 0.5;
+}
 export function setCry(level) {
   if (!ensure()) return;
-  level = S.enabled ? Math.max(0, Math.min(1, level)) : 0;
-  if (!cry && level > 0.001) {
-    const o = ctx.createOscillator(), lfo = ctx.createOscillator(), lg = ctx.createGain(), f1 = ctx.createBiquadFilter(), f2 = ctx.createBiquadFilter(), g = ctx.createGain(), env = ctx.createGain();
-    o.type = 'sawtooth'; o.frequency.value = 420;
-    lfo.frequency.value = 6; lg.gain.value = 18; lfo.connect(lg); lg.connect(o.frequency);   // trembling voice
-    f1.type = 'bandpass'; f1.frequency.value = 1100; f1.Q.value = 6;
-    f2.type = 'bandpass'; f2.frequency.value = 2600; f2.Q.value = 8;
-    o.connect(f1); o.connect(f2); f1.connect(env); f2.connect(env); env.connect(g); g.connect(bus.ambience);
-    env.gain.value = 0; g.gain.value = 0; o.start(); lfo.start();
-    // Sobbing pattern: rising "waa", falling tail, gasps.
-    const sob = () => {
-      if (!cry) return;
-      const t = now(), len = 0.9 + Math.random() * 0.8, base = 380 + Math.random() * 80;
-      o.frequency.cancelScheduledValues(t);
-      o.frequency.setValueAtTime(base, t); o.frequency.linearRampToValueAtTime(base * 1.35, t + 0.25); o.frequency.exponentialRampToValueAtTime(base * 0.8, t + len);
-      env.gain.cancelScheduledValues(t); env.gain.setValueAtTime(0, t); env.gain.linearRampToValueAtTime(0.9, t + 0.12); env.gain.setValueAtTime(0.9, t + len * 0.6); env.gain.exponentialRampToValueAtTime(0.001, t + len);
-      if (Math.random() < 0.5) noise({ dur: 0.18, vol: 0.12 * cry.level, freq: 1800, q: 1, at: len + 0.1, b: 'ambience' }); // gasp
-      cry.timer = setTimeout(sob, (len + 0.35 + Math.random() * 0.6) * 1000);
-    };
-    cry = { o, lfo, g, level: 0 }; sob();
-  }
-  if (cry) {
-    cry.level = level;
-    cry.g.gain.setTargetAtTime(level * 0.22 * S.ambience, now(), 0.2);
-    if (level <= 0.001) { const c = cry; cry = null; clearTimeout(c.timer); setTimeout(() => { try { c.o.stop(); c.lfo.stop(); } catch {} }, 400); }
+  if (!cryBus) { cryBus = ctx.createGain(); cryBus.gain.value = 0; cryBus.connect(out); }
+  cryLevel = S.enabled ? Math.max(0, Math.min(1, level)) : 0;
+  cryBus.gain.setTargetAtTime(cryLevel * S.ambience * 1.2, now(), 0.15);
+  if (cryLevel > 0.01 && !cryTimer) {
+    const loop = () => { if (cryLevel <= 0.01) { cryTimer = null; return; } cryTimer = setTimeout(loop, sobOnce() * 1000); };
+    loop();
   }
 }
-export const creak = () => { if (!ensure()) return; tone({ f: 90, f2: 60, dur: 1.4, vol: 0.2, type: 'sawtooth', attack: 0.2 }); noise({ dur: 1.2, vol: 0.15, freq: 400, q: 3, attack: 0.3 }); noise({ dur: 0.5, vol: 0.3, freq: 150, filter: 'lowpass', at: 1.2 }); };
+// Old wooden door: stick-slip creaks of an iron hinge, a groan, then the heavy thud.
+export const creak = () => {
+  if (!ensure()) return;
+  const t0 = now();
+  const o = ctx.createOscillator(), bp = ctx.createBiquadFilter(), g = ctx.createGain();
+  o.type = 'sawtooth'; bp.type = 'bandpass'; bp.Q.value = 9; g.gain.value = 0;
+  o.connect(bp); bp.connect(g); g.connect(bus.effects);
+  // stick-slip: rapid little bursts with wandering pitch
+  let t = t0;
+  for (let i = 0; i < 38; i++) {
+    const f = 55 + Math.sin(i * 0.35) * 25 + Math.random() * 20;
+    o.frequency.setValueAtTime(f, t); bp.frequency.setValueAtTime(700 + Math.sin(i * 0.2) * 300 + Math.random() * 200, t);
+    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.35 + Math.random() * 0.2, t + 0.012); g.gain.exponentialRampToValueAtTime(0.02, t + 0.035 + Math.random() * 0.02);
+    t += 0.035 + Math.random() * 0.03 + (i > 25 ? 0.02 : 0);
+  }
+  o.start(t0); o.stop(t + 0.2);
+  noise({ dur: 1.4, vol: 0.08, freq: 350, q: 2, attack: 0.3 });                                  // wood groan
+  noise({ dur: 0.7, vol: 0.5, freq: 110, q: 0.7, filter: 'lowpass', at: t - t0 + 0.05 });        // thud
+  tone({ f: 70, f2: 40, dur: 0.5, vol: 0.3, at: t - t0 + 0.05, type: 'sine' });
+  tone({ f: 1900, dur: 0.25, vol: 0.04, at: t - t0 + 0.08, type: 'triangle' });                  // latch clink
+};
 export const chains = () => { if (!ensure()) return; for (let i = 0; i < 5; i++) tone({ f: 2000 + Math.random() * 1500, dur: 0.12, vol: 0.05, at: i * 0.07, type: 'square', b: 'ambience' }); };

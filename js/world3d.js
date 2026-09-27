@@ -243,6 +243,15 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 4, 6), new THREE.MeshStandardMaterial({ color: 0xdddddd })); pole.position.y = 13; g.add(pole);
     const flag = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.3), new THREE.MeshStandardMaterial({ color: 0xffc83d, side: THREE.DoubleSide, emissive: 0x6a4a00, emissiveIntensity: 0.4 })); flag.position.set(1.1, 14.2, 0); g.add(flag);
     const door = new THREE.Mesh(new THREE.BoxGeometry(2, 2.6, 0.2), new THREE.MeshStandardMaterial({ color: 0x3a2618 })); door.position.set(0, 1.6, 6.55); g.add(door);
+    // Prison wing behind the keep: a squat dark tower joined by a wall, barred windows.
+    const dark2 = new THREE.MeshStandardMaterial({ color: 0x5f564c, roughness: 1 });
+    const wing = new THREE.Mesh(new THREE.BoxGeometry(9, 5, 7), dark2); wing.position.set(0, 2.8, -10.5); g.add(wing);
+    const link = new THREE.Mesh(new THREE.BoxGeometry(3, 3.5, 5), stone); link.position.set(0, 2.2, -7); g.add(link);
+    for (const x of [-3, 0, 3]) { const w = new THREE.Mesh(new THREE.BoxGeometry(1, 0.8, 0.1), new THREE.MeshStandardMaterial({ color: 0x111111 })); w.position.set(x, 3.4, -14.05); g.add(w); for (const bx of [-0.25, 0, 0.25]) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.8, 0.06), new THREE.MeshStandardMaterial({ color: 0x777777, metalness: 0.8 })); b.position.set(x + bx, 3.4, -14.1); g.add(b); } }
+    for (let i = -4; i <= 4; i += 1.6) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.8, 1), dark2); m.position.set(i, 5.7, -14); g.add(m); }
+    const dt = new THREE.Mesh(new THREE.CylinderGeometry(2, 2.3, 10, 12), dark2); dt.position.set(4.5, 5, -12); g.add(dt);
+    const dr = new THREE.Mesh(new THREE.ConeGeometry(2.6, 3, 12), new THREE.MeshStandardMaterial({ color: 0x3a2a2a })); dr.position.set(4.5, 11.5, -12); g.add(dr);
+    const glowW = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1, 0.1), new THREE.MeshStandardMaterial({ color: 0xff9a3c, emissive: 0xff7a1c, emissiveIntensity: 1 })); glowW.position.set(4.5, 7, -9.8); g.add(glowW);
     addShadow(g);
     return g;
   }
@@ -459,7 +468,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     const floating = !!s.def.floating;
     const y = floating ? 26 : height(s.x, s.z);
     const obj = floating ? skyIsland() : s.def.kind === 'hq' ? fortress() : s.def.id === 'sanctuary' ? palace() : (DIM_BUILD[s.def.id] || ruin)();
-    obj.scale.setScalar(floating ? 1.1 : 1.5);
+    obj.scale.setScalar(floating ? 1.1 : s.def.kind === 'hq' ? 1.9 : 1.5);
     obj.position.set(s.x, y - 0.2, s.z);
     if (floating) obj.userData.float = y;
     obj.userData.spot = s.def.id;

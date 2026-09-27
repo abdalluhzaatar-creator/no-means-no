@@ -290,6 +290,7 @@ export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 
   };
   const walker = createWalker({ hero: cmd, camera, dom: renderer.domElement, container, blocked: inHall, dist: 9, height: 2.6 });
   walker.teleport(0, 6, 0);   // facing the great doors
+  if (window.__nmnDebug) window.__hqTeleport = (x, z, f = Math.PI) => walker.teleport(x, z, f);
   let room = 'hall';
   const clampHall = (p) => { p.x = Math.max(-10.5, Math.min(10.5, p.x)); p.z = Math.max(-HL + 2, Math.min(HL - 1, p.z)); p.y = Math.max(0.8, Math.min(WALL_H + 6, p.y)); };
   const clampDungeon = (p) => { p.x = Math.max(DX - D.hw + 1, Math.min(DX + D.hw - 1, p.x)); p.z = Math.max(-D.hl + 10, Math.min(D.hl - 1, p.z)); p.y = Math.max(0.8, Math.min(14, p.y)); };
@@ -309,17 +310,25 @@ export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 
       setTimeout(() => fade.classList.remove('on'), 150);
     }, 700);
   };
-  prompt.onclick = () => go(room === 'hall' ? 'dungeon' : 'hall');
+  // One interaction prompt: press E (or tap it on touch screens).
+  let action = null;
+  prompt.onclick = () => action?.();
+  const onE = (e) => { if (e.key.toLowerCase() === 'e' || e.key === 'ث') { if (action && !prompt.hidden && document.getElementById('modal')?.hidden !== false) { e.preventDefault(); action(); } } };
+  window.addEventListener('keydown', onE);
+  const showPrompt = (text, fn) => { action = fn; prompt.hidden = false; prompt.innerHTML = `<kbd>E</kbd> ${text}`; };
   let childLevel = child, futureLevel = future;
   const updatePrompts = () => {
     const p = cmd.root.position; if (window.__nmnDebug) window.__hqPos = [p.x, p.z, room];
     if (room === 'hall') {
-      const near = p.z > HL - 6 && Math.abs(p.x) < 5;
-      prompt.hidden = !near; prompt.textContent = '🚪 افتح الباب';
+      const nearDoor = p.z > HL - 6 && Math.abs(p.x) < 5;
+      const nearMap = Math.abs(p.x) < 7.5 && p.z > -10 && p.z < 2.2;
+      if (nearDoor) showPrompt('🚪 افتح الباب', () => go('dungeon'));
+      else if (nearMap) showPrompt('🗺 افتح الخريطة', () => onTable?.());
+      else { prompt.hidden = true; action = null; }
       caption.hidden = true;
     } else {
       const near = p.z > D.hl - 6 && Math.abs(p.x - DX) < 4;
-      prompt.hidden = !near; prompt.textContent = '🚪 ارجع إلى القاعة';
+      if (near) showPrompt('🚪 ارجع إلى القاعة', () => go('hall')); else { prompt.hidden = true; action = null; }
       const dF = p.distanceTo(dungeon.futureAt), dC = p.distanceTo(dungeon.childAt);
       // Crying grows louder as you approach the child (only while it is sad).
       setCry(childLevel < 0.4 ? Math.max(0, 1 - dC / 22) * (1 - childLevel * 2) : 0);
@@ -383,7 +392,7 @@ export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 
     update({ rankIndex: ri, future: f, child: c }) { setRank(ri); if (f != null) { futureLevel = f; dungeon.setFuture(f); } if (c != null) { childLevel = c; dungeon.setChild(c); } },
     salute() { cmd.wave(); },
     dispose() {
-      cancelAnimationFrame(raf); ro.disconnect(); walker.dispose(); setCry(0);
+      cancelAnimationFrame(raf); ro.disconnect(); walker.dispose(); setCry(0); window.removeEventListener('keydown', onE);
       scene.traverse((o) => { o.geometry?.dispose(); });
       renderer.dispose(); renderer.forceContextLoss?.();
       container.innerHTML = '';
