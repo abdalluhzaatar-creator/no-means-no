@@ -48,6 +48,7 @@ export function mountWorld(container, spots, onPick) {
     h = h * 26 - Math.pow(Math.max(0, d - 0.28), 1.6) * 260 + 3;
     // Flatten gently around every place so buildings sit on a plateau.
     for (const s of shown) {
+      if (s.def.floating) continue;   // the trophy island floats over open sea
       const k = Math.exp(-((x - s.x) ** 2 + (z - s.z) ** 2) / 260);
       h = h * (1 - k) + 6 * k;
     }
@@ -377,9 +378,9 @@ export function mountWorld(container, spots, onPick) {
   let glow;
   for (const s of shown) {
     const floating = !!s.def.floating;
-    const y = floating ? height(s.x, s.z) + 34 : height(s.x, s.z);
+    const y = floating ? 26 : height(s.x, s.z);
     const obj = floating ? skyIsland() : s.def.kind === 'hq' ? fortress() : s.def.id === 'sanctuary' ? palace() : (DIM_BUILD[s.def.id] || ruin)();
-    obj.scale.setScalar(1.5);
+    obj.scale.setScalar(floating ? 1.1 : 1.5);
     obj.position.set(s.x, y - 0.2, s.z);
     if (floating) obj.userData.float = y;
     obj.userData.spot = s.def.id;
@@ -453,7 +454,7 @@ export function mountWorld(container, spots, onPick) {
   controls.maxPolarAngle = THREE.MathUtils.degToRad(78);
   controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
   controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
-  const bounds = { x: SIZE * 0.55, z: DEPTH * 0.55 };
+  const bounds = { x: SIZE * 0.62, z: DEPTH * 0.62 };
   controls.addEventListener('change', () => {
     const t = controls.target, dx = THREE.MathUtils.clamp(t.x, -bounds.x, bounds.x) - t.x, dz = THREE.MathUtils.clamp(t.z, -bounds.z, bounds.z) - t.z;
     if (dx || dz) { t.x += dx; t.z += dz; camera.position.x += dx; camera.position.z += dz; }

@@ -301,7 +301,7 @@ export const REGIONS = [
     cost: {},
     starter: true,
     requires: [],
-    map: { x: 250, y: 170 },
+    map: { x: -330, y: -170 },   // far out over the sea, off the main island
     floating: true,
     upgrades: [],
   },
