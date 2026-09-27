@@ -74,10 +74,10 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0xbfd4e2, 0.0026);
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 2000);
+  const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 5000);
 
   const sky = new Sky();
-  sky.scale.setScalar(1800);
+  sky.scale.setScalar(4000);
   const su = sky.material.uniforms;
   su.turbidity.value = 6; su.rayleigh.value = 1.6; su.mieCoefficient.value = 0.005; su.mieDirectionalG.value = 0.8;
   const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(58), THREE.MathUtils.degToRad(210));
@@ -133,7 +133,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   // ---------- sea ----------
   const waterGeo = new THREE.PlaneGeometry(3000, 3000, 1, 1); waterGeo.rotateX(-Math.PI / 2);
   const water = new THREE.Mesh(waterGeo, new THREE.MeshPhysicalMaterial({
-    color: 0x1f6f8b, roughness: 0.08, metalness: 0.1, transmission: 0, transparent: true, opacity: 0.82, clearcoat: 1,
+    color: 0x1f6f8b, roughness: 0.08, metalness: 0.1, transmission: 0, transparent: false, clearcoat: 1,
   }));
   water.position.y = SEA; water.receiveShadow = true;
   const waveTex = (() => {

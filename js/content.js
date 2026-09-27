@@ -233,7 +233,7 @@ export const REGIONS = [
     characterId: 'empath',
     cost: { keys: 1 },
     requires: [],
-    map: { x: 190, y: 430, revealedBy: 'sanctuary' },
+    map: { x: 320, y: 495, revealedBy: 'sanctuary' },
     upgrades: [],
   },
   {
