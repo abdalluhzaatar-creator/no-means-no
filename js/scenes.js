@@ -22,8 +22,9 @@ export function characterSVG(def, level = 1, { size = 120, locked = false } = {}
     ? `<rect x="44" y="84" width="32" height="22" rx="2" fill="${p.accent}"/><line x1="60" y1="84" x2="60" y2="106" stroke="${p.robe}" stroke-width="1.5"/>`
     : `<path d="M47 90 Q60 98 73 90" stroke="${p.skin}" stroke-width="6" fill="none" stroke-linecap="round"/>`}
   <circle cx="60" cy="54" r="14" fill="${p.skin}"/>
-  <path d="M46 50 Q60 34 74 50 Z" fill="${level >= 6 ? '#d9b24c' : p.robe}" stroke="${p.accent}" stroke-width="1"/>
-  ${level >= 3 ? `<path d="M50 62 Q60 72 70 62" fill="${locked ? '#555' : '#3b2e25'}" opacity=".85"/>` : ''}
+  ${holdsBook ? `<path d="M46 50 Q60 34 74 50 Z" fill="${level >= 6 ? '#d9b24c' : p.robe}" stroke="${p.accent}" stroke-width="1"/>`
+    : `<path d="M46 52 Q46 38 60 38 Q74 38 74 52 Q70 44 60 45 Q50 44 46 52Z" fill="${locked ? '#555' : '#2a1d14'}"/>`}
+  ${level >= 3 || !holdsBook ? `<path d="M47 56 Q49 70 60 71 Q71 70 73 56 Q68 64 60 64 Q52 64 47 56Z" fill="${locked ? '#555' : '#2a1d14'}"/>` : ''}
   ${level >= 8 ? Array.from({ length: 6 }, (_, i) => {
     const a = (i / 6) * Math.PI * 2;
     return `<circle cx="${60 + Math.cos(a) * 34}" cy="${60 + Math.sin(a) * 34}" r="2" fill="${p.glow}" class="orbit" style="animation-delay:${i * 0.3}s"/>`;
@@ -33,19 +34,39 @@ export function characterSVG(def, level = 1, { size = 120, locked = false } = {}
 }
 
 // ---------- Regions ----------
-function sanctuary(f, theme) {
-  const g = glowId();
+function sanctuary(f) {
+  const g = glowId(), fl = glowId();
+  const night = f.has('stars');
+  const arch = (x, w, h, y) => `<path d="M${x} ${y} V${y - h + w / 2} Q${x + w / 2} ${y - h - w * 0.35} ${x + w} ${y - h + w / 2} V${y}" fill="#2d2a28"/>`;
   return `
-  <defs><linearGradient id="${g}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${theme.sky[0]}"/><stop offset="1" stop-color="${theme.sky[1]}"/></linearGradient></defs>
+  <defs>
+    <linearGradient id="${g}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${night ? '#10193a' : '#7fb8e6'}"/><stop offset="1" stop-color="${night ? '#3b4a7a' : '#dff0fb'}"/></linearGradient>
+    <pattern id="${fl}" width="26" height="14" patternUnits="userSpaceOnUse"><rect width="26" height="14" fill="#efe9dc"/><rect width="13" height="7" fill="#e0d8c7"/><rect x="13" y="7" width="13" height="7" fill="#e0d8c7"/></pattern>
+  </defs>
   <rect width="400" height="260" fill="url(#${g})"/>
-  ${f.has('stars') ? Array.from({ length: 28 }, (_, i) => `<circle cx="${(i * 97) % 400}" cy="${(i * 53) % 110}" r="${i % 3 ? 1 : 1.6}" fill="#fff" class="twinkle" style="animation-delay:${(i % 7) * 0.4}s"/>`).join('') : ''}
-  <circle cx="320" cy="60" r="18" fill="#f7e7b5" opacity=".9"/><circle cx="328" cy="54" r="16" fill="${theme.sky[0]}" opacity=".95"/>
-  <path d="M0 200 Q100 170 200 190 T400 185 V260 H0Z" fill="${theme.ground}"/>
-  <path d="M0 215 Q120 200 240 212 T400 208 V260 H0Z" fill="#cbb58c"/>
-  ${f.has('arch') ? `<path d="M150 205 V130 Q200 70 250 130 V205" fill="none" stroke="#f1e6cc" stroke-width="10"/><path d="M165 205 V135 Q200 92 235 135 V205" fill="#1d3b4f22"/>` : ''}
-  ${f.has('palms') ? [40, 355].map((x) => `<g transform="translate(${x},200)"><path d="M0 0 Q-4 -40 4 -80" stroke="#6b4f33" stroke-width="7" fill="none"/>${[-60, -20, 20, 60, 100].map((a) => `<path d="M4 -80 q${Math.cos(a * Math.PI / 180) * 30} ${Math.sin(a * Math.PI / 180) * 10 - 10} ${Math.cos(a * Math.PI / 180) * 45} ${Math.sin(a * Math.PI / 180) * 25 + 5}" stroke="#3f7d6e" stroke-width="6" fill="none" stroke-linecap="round"/>`).join('')}</g>`).join('') : ''}
-  ${f.has('fountain') ? `<g transform="translate(300,205)"><ellipse rx="34" ry="8" fill="#7fb7c4"/><rect x="-4" y="-26" width="8" height="24" fill="#e9e4d8"/><path d="M0 -26 q-14 -6 -20 14 M0 -26 q14 -6 20 14" stroke="#bfe3ea" stroke-width="2" fill="none" class="water"/></g>` : ''}
-  ${f.has('lanterns') ? [110, 290].map((x, i) => `<g transform="translate(${x},${i ? 120 : 110})"><line y1="-40" y2="0" stroke="#8a6b45"/><rect x="-7" y="0" width="14" height="20" rx="3" fill="#f4d58d" class="flicker"/><circle cx="0" cy="10" r="16" fill="#f4d58d" opacity=".25"/></g>`).join('') : ''}`;
+  ${night ? Array.from({ length: 28 }, (_, i) => `<circle cx="${(i * 97) % 400}" cy="${(i * 53) % 90}" r="${i % 3 ? 1 : 1.6}" fill="#fff" class="twinkle" style="animation-delay:${(i % 7) * 0.4}s"/>`).join('') : ''}
+  <path d="M0 150 Q80 120 160 140 T400 130 V170 H0Z" fill="#8fb36a"/>
+  <!-- palace hall -->
+  <rect x="120" y="95" width="160" height="90" fill="#f3ece0"/>
+  <rect x="165" y="70" width="70" height="115" fill="#eadfc8"/>
+  <path d="M175 185 V120 Q200 88 225 120 V185Z" fill="#2f7a8a"/>
+  <path d="M188 185 V140 Q200 124 212 140 V185Z" fill="#5a3a22"/>
+  <rect x="172" y="62" width="56" height="10" fill="#eadfc8"/>
+  <path d="M166 62 Q200 -2 234 62Z" fill="#2f7a8a"/><rect x="198" y="18" width="4" height="12" fill="#d4a53a"/>
+  ${[110, 290].map((x) => `<rect x="${x - 6}" y="40" width="12" height="145" fill="#eadfc8"/><path d="M${x - 9} 42 Q${x} 18 ${x + 9} 42Z" fill="#2f7a8a"/>`).join('')}
+  ${[135, 255].map((x) => arch(x, 14, 30, 150)).join('')}
+  <!-- arcades -->
+  <rect x="0" y="130" width="100" height="60" fill="#eadfc8"/><rect x="300" y="130" width="100" height="60" fill="#eadfc8"/>
+  ${[8, 38, 68, 308, 338, 368].map((x) => arch(x, 22, 44, 190)).join('')}
+  <rect x="0" y="126" width="100" height="6" fill="#2f7a8a"/><rect x="300" y="126" width="100" height="6" fill="#2f7a8a"/>
+  <!-- marble courtyard -->
+  <path d="M0 185 H400 V260 H0Z" fill="url(#${fl})"/>
+  <path d="M188 185 H212 L226 260 H174Z" fill="#2c8aa6" opacity=".85"/>
+  ${[60, 340].map((x) => `<ellipse cx="${x}" cy="150" rx="9" ry="34" fill="#2f5a2e"/>`).join('')}
+  ${f.has('palms') ? [30, 370].map((x) => `<g transform="translate(${x},215)"><rect x="-10" y="0" width="20" height="16" fill="#b8683f"/><circle cy="-10" r="16" fill="#3e7a33"/><circle cx="-6" cy="-14" r="3" fill="#f29a2e"/><circle cx="7" cy="-6" r="3" fill="#f29a2e"/></g>`).join('') : ''}
+  ${f.has('arch') ? `<path d="M150 250 V175 Q200 120 250 175 V250" fill="none" stroke="#f1e6cc" stroke-width="9"/>` : ''}
+  ${f.has('fountain') ? `<g transform="translate(300,238)"><ellipse rx="30" ry="7" fill="#7fb7c4"/><rect x="-4" y="-24" width="8" height="22" fill="#e9e4d8"/><path d="M0 -24 q-14 -6 -20 14 M0 -24 q14 -6 20 14" stroke="#bfe3ea" stroke-width="2" fill="none" class="water"/></g>` : ''}
+  ${f.has('lanterns') ? [110, 290].map((x) => `<g transform="translate(${x},200)"><line y1="0" y2="30" stroke="#3a3128" stroke-width="2"/><rect x="-6" y="-14" width="12" height="16" rx="3" fill="#f4d58d" class="flicker"/><circle cy="-6" r="14" fill="#f4d58d" opacity=".25"/></g>`).join('') : ''}`;
 }
 
 function library(f, theme) {
@@ -53,7 +74,13 @@ function library(f, theme) {
   return `
   <defs><linearGradient id="${g}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${theme.sky[0]}"/><stop offset="1" stop-color="${theme.sky[1]}"/></linearGradient></defs>
   <rect width="400" height="260" fill="url(#${g})"/>
-  <rect y="200" width="400" height="60" fill="${theme.ground}"/>
+  <!-- tall reading hall: stone walls, arched windows with moonlight, wooden floor -->
+  <rect y="0" width="400" height="200" fill="#3a3040"/>
+  ${[40, 120, 280, 360].map((x) => `<path d="M${x - 18} 150 V70 Q${x} 40 ${x + 18} 70 V150Z" fill="#8fb0d8" opacity=".55"/><path d="M${x} 150 V56 M${x - 18} 100 H${x + 18}" stroke="#2a2230" stroke-width="3"/>`).join('')}
+  ${[0, 400].map((x) => `<rect x="${x ? 350 : 0}" y="20" width="50" height="180" fill="#4b3a2a"/>${[40, 80, 120, 160].map((y) => `<rect x="${(x ? 350 : 0) + 3}" y="${y}" width="44" height="3" fill="#2d2118"/>${Array.from({ length: 5 }, (_, i) => `<rect x="${(x ? 350 : 0) + 5 + i * 8.5}" y="${y - 22}" width="7" height="22" fill="${['#8e3b3b', '#2f4a6d', '#c9a45c', '#3f7d6e'][(i + y / 40) % 4]}"/>`).join('')}`).join('')}`).join('')}
+  <rect y="200" width="400" height="60" fill="#6b4a30"/>
+  ${Array.from({ length: 10 }, (_, i) => `<rect x="${i * 40}" y="200" width="2" height="60" fill="#553a25"/>`).join('')}
+  <path d="M140 200 H260 L290 260 H110Z" fill="#8e2a2c" opacity=".8"/>
   ${f.has('window') ? `<g transform="translate(200,70)"><path d="M-40 40 V-10 Q0 -60 40 -10 V40Z" fill="#0f1a2c" stroke="#c9a45c" stroke-width="4"/><circle cx="12" cy="-6" r="10" fill="#f7e7b5"/></g>` : ''}
   ${f.has('shelves') ? [20, 310].map((x) => `<g transform="translate(${x},70)"><rect width="70" height="130" fill="#5a4330"/>${[10, 50, 90].map((y) => `<rect x="4" y="${y + 30}" width="62" height="4" fill="#3d2d20"/>${Array.from({ length: 7 }, (_, i) => `<rect x="${6 + i * 8.5}" y="${y + 4}" width="7" height="26" fill="${['#8e3b3b', '#2f4a6d', '#c9a45c', '#3f7d6e'][(i + y) % 4]}"/>`).join('')}`).join('')}</g>`).join('') : ''}
   ${f.has('desk') ? `<g transform="translate(250,190)"><rect x="-50" y="-6" width="100" height="10" fill="#7a5a3c"/><rect x="-44" y="4" width="8" height="18" fill="#5a4330"/><rect x="36" y="4" width="8" height="18" fill="#5a4330"/><rect x="-20" y="-14" width="30" height="8" fill="#f1e6cc"/><circle cx="30" cy="-18" r="10" fill="#f4d58d" opacity=".4" class="flicker"/></g>` : ''}

@@ -104,6 +104,39 @@ export const REGIONS = [
       { level: 5, cost: 400, adds: 'window', label: 'نافذة القمر' },
     ],
   },
+  {
+    // A special floating island: not a character's home but the challenge arena.
+    id: 'trophies',
+    kind: 'trophies',
+    name: 'جزيرة الكؤوس',
+    desc: 'جزيرة معلّقة في السماء، فيها كؤوس التحدي.',
+    cost: {},
+    starter: true,
+    requires: [],
+    map: { x: 250, y: 170 },
+    floating: true,
+    upgrades: [],
+  },
 ];
 
+// Challenge cups: the challenger must stay clean for `days` days. The stake is
+// `days` dinars (rule 7), held by the second party until they judge the result.
+export const CUPS = [
+  { id: 'stone', name: 'الكأس الحجري', days: 5, color: '#8d8a84', metal: 0 },
+  { id: 'wood', name: 'الكأس الخشبي', days: 10, color: '#8b5a2b', metal: 0 },
+  { id: 'copper', name: 'الكأس النحاسي', days: 15, color: '#c26a3a', metal: 0.8 },
+  { id: 'bronze', name: 'الكأس البرونزي', days: 20, color: '#cd7f32', metal: 0.85 },
+  { id: 'iron', name: 'الكأس الحديدي', days: 25, color: '#6e7479', metal: 0.9 },
+  { id: 'silver', name: 'الكأس الفضي', days: 30, color: '#d8dde3', metal: 1 },
+  { id: 'gold', name: 'الكأس الذهبي', days: 45, color: '#ffc83d', metal: 1 },
+  { id: 'platinum', name: 'الكأس البلاتيني', days: 60, color: '#9fe3e8', metal: 1 },
+  { id: 'diamond', name: 'الكأس الماسي', days: 75, color: '#aeeaff', metal: 0.3, glow: '#7fdcff' },
+  { id: 'master', name: 'ماستر', days: 90, color: '#9b59d0', metal: 0.7, glow: '#c38bff' },
+  { id: 'grandmaster', name: 'غراند ماستر', days: 120, color: '#d0364a', metal: 0.7, glow: '#ff5a6e' },
+  { id: 'challenger', name: 'تشالنجر', days: 150, color: '#4fd0ff', metal: 0.8, glow: '#ffe07a' },
+  { id: 'legendary', name: 'أسطوري', days: 180, color: '#ff8a00', metal: 0.8, glow: '#ffb14d' },
+];
+// Channel rule: opening a second channel requires owning this cup.
+export const CHANNEL_UNLOCK_CUP = 'silver';
+export const JOD_TO_USD = 1.41;
 

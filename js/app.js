@@ -1,5 +1,6 @@
 // UI layer: renders screens from state, calls engine actions, saves, plays effects.
-import { CHARACTERS, REGIONS } from './content.js';
+import { CHARACTERS, REGIONS, CUPS, JOD_TO_USD } from './content.js';
+import * as C from './cups.js';
 import * as E from './engine.js';
 import { createStorage } from './storage.js';
 import { characterSVG, regionSVG, worldMapSVG } from './scenes.js';
@@ -46,6 +47,7 @@ async function loadGame() {
   let raw = null;
   try { raw = await storage.load(); } catch (e) { console.error(e); FX.toast('تعذّر تحميل الحفظ', 'err'); }
   state = raw ? E.migrate(raw) : E.demoState();
+  C.ensure(state);
   if (!raw) scheduleSave();
   $('#account').textContent = storage.accountName ? `👤 ${storage.accountName}` : '👤 حسابك';
   $('#app').hidden = false;
@@ -103,8 +105,9 @@ function render() {
   $('#keys').textContent = state.keys;
   const navScreen = screen === 'character' ? 'world' : screen;
   document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.screen === navScreen));
-  document.body.classList.toggle('in-scene', screen === 'character' && sceneFor(currentChar));
+  document.body.classList.toggle('in-scene', (screen === 'character' && sceneFor(currentChar)) || screen === 'trophies');
   document.body.classList.toggle('in-world', screen === 'world');
+  document.body.classList.toggle('in-store', screen === 'shop');
   // A live 3D place only refreshes its overlay, so animations and camera survive.
   if (screen === 'character' && oasis && oasis.char === currentChar && $('#place-view')) {
     $('#hud').innerHTML = placeHUD();
@@ -112,13 +115,21 @@ function render() {
     bind(); refreshModal();
     return;
   }
+  if (screen === 'trophies' && isle && $('#trophy-view')) {
+    $('#hud').innerHTML = trophyHUD();
+    isle.update(cupList());
+    bind(); refreshModal();
+    return;
+  }
+  isle?.dispose(); isle = null;
   if (screen === 'world' && disposeWorld && worldKey === worldSignature() && $('#world-view')) { bind(); return; }
   oasis?.scene.dispose(); oasis = null;
-  const view = { world: renderWorld, character: renderCharacter, shop: renderShop }[screen];
+  const view = { world: renderWorld, character: renderCharacter, shop: renderShop, trophies: renderTrophies }[screen];
   $('#screen').innerHTML = view();
   bind();
   bindWorld();
   bindPlace();
+  bindTrophies();
   refreshModal();
 }
 
@@ -218,7 +229,7 @@ function renderWorld() {
   const spots = REGIONS.filter((r) => r.map).map((def) => {
     const vis = E.mapVisibility(state, def);
     let scene = '';
-    if (vis === 'owned') {
+    if (vis === 'owned' && def.characterId) {
       const c = E.findCharacter(def.characterId);
       const ch = state.characters[c.id];
       scene = regionSVG(def, E.regionFeatures(state, def.id), ch ? characterSVG(c, artLevel(ch), { size: 80 }) : '');
@@ -255,6 +266,7 @@ async function bindWorld() {
 
 function openSpot(id) {
   const def = E.findRegion(id);
+  if (def.kind === 'trophies') return go('trophies');
   if (state.regions[id]) return enter(def.characterId);
   const st = E.shopStatus(state, 'region', def);
   const c = E.findCharacter(def.characterId);
@@ -528,34 +540,267 @@ function renderCharacter() {
   ${progressionPanel(c, ch)}`;
 }
 
-function shopCard(kind, item) {
-  const st = E.shopStatus(state, kind, item);
-  const art = kind === 'character'
-    ? characterSVG(item, state.characters[item.id] ? artLevel(state.characters[item.id]) : 1, { size: 90, locked: !st.owned && !st.conditionsMet })
-    : regionSVG(item, new Set(), '', { locked: !st.owned && !st.conditionsMet });
+// Shop: every offer is a whole realm — a place together with the character who lives there.
+function realmCard(r) {
+  const st = E.shopStatus(state, 'region', r);
+  const c = E.findCharacter(r.characterId);
+  const ch = c && state.characters[c.id];
+  const locked = !st.owned && !st.conditionsMet;
+  const art = regionSVG(r, st.owned ? E.regionFeatures(state, r.id) : new Set(), c ? characterSVG(c, ch ? artLevel(ch) : 1, { size: 90, locked }) : '', { locked });
+  const rarity = r.cost?.keys ? 'epic' : 'common';
+  let action;
+  if (st.owned) action = `<button class="store-btn owned" data-enter-realm="${r.id}">▶ ادخل</button>`;
+  else if (locked) action = `<button class="store-btn" disabled>🔒 ${esc(st.conditions.find((x) => !x.met)?.label || 'مقفل')}</button>`;
+  else action = `<button class="store-btn buy" data-buy="region:${r.id}" ${st.affordable ? '' : 'disabled'}>${E.costText(r.cost)}</button>`;
   return `
-  <div class="card shop-item ${st.owned ? 'owned' : ''}">
-    <div class="shop-art ${kind}">${art}</div>
-    <div class="shop-info">
-      <h3>${item.name} <small class="muted">${kind === 'character' ? 'شخصية' : 'منطقة'}</small></h3>
-      <p class="muted">${item.desc}</p>
-      ${st.conditions.length ? `<ul class="conds">${st.conditions.map((c) => `
-        <li class="${c.met ? 'met' : ''}">${c.met ? '✔' : '○'} ${esc(c.label)} <small>(${c.current}/${c.target})</small></li>`).join('')}</ul>` : ''}
-      ${st.owned ? '<span class="badge">✔ مملوك</span>'
-        : `<button class="btn primary" data-buy="${kind}:${item.id}" ${st.canBuy ? '' : 'disabled'}>
-             ${st.conditionsMet ? (st.affordable ? 'شراء' : 'غير كافٍ') : 'مقفل'} — ${E.costText(item.cost)}</button>`}
+  <article class="realm ${rarity} ${st.owned ? 'is-owned' : ''} ${locked ? 'is-locked' : ''}">
+    <div class="realm-art">${art}${st.owned ? '<span class="realm-tag">✔ مملوك</span>' : rarity === 'epic' ? '<span class="realm-tag epic">نادر</span>' : ''}</div>
+    <div class="realm-body">
+      <h3>${r.name}</h3>
+      ${c ? `<div class="realm-with">+ ${c.name}</div>` : ''}
     </div>
-  </div>`;
+    ${action}
+  </article>`;
 }
 
 function renderShop() {
+  const realms = REGIONS.filter((r) => r.characterId);
   return `
-  <h2 class="screen-title">المتجر</h2>
-  <p class="muted">الأماكن تُفتح بالمفاتيح 🗝، وتطوير المناطق بالذهب 🪙.</p>
-  <h3>الشخصيات</h3>
-  <div class="grid">${CHARACTERS.map((c) => shopCard('character', c)).join('')}</div>
-  <h3>المناطق</h3>
-  <div class="grid">${REGIONS.map((r) => shopCard('region', r)).join('')}</div>`;
+  <div class="store">
+    <header class="store-head">
+      <h2>🛒 المتجر</h2>
+      <div class="store-sub">كل عالم = مكان + شخصيته</div>
+    </header>
+    <div class="store-grid">${realms.map(realmCard).join('')}</div>
+  </div>`;
+}
+
+// ---------- Trophy island (challenge cups) ----------
+let isle = null, cupChannel = null;
+const usd = (n) => `$${(+n).toFixed(2).replace(/\.00$/, '')}`;
+const cupIcon = (cup, size = 44, dim = false) => `
+  <svg viewBox="0 0 48 48" width="${size}" height="${size}" aria-hidden="true" style="${dim ? 'opacity:.35;filter:grayscale(1)' : `filter:drop-shadow(0 0 6px ${cup.glow || cup.color}88)`}">
+    <path d="M14 6h20v8c0 7-4 12-10 12S14 21 14 14z" fill="${cup.color}"/>
+    <path d="M14 9H7c0 6 3 9 8 9M34 9h7c0 6-3 9-8 9" fill="none" stroke="${cup.color}" stroke-width="3"/>
+    <rect x="21" y="26" width="6" height="8" fill="${cup.color}"/><rect x="14" y="34" width="20" height="6" rx="2" fill="#3a2f28"/>
+    <path d="M18 9h3v9h-3z" fill="#fff" opacity=".35"/>
+    ${cup.glow ? `<path d="M24 1l2 3-2 2-2-2z" fill="${cup.glow}"/>` : ''}
+  </svg>`;
+
+function cupList() {
+  const ch = currentCupChannel();
+  const now = Date.now();
+  return CUPS.map((cup) => {
+    const act = C.active(state).find((x) => x.cupId === cup.id && (!ch || x.channel === ch));
+    const won = C.ownsCup(state, cup.id);
+    const done = act ? Math.min(cup.days, C.daysDone(act, now)) : 0;
+    return { ...cup, state: act ? 'active' : won ? 'won' : 'locked', progress: act ? done / cup.days : 0, done };
+  });
+}
+function currentCupChannel() {
+  const list = C.channels(state);
+  if (!list.includes(cupChannel)) cupChannel = C.active(state)[0]?.channel || list[0] || null;
+  return cupChannel;
+}
+
+function renderTrophies() {
+  return `
+  <div class="place-view" id="trophy-view"><div class="w3-loading">جارٍ الصعود إلى جزيرة الكؤوس…</div></div>
+  <div class="hud" id="hud">${trophyHUD()}</div>`;
+}
+
+async function bindTrophies() {
+  const v = $('#trophy-view');
+  if (!v) return;
+  try {
+    const { mountTrophies } = await import('./trophies3d.js');
+    if (!v.isConnected) return;
+    v.querySelector('.w3-loading')?.remove();
+    isle = mountTrophies(v, { cups: cupList(), sky: skyInfo, onPick: showCup });
+  } catch (err) {
+    console.warn('3D trophies unavailable', err);
+    v.innerHTML = `<div class="cup-fallback">${CUPS.map((c) => `<button data-cup="${c.id}">${cupIcon(c, 56, !C.ownsCup(state, c.id))}<small>${c.name}</small></button>`).join('')}</div>`;
+    bind();
+  }
+}
+
+function trophyHUD() {
+  const cups = C.ensure(state);
+  const ch = currentCupChannel();
+  const chans = C.channels(state);
+  const act = C.active(state).find((x) => x.channel === ch);
+  const won = C.wonCups(state).length;
+  let card;
+  if (act) {
+    const cup = C.findCup(act.cupId), done = Math.min(cup.days, C.daysDone(act)), complete = C.isComplete(act);
+    card = `
+    <div class="challenge-card ${complete ? 'complete' : ''}">
+      <div class="cc-top">${cupIcon(cup, 52)}<div><b>${cup.name}</b><small>قناة: ${esc(act.channel)}</small></div></div>
+      <div class="cc-days"><span>اليوم</span><b><bdi>${done}</bdi></b><span>من <bdi>${cup.days}</bdi></span></div>
+      <div class="xp big"><span style="width:${Math.round((done / cup.days) * 100)}%"></span></div>
+      <div class="cc-meta">💰 ${act.stakeJod} دينار (${usd(act.stakeUsd)}) · مؤمَّن عند <b>${esc(act.partner)}</b></div>
+      ${complete ? '<div class="cc-note">✨ اكتملت المدة — بانتظار حكم الطرف الثاني</div>' : ''}
+      <button class="store-btn buy" data-judge="${act.id}">⚖️ حكم الطرف الثاني</button>
+    </div>`;
+  } else {
+    card = `
+    <div class="challenge-card empty">
+      <b>${ch ? `لا يوجد تحدٍّ في قناة «${esc(ch)}»` : 'ابدأ أول تحدٍّ لك'}</b>
+      <small>اختر كأسًا، أمّن مبلغه عند الطرف الثاني، والتزم بالمدة.</small>
+      <button class="store-btn owned" data-cup-picker>🏆 ابدأ تحدّي</button>
+    </div>`;
+  }
+  return `
+  <div class="hud-top">
+    <div class="plate">
+      <div class="plate-avatar" style="--glow:#ffc83d">🏆</div>
+      <div class="plate-body">
+        <div class="plate-name">جزيرة الكؤوس</div>
+        <div class="plate-row"><span class="plate-streak">🏆 ${won} / ${CUPS.length}</span></div>
+      </div>
+    </div>
+    <button class="hud-chip wallet" data-wallet>💵 ${usd(cups.wallet)}</button>
+  </div>
+  <aside class="cup-side">
+    ${chans.length ? `<div class="chan-tabs">${chans.map((c) => `<button class="chan ${c === ch ? 'on' : ''}" data-channel="${esc(c)}">${esc(c)}</button>`).join('')}</div>` : ''}
+    ${card}
+  </aside>
+  <div class="dock">
+    <button class="dock-btn" data-cup-picker>🏆<span>ابدأ تحدّي</span></button>
+    <button class="dock-btn" data-cup-rules>📜<span>القوانين</span></button>
+    <button class="dock-btn" data-cup-history>🗂<span>السجل</span></button>
+  </div>`;
+}
+
+function showCup(cupId) {
+  const cup = C.findCup(cupId);
+  const act = C.active(state).find((x) => x.cupId === cupId);
+  const wins = C.wonCups(state).filter((x) => x.cupId === cupId);
+  isle?.focus(cupId);
+  modal(`
+    <div class="cup-hero">${cupIcon(cup, 96)}<h2>${cup.name}</h2><p class="muted">${cup.days} يوم · تأمين ${cup.days} دينار (${usd(C.stakeUsd(cup))})</p></div>
+    ${wins.length ? `<p class="ok-text">🏆 فزت فيه ${wins.length} مرة (${wins.map((w) => esc(w.channel)).join('، ')})</p>` : ''}
+    ${act ? `<p>⏳ شغّال في قناة «${esc(act.channel)}» — اليوم ${Math.min(cup.days, C.daysDone(act))} من ${cup.days}</p><button class="store-btn buy" data-judge="${act.id}">⚖️ حكم الطرف الثاني</button>`
+      : `<button class="store-btn owned" data-start-cup="${cup.id}">ابدأ تحدّي ${cup.name}</button>`}`);
+  bind();
+}
+
+function showCupPicker() {
+  const has = (id) => C.ownsCup(state, id);
+  modal(`
+    <h2>🏆 اختر الكأس</h2>
+    <p class="muted">المبلغ بالدينار = عدد أيام الكأس، ويُخصم من رصيدك الحقيقي (💵 ${usd(state.cups.wallet)}).</p>
+    <div class="cup-grid">${CUPS.map((c) => `
+      <button class="cup-tile ${has(c.id) ? 'won' : ''}" data-start-cup="${c.id}" style="--c:${c.glow || c.color}">
+        ${cupIcon(c, 54)}<b>${c.name}</b><span>${c.days} يوم</span><small>${c.days} دينار · ${usd(C.stakeUsd(c))}</small>${has(c.id) ? '<i>✔</i>' : ''}
+      </button>`).join('')}</div>`);
+  bind();
+}
+
+function startCupFlow(cupId) {
+  const cup = C.findCup(cupId);
+  const chans = C.channels(state);
+  const canNew = C.canOpenChannel(state, '__new__').ok;
+  const busy = new Set(C.active(state).map((x) => x.channel));
+  const cost = C.stakeUsd(cup);
+  modal(`
+    <div class="cup-hero">${cupIcon(cup, 72)}<h2>تحدّي ${cup.name}</h2><p class="muted">${cup.days} يوم · تأمين <b>${cup.days} دينار</b> (${usd(cost)})</p></div>
+    <form id="cup-form" class="cup-form">
+      <label>القناة (العادة اللي بدك تتركها)
+        ${chans.length ? `<div class="chips">${chans.map((c) => `<button type="button" class="chip ${busy.has(c) ? '' : ''}" data-fill-channel="${esc(c)}" ${busy.has(c) ? 'disabled title="فيها تحدٍّ شغّال"' : ''}>${esc(c)}${busy.has(c) ? ' ⏳' : ''}</button>`).join('')}</div>` : ''}
+        <input name="channel" required placeholder="${chans.length ? 'اختر قناة أو اكتب قناة جديدة' : 'مثال: ترك التدخين'}" value="${chans.find((c) => !busy.has(c)) ? esc(chans.find((c) => !busy.has(c))) : ''}">
+        ${chans.length && !canNew ? `<small class="muted">🔒 فتح قناة جديدة يحتاج ${C.findCup('silver').name}</small>` : ''}
+      </label>
+      <label>اسم الطرف الثاني (اللي بيأمّن المبلغ عنده)<input name="partner" required placeholder="مثال: أحمد"></label>
+      <label>رمز الطرف الثاني — 4 أرقام يدخلها هو بنفسه<input name="pin" required inputmode="numeric" pattern="\\d{4}" maxlength="4" type="password" placeholder="••••"></label>
+      <label class="check"><input type="checkbox" name="agree" required> أوافق: إذا خسرت يصير المبلغ للطرف الثاني، ولا يحق لي المطالبة بالمال بعد بدء التحدي تحت أي ظرف.</label>
+      <button class="store-btn buy" type="submit" ${state.cups.wallet < cost ? 'disabled' : ''}>${state.cups.wallet < cost ? `الرصيد لا يكفي — أضف ${usd(cost - state.cups.wallet)}` : `ابدأ — أمّن ${usd(cost)}`}</button>
+      ${state.cups.wallet < cost ? '<button type="button" class="btn ghost" data-wallet>💵 أضف رصيد</button>' : ''}
+    </form>`);
+  document.querySelectorAll('[data-fill-channel]').forEach((b) => (b.onclick = () => { $('#cup-form').channel.value = b.dataset.fillChannel; }));
+  $('#cup-form').onsubmit = (e) => {
+    e.preventDefault();
+    const f = e.currentTarget;
+    const r = C.startChallenge(state, { channel: f.channel.value, cupId, partner: f.partner.value, pin: f.pin.value });
+    if (!r.ok) return FX.toast(r.reason, 'err');
+    cupChannel = r.challenge.channel;
+    scheduleSave(); closeModal(); render();
+    FX.banner(`بدأ تحدّي ${cup.name}`, `${cup.days} يوم — المبلغ مؤمَّن عند ${r.challenge.partner}. بالتوفيق!`, '🏆');
+  };
+  bind();
+}
+
+function judgeFlow(id) {
+  const ch = state.cups.challenges.find((x) => x.id === id);
+  const cup = C.findCup(ch.cupId);
+  const complete = C.isComplete(ch);
+  modal(`
+    <div class="cup-hero">${cupIcon(cup, 72)}<h2>⚖️ حكم الطرف الثاني</h2>
+    <p class="muted">${esc(ch.partner)} فقط يقرّر الفوز أو الخسارة، برمزه السري.</p></div>
+    <p>اليوم ${Math.min(cup.days, C.daysDone(ch))} من ${cup.days} · المبلغ ${ch.stakeJod} دينار (${usd(ch.stakeUsd)})</p>
+    <form id="judge-form" class="cup-form">
+      <label>رمز ${esc(ch.partner)}<input name="pin" required inputmode="numeric" maxlength="4" type="password" placeholder="••••"></label>
+      <div class="row wrap">
+        <button class="store-btn buy" name="win" value="1" ${complete ? '' : 'disabled'}>🏆 فاز${complete ? ' — يرجع المبلغ' : ` (بعد ${cup.days - C.daysDone(ch)} يوم)`}</button>
+        <button class="store-btn lose" name="win" value="0">✘ خسر — المبلغ لـ ${esc(ch.partner)}</button>
+      </div>
+    </form>`);
+  $('#judge-form').onsubmit = (e) => {
+    e.preventDefault();
+    const won = e.submitter?.value === '1';
+    const r = C.judge(state, id, e.currentTarget.pin.value, won);
+    if (!r.ok) return FX.toast(r.reason, 'err');
+    scheduleSave(); closeModal(); render();
+    if (won) { FX.banner(`🏆 ${cup.name}`, 'مبروك! فزت بالكأس ورجع المبلغ لرصيدك.', '🏆'); FX.confetti(); }
+    else FX.toast(`خسارة ${cup.name} — المبلغ صار لـ ${ch.partner}`, 'err');
+  };
+}
+
+function showWallet() {
+  const w = C.ensure(state);
+  modal(`
+    <h2>💵 الرصيد الحقيقي</h2>
+    <p class="muted">هذا يمثّل مصاريك الحقيقية بالدولار. تضيف وتنقص يدويًا، وتأمين الكؤوس يُخصم منه.</p>
+    <div class="wallet-big">${usd(w.wallet)}</div>
+    <form id="wallet-form" class="cup-form">
+      <label>المبلغ بالدولار<input name="amount" type="number" min="0.01" step="0.01" required placeholder="0.00"></label>
+      <label>ملاحظة (اختياري)<input name="note" placeholder="مثال: مصروف الأسبوع"></label>
+      <div class="row wrap"><button class="store-btn buy" name="dir" value="1">＋ إضافة</button><button class="store-btn lose" name="dir" value="-1">－ خصم</button></div>
+    </form>
+    ${w.walletLog.length ? `<h3>آخر الحركات</h3><ul class="wallet-log">${w.walletLog.slice(0, 12).map((l) => `<li><span>${esc(l.note || (l.delta > 0 ? 'إضافة' : 'خصم'))}</span><b class="${l.delta >= 0 ? 'plus' : 'minus'}">${l.delta ? (l.delta > 0 ? '+' : '−') + usd(Math.abs(l.delta)) : '—'}</b></li>`).join('')}</ul>` : ''}`);
+  modalRefresh = showWallet;
+  $('#wallet-form').onsubmit = (e) => {
+    e.preventDefault();
+    const f = e.currentTarget, dir = +e.submitter.value;
+    const r = C.adjustWallet(state, dir * +f.amount.value, f.note.value.trim());
+    if (!r.ok) return FX.toast(r.reason, 'err');
+    scheduleSave(); render(); FX.toast(`${dir > 0 ? '+' : '−'}${usd(f.amount.value)}`);
+  };
+}
+
+function showCupRules() {
+  modal(`
+    <h2>📜 قوانين التحدي</h2>
+    <p class="muted">تحدٍّ بروح تنافسية عالية نحو حياة خالية من الإدمان والحفاظ على طاقة الشباب.</p>
+    <ol class="rules">
+      <li>يمكن بدء التحدي من طرف واحد.</li>
+      <li>من يبدأ التحدي يؤمّن مبلغًا ماليًا عند الطرف الثاني.</li>
+      <li>يختار المتحدي أحد الكؤوس، ويجب أن يجتاز مدته كاملة ليسترجع المبلغ المؤتمن.</li>
+      <li>إذا خسر المتحدي يصبح المبلغ كاملًا ملكًا للطرف الثاني، ولا يحق له المطالبة به.</li>
+      <li>الطرف الثاني هو من يحدد الفوز أو الخسارة (برمزه السري).</li>
+      <li>يُمنع منعًا باتًا بعد بدء التحدي المطالبة بالأموال تحت أي ظرف.</li>
+      <li>لفتح قناة أخرى يجب امتلاك ${C.findCup('silver').name}؛ بناء العادات بالتدريج. ويمكن اختيار القناة التي تبدأ منها.</li>
+      <li>مبلغ التأمين بالدينار = عدد أيام الكأس (الحجري 5 أيام = 5 دنانير).</li>
+    </ol>
+    <div class="cup-grid small">${CUPS.map((c) => `<div class="cup-tile" style="--c:${c.glow || c.color}">${cupIcon(c, 36)}<b>${c.name}</b><span>${c.days} يوم</span></div>`).join('')}</div>`);
+}
+
+function showCupHistory() {
+  const list = [...C.ensure(state).challenges].reverse();
+  const label = { active: '⏳ شغّال', won: '🏆 فاز', lost: '✘ خسر' };
+  modal(`
+    <h2>🗂 سجل التحديات</h2>
+    ${list.length ? `<ul class="wallet-log">${list.map((x) => `<li><span>${cupIcon(C.findCup(x.cupId), 26)} ${C.findCup(x.cupId).name} · ${esc(x.channel)} · ${esc(x.partner)}</span><b class="${x.status === 'won' ? 'plus' : x.status === 'lost' ? 'minus' : ''}">${label[x.status]}</b></li>`).join('')}</ul>` : '<p class="muted">لا يوجد تحديات بعد.</p>'}`);
 }
 
 // Failure: the player chooses whether to apply the penalty on themselves.
@@ -597,6 +842,14 @@ function bind() {
   on('data-open-upgrades', showUpgrades);
   on('data-open-path', showPath);
   on('data-open-atmo', showAtmosphere);
+  on('data-cup-picker', showCupPicker);
+  on('data-cup-rules', showCupRules);
+  on('data-cup-history', showCupHistory);
+  on('data-cup', showCup);
+  on('data-start-cup', startCupFlow);
+  on('data-judge', judgeFlow);
+  on('data-wallet', showWallet);
+  on('data-channel', (c) => { cupChannel = c; render(); });
   on('data-set-weather', (k) => { weatherOverride = k; oasis?.scene.setWeather(currentWeather()); render(); });
   on('data-set-time', (k) => { timeOverride = k; oasis?.scene.refreshSky(); render(); });
   on('data-toggle-quests', () => { questsCollapsed = !questsCollapsed; $('#quests')?.classList.toggle('collapsed', questsCollapsed); });
@@ -609,6 +862,7 @@ function bind() {
   on('data-level', (id, el) => act(E.levelUpCharacter(state, id), el));
   on('data-upgrade', (id, el) => act(E.upgradeRegion(state, id), el));
   on('data-buy', (v, el) => { const [k, id] = v.split(':'); act(E.buy(state, k, id), el); });
+  on('data-enter-realm', (id) => enter(E.findRegion(id).characterId));
   on('data-go', go);
   on('data-spot', openSpot);
   on('data-ranks', showRanks);

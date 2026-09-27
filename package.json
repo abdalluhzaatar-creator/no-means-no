@@ -1,7 +1,7 @@
 {
   "type": "module",
   "scripts": {
-    "test": "node tests/engine.test.js",
+    "test": "TZ=Asia/Riyadh node tests/engine.test.js && node tests/cups.test.js",
     "start": "npx -y http-server -p 8123 -c-1"
   }
 }

@@ -220,6 +220,26 @@ export function mountWorld(container, spots, onPick) {
     return g;
   }
 
+  // Floating island that holds the challenge cups.
+  function skyIsland() {
+    const g = new THREE.Group();
+    const rock = new THREE.MeshStandardMaterial({ color: 0x7d6a58, roughness: 1, flatShading: true });
+    const under = new THREE.Mesh(new THREE.ConeGeometry(9, 16, 9, 3), rock); under.rotation.x = Math.PI; under.position.y = -8; g.add(under);
+    for (let i = 0; i < 5; i++) { const r = new THREE.Mesh(new THREE.ConeGeometry(2.4, 6, 6), rock); const a = i * 1.26; r.rotation.x = Math.PI; r.position.set(Math.cos(a) * 6, -4, Math.sin(a) * 6); g.add(r); }
+    const top = new THREE.Mesh(new THREE.CylinderGeometry(9.5, 9, 1.6, 24), new THREE.MeshStandardMaterial({ color: 0x69a64a, roughness: 1 })); top.position.y = 0.2; g.add(top);
+    const plaza = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 5.5, 0.4, 32), new THREE.MeshStandardMaterial({ color: 0xf1ede4, roughness: 0.4 })); plaza.position.y = 1.1; g.add(plaza);
+    const gold = new THREE.MeshStandardMaterial({ color: 0xffc83d, roughness: 0.2, metalness: 1, emissive: 0x6a4a00, emissiveIntensity: 0.4 });
+    const ped = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 2, 12), new THREE.MeshStandardMaterial({ color: 0xeadfc8 })); ped.position.y = 2.3; g.add(ped);
+    const cup = new THREE.Mesh(new THREE.LatheGeometry([0, 1.6, 1.9, 2.1, 2.2].map((r, i) => new THREE.Vector2([0.9, 0.35, 1.1, 1.5, 1.6][i], [0, 0.6, 1.4, 2.2, 2.6][i])), 24), gold);
+    cup.position.y = 3.3; g.add(cup);
+    for (const sx of [-1, 1]) { const h = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.15, 8, 16, Math.PI), gold); h.position.set(sx * 1.6, 5, 0); h.rotation.z = sx * Math.PI / 2; g.add(h); }
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; const c = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.35, 3.2, 8), new THREE.MeshStandardMaterial({ color: 0xfbf8f2 })); c.position.set(Math.cos(a) * 4.6, 2.9, Math.sin(a) * 4.6); g.add(c); }
+    const fall = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 26), new THREE.MeshBasicMaterial({ color: 0xcfefff, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
+    fall.position.set(8.6, -12, 2); fall.rotation.y = 0.4; g.add(fall);
+    addShadow(g);
+    return g;
+  }
+
   function ruin() {
     const g = new THREE.Group();
     const mat = new THREE.MeshStandardMaterial({ color: 0x6b6f76, roughness: 0.9, transparent: true, opacity: 0.9 });
@@ -236,14 +256,16 @@ export function mountWorld(container, spots, onPick) {
   const labelLayer = document.createElement('div'); labelLayer.className = 'w3-labels'; container.appendChild(labelLayer);
   let glow;
   for (const s of shown) {
-    const y = height(s.x, s.z);
-    const obj = s.vis === 'owned' ? palace() : ruin();
+    const floating = !!s.def.floating;
+    const y = floating ? height(s.x, s.z) + 34 : height(s.x, s.z);
+    const obj = floating ? skyIsland() : s.vis === 'owned' ? palace() : ruin();
     obj.scale.setScalar(1.5);
     obj.position.set(s.x, y - 0.2, s.z);
+    if (floating) obj.userData.float = y;
     obj.userData.spot = s.def.id;
     obj.traverse((m) => { m.userData.spot = s.def.id; });
     scene.add(obj); pickables.push(obj);
-    if (s.vis === 'owned') {
+    if (s.vis === 'owned' && !floating) {
       const ring = new THREE.Mesh(new THREE.RingGeometry(10, 11.5, 64), new THREE.MeshBasicMaterial({ color: 0xffd98a, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2; ring.position.set(s.x, y + 0.5, s.z); scene.add(ring); glow = ring;
     }
@@ -253,7 +275,7 @@ export function mountWorld(container, spots, onPick) {
       : `🔒 ${s.def.name} · ${s.def.cost?.keys ? `🗝 ${s.def.cost.keys}` : `🪙 ${s.def.cost?.gold ?? 0}`}`;
     el.onclick = () => onPick(s.def.id);
     labelLayer.appendChild(el);
-    labels.push({ el, v: new THREE.Vector3(s.x, y + (s.vis === 'owned' ? 18 : 10), s.z) });
+    labels.push({ el, v: new THREE.Vector3(s.x, y + (floating ? 26 : s.vis === 'owned' ? 18 : 10), s.z) });
   }
 
   // ---------- clouds ----------
@@ -345,6 +367,7 @@ export function mountWorld(container, spots, onPick) {
     waveTex.offset.set(t * 0.004, t * 0.006);
     for (const sp of cloudGroup.children) { sp.position.x += dt * sp.userData.drift; if (sp.position.x > SIZE * 0.85) sp.position.x -= SIZE * 1.7; }
     if (glow) glow.material.opacity = 0.35 + Math.sin(t * 2) * 0.2;
+    for (const o of pickables) if (o.userData.float != null) { o.position.y = o.userData.float + Math.sin(t * 0.8) * 0.9; o.rotation.y = t * 0.05; }
     renderer.render(scene, camera);
     const w = container.clientWidth, h = container.clientHeight;
     for (const l of labels) {
