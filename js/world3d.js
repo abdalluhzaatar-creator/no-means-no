@@ -247,22 +247,98 @@ export function mountWorld(container, spots, onPick) {
   // Floating island that holds the challenge cups.
   function skyIsland() {
     const g = new THREE.Group();
-    const rock = new THREE.MeshStandardMaterial({ color: 0x7d6a58, roughness: 1, flatShading: true });
-    const under = new THREE.Mesh(new THREE.ConeGeometry(9, 16, 9, 3), rock); under.rotation.x = Math.PI; under.position.y = -8; g.add(under);
-    for (let i = 0; i < 5; i++) { const r = new THREE.Mesh(new THREE.ConeGeometry(2.4, 6, 6), rock); const a = i * 1.26; r.rotation.x = Math.PI; r.position.set(Math.cos(a) * 6, -4, Math.sin(a) * 6); g.add(r); }
-    const top = new THREE.Mesh(new THREE.CylinderGeometry(9.5, 9, 1.6, 24), new THREE.MeshStandardMaterial({ color: 0x69a64a, roughness: 1 })); top.position.y = 0.2; g.add(top);
-    const plaza = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 5.5, 0.4, 32), new THREE.MeshStandardMaterial({ color: 0xf1ede4, roughness: 0.4 })); plaza.position.y = 1.1; g.add(plaza);
+    let sd = 5; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+    const rockA = new THREE.MeshStandardMaterial({ color: 0x6f5e4e, roughness: 1, flatShading: true });
+    const rockB = new THREE.MeshStandardMaterial({ color: 0x8a7663, roughness: 1, flatShading: true });
+    const dirt = new THREE.MeshStandardMaterial({ color: 0x5a4636, roughness: 1, flatShading: true });
+    const grassM = new THREE.MeshStandardMaterial({ color: 0x5f9e3f, roughness: 1, flatShading: true });
+
+    // Irregular grassy top: a jagged disc, slightly domed.
+    const top = new THREE.CylinderGeometry(10, 9.2, 1.6, 22, 2);
+    const tp = top.attributes.position;
+    for (let i = 0; i < tp.count; i++) {
+      const x = tp.getX(i), z = tp.getZ(i), d = Math.hypot(x, z);
+      if (d > 1) { const a = Math.atan2(z, x), k = 1 + Math.sin(a * 3) * 0.08 + Math.sin(a * 7 + 1) * 0.05; tp.setX(i, x * k); tp.setZ(i, z * k); }
+      if (tp.getY(i) > 0) tp.setY(i, tp.getY(i) + Math.max(0, 1 - d / 10) * 0.8);
+    }
+    top.computeVertexNormals();
+    const grass = new THREE.Mesh(top, grassM); grass.position.y = 0.2; g.add(grass);
+    const soil = new THREE.Mesh(new THREE.CylinderGeometry(9.6, 8.4, 2.4, 22), dirt); soil.position.y = -1.6; g.add(soil);
+
+    // Rocky underside: one big inverted crag plus many hanging stalactites and boulders.
+    const core = new THREE.Mesh(new THREE.ConeGeometry(8.6, 16, 11, 5), rockA);
+    const cp = core.geometry.attributes.position;
+    for (let i = 0; i < cp.count; i++) { const k = 0.8 + r() * 0.4; cp.setX(i, cp.getX(i) * k); cp.setZ(i, cp.getZ(i) * k); }
+    core.geometry.computeVertexNormals(); core.rotation.x = Math.PI; core.position.y = -10.5; g.add(core);
+    for (let i = 0; i < 16; i++) {
+      const a = r() * Math.PI * 2, d = 2 + r() * 6.5, h = 4 + r() * 9;
+      const c = new THREE.Mesh(new THREE.ConeGeometry(0.8 + r() * 1.8, h, 6), i % 2 ? rockA : rockB);
+      c.rotation.x = Math.PI; c.rotation.z = (r() - 0.5) * 0.3; c.position.set(Math.cos(a) * d, -2.6 - h / 2 - r() * 3, Math.sin(a) * d); g.add(c);
+    }
+    for (let i = 0; i < 14; i++) {
+      const a = r() * Math.PI * 2, d = 7.5 + r() * 2.2;
+      const b = new THREE.Mesh(new THREE.DodecahedronGeometry(0.8 + r() * 1.3, 0), rockB); b.position.set(Math.cos(a) * d, -1.8 - r() * 2, Math.sin(a) * d); b.rotation.set(r(), r(), r()); g.add(b);
+    }
+    // Hanging roots
+    for (let i = 0; i < 10; i++) {
+      const a = r() * Math.PI * 2, d = 7 + r() * 2;
+      const root = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.12, 2 + r() * 3, 5), new THREE.MeshStandardMaterial({ color: 0x3e2f22 }));
+      root.position.set(Math.cos(a) * d, -3.8 - r(), Math.sin(a) * d); root.rotation.z = (r() - 0.5) * 0.5; g.add(root);
+    }
+
+    // Small temple on top
+    const marble = new THREE.MeshStandardMaterial({ color: 0xf6f1e7, roughness: 0.35 });
     const gold = new THREE.MeshStandardMaterial({ color: 0xffc83d, roughness: 0.2, metalness: 1, emissive: 0x6a4a00, emissiveIntensity: 0.4 });
-    const ped = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.3, 2, 12), new THREE.MeshStandardMaterial({ color: 0xeadfc8 })); ped.position.y = 2.3; g.add(ped);
-    const cup = new THREE.Mesh(new THREE.LatheGeometry([0, 1.6, 1.9, 2.1, 2.2].map((r, i) => new THREE.Vector2([0.9, 0.35, 1.1, 1.5, 1.6][i], [0, 0.6, 1.4, 2.2, 2.6][i])), 24), gold);
-    cup.position.y = 3.3; g.add(cup);
-    for (const sx of [-1, 1]) { const h = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.15, 8, 16, Math.PI), gold); h.position.set(sx * 1.6, 5, 0); h.rotation.z = sx * Math.PI / 2; g.add(h); }
-    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; const c = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.35, 3.2, 8), new THREE.MeshStandardMaterial({ color: 0xfbf8f2 })); c.position.set(Math.cos(a) * 4.6, 2.9, Math.sin(a) * 4.6); g.add(c); }
-    const fall = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 26), new THREE.MeshBasicMaterial({ color: 0xcfefff, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
-    fall.position.set(8.6, -12, 2); fall.rotation.y = 0.4; g.add(fall);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(4, 4.4, 0.8, 32), marble); base.position.set(-1.5, 1.4, -1); g.add(base);
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; const c = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 3.4, 10), marble); c.position.set(-1.5 + Math.cos(a) * 3.3, 3.5, -1 + Math.sin(a) * 3.3); g.add(c); }
+    const roof = new THREE.Mesh(new THREE.SphereGeometry(3.7, 32, 12, 0, Math.PI * 2, 0, Math.PI / 2), gold); roof.position.set(-1.5, 5.2, -1); roof.scale.y = 0.6; g.add(roof);
+    const cup = new THREE.Mesh(new THREE.LatheGeometry([[0.5, 0], [0.2, 0.4], [0.7, 1.1], [0.95, 1.8], [1, 2.1]].map(([x, y]) => new THREE.Vector2(x, y)), 24), gold);
+    cup.position.set(-1.5, 1.8, -1); g.add(cup);
+    for (let i = 0; i < 7; i++) { const a = r() * 6.28, d = 5 + r() * 3.5; const t = new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 6), new THREE.MeshStandardMaterial({ color: 0x2f5a2e })); t.scale.y = 2.2; t.position.set(Math.cos(a) * d, 2.2, Math.sin(a) * d); if (Math.hypot(t.position.x - 5.5, t.position.z - 3) > 3) g.add(t); }
+
+    // Waterfall: pond on the top edge → stream over the lip → long curtain of falling water → mist.
+    const pond = new THREE.Mesh(new THREE.CircleGeometry(2, 24), new THREE.MeshStandardMaterial({ color: 0x3aa0c8, roughness: 0.05, metalness: 0.2 })); pond.rotation.x = -Math.PI / 2; pond.position.set(5.5, 1.75, 3); g.add(pond);
+    const waterTex = (() => {
+      const cv = document.createElement('canvas'); cv.width = 64; cv.height = 256; const c = cv.getContext('2d');
+      const grd = c.createLinearGradient(0, 0, 64, 0); grd.addColorStop(0, 'rgba(180,225,245,.0)'); grd.addColorStop(.2, 'rgba(200,235,250,.9)'); grd.addColorStop(.8, 'rgba(200,235,250,.9)'); grd.addColorStop(1, 'rgba(180,225,245,0)');
+      c.fillStyle = grd; c.fillRect(0, 0, 64, 256);
+      for (let i = 0; i < 90; i++) { c.fillStyle = `rgba(255,255,255,${0.35 + Math.random() * 0.5})`; c.fillRect(6 + Math.random() * 52, Math.random() * 256, 1 + Math.random() * 2, 8 + Math.random() * 30); }
+      const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, 3); return t;
+    })();
+    const waterM = new THREE.MeshBasicMaterial({ map: waterTex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+    // Lip + curtain as one bent strip following the cliff.
+    const pts = [new THREE.Vector3(5.5, 1.8, 3), new THREE.Vector3(7.8, 1.4, 4.4), new THREE.Vector3(9.3, 0.2, 5.3), new THREE.Vector3(9.9, -3, 5.7), new THREE.Vector3(10.3, -14, 6), new THREE.Vector3(10.5, -30, 6.2)];
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const N = 60, W = 1.4, verts = [], uvs = [], idx = [];
+    for (let i = 0; i <= N; i++) {
+      const t = i / N, p = curve.getPoint(t), w = W * (1 + t * 0.9);
+      const side = new THREE.Vector3(-0.53, 0, 0.85).multiplyScalar(w / 2);
+      verts.push(p.x - side.x, p.y, p.z - side.z, p.x + side.x, p.y, p.z + side.z);
+      uvs.push(0, t * 4, 1, t * 4);
+      if (i < N) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+    }
+    const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3)); fg.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); fg.setIndex(idx);
+    const fall = new THREE.Mesh(fg, waterM); g.add(fall);
+    // Spray particles falling and mist cloud at the bottom
+    const SP = 160, sp = new Float32Array(SP * 3), sv = Array.from({ length: SP }, () => r());
+    const spray = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(sp, 3)), new THREE.PointsMaterial({ color: 0xffffff, size: 0.35, transparent: true, opacity: 0.8, depthWrite: false }));
+    g.add(spray);
+    const mist = new THREE.Mesh(new THREE.SphereGeometry(3.5, 16, 10), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35, depthWrite: false })); mist.position.set(10.5, -30, 6.2); mist.scale.y = 0.6; g.add(mist);
+
+    g.userData.tick = (t) => {
+      waterTex.offset.y = -t * 1.6;
+      for (let i = 0; i < SP; i++) {
+        const k = (sv[i] + t * 0.35) % 1, p = curve.getPoint(0.3 + k * 0.7);
+        sp.set([p.x + Math.sin(i * 7.3) * (0.4 + k * 1.4), p.y, p.z + Math.cos(i * 3.1) * (0.4 + k * 1.4)], i * 3);
+      }
+      spray.geometry.attributes.position.needsUpdate = true;
+      mist.scale.set(1 + Math.sin(t * 1.5) * 0.08, 0.6, 1 + Math.cos(t * 1.3) * 0.08);
+    };
     addShadow(g);
+    fall.castShadow = false; spray.castShadow = false; mist.castShadow = false;
     return g;
   }
+
 
   // ---- one landmark per dimension ----
   const M = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.7, ...o });
@@ -488,7 +564,7 @@ export function mountWorld(container, spots, onPick) {
     waveTex.offset.set(t * 0.004, t * 0.006);
     for (const sp of cloudGroup.children) { sp.position.x += dt * sp.userData.drift; if (sp.position.x > SIZE * 0.85) sp.position.x -= SIZE * 1.7; }
     if (glow) glow.material.opacity = 0.35 + Math.sin(t * 2) * 0.2;
-    for (const o of pickables) if (o.userData.float != null) { o.position.y = o.userData.float + Math.sin(t * 0.8) * 0.9; o.rotation.y = t * 0.05; }
+    for (const o of pickables) if (o.userData.float != null) { o.position.y = o.userData.float + Math.sin(t * 0.8) * 0.9; o.rotation.y = t * 0.05; o.userData.tick?.(t); }
     renderer.render(scene, camera);
     const w = container.clientWidth, h = container.clientHeight;
     for (const l of labels) {
