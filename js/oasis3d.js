@@ -3,6 +3,7 @@
 // and the sky follows the real time of day.
 import * as THREE from './vendor/three.module.min.js';
 import { Sky } from './vendor/Sky.js';
+import { sfx } from './audio.js';
 
 // ---------- helpers ----------
 function makeNoise(seed = 5) {
@@ -628,7 +629,7 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
   const RUG = new THREE.Vector3(0, 0.44, 0);
   const keys = new Set();
   const joy = new THREE.Vector2();
-  let vy = 0, grounded = true, walkAmt = 0, facing = Math.PI;
+  let vy = 0, grounded = true, walkAmt = 0, facing = Math.PI, stepT = 0;
   const onKey = (e) => {
     if (e.target.closest?.('input, textarea, select')) return;
     const k = e.key.toLowerCase();
@@ -637,7 +638,7 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
     if (e.type === 'keydown') { keys.add(k); if (k === ' ') jump(); } else keys.delete(k);
   };
   window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey);
-  const jump = () => { if (grounded && !hero.busy()) { vy = 7.5; grounded = false; } };
+  const jump = () => { if (grounded && !hero.busy()) { vy = 7.5; grounded = false; sfx.jump(); } };
   const blocked = (x, z) => {
     if (Math.abs(x) > 20.3 || Math.abs(z) > 20.3) return true;
     if (Math.abs(x) < 2.6 && z > 6 && z < 21) return true;                           // reflecting pool
@@ -685,9 +686,10 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
       facing += d * Math.min(1, dt * 12);
     }
     walkAmt = lerp(walkAmt, hero.busy() ? 0 : mag, Math.min(1, dt * 10));
+    if (grounded && walkAmt > 0.3) { stepT -= dt * (1 + walkAmt); if (stepT <= 0) { sfx.step(); stepT = 0.42; } }
     if (!grounded) {
       vy -= 22 * dt; p.y += vy * dt;
-      if (p.y <= 0.44) { p.y = 0.44; vy = 0; grounded = true; }
+      if (p.y <= 0.44) { p.y = 0.44; vy = 0; grounded = true; sfx.land(); }
     }
     hero.root.rotation.y = facing;
     aura.position.set(p.x, 0.46, p.z - 0.3 * Math.cos(facing));
@@ -737,7 +739,7 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
     // Snow settles over time; melts when the weather changes.
     snowAcc = THREE.MathUtils.clamp(snowAcc + (W.snow ? dt * 0.04 : -dt * 0.05), 0, 0.85);
     snowCover.material.opacity = snowAcc;
-    if (kind === 'storm' && t > nextBolt) { flash.intensity = 6; nextBolt = t + 4 + Math.random() * 8; }
+    if (kind === 'storm' && t > nextBolt) { flash.intensity = 6; setTimeout(sfx.thunder, 600 + Math.random() * 1500); nextBolt = t + 4 + Math.random() * 8; }
     flash.intensity *= 0.86;
     renderer.render(scene, camera);
     raf = requestAnimationFrame(tick);

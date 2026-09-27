@@ -7,6 +7,7 @@ import * as E from './engine.js';
 import { createStorage } from './storage.js';
 import { characterSVG, regionSVG, worldMapSVG } from './scenes.js';
 import * as FX from './effects.js';
+import * as SND from './audio.js';
 import { CITIES, METHODS, prayerDay, windowState, fmtTime } from './prayer.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -31,6 +32,7 @@ function scheduleSave() {
 function act(result, originEl) {
   if (!result.ok) { FX.toast(result.reason, 'err'); return result; }
   FX.playEvents(result.events, originEl);
+  SND.playEvents(result.events);
   scheduleSave();
   render();
   return result;
@@ -82,13 +84,14 @@ function showLogin() {
 function modal(html, { closable = true } = {}) {
   const m = $('#modal');
   m.classList.remove('wide');
+  if (m.hidden) SND.sfx.open();
   $('#modal-body').innerHTML = html;
   m.hidden = false;
   m.dataset.closable = closable;
   $('#modal-close').hidden = !closable;
 }
 let modalRefresh = null;
-function closeModal() { $('#modal').hidden = true; $('#modal').classList.remove('wide'); modalRefresh = null; }
+function closeModal() { if (!$('#modal').hidden) SND.sfx.close(); $('#modal').hidden = true; $('#modal').classList.remove('wide'); modalRefresh = null; }
 // Re-draws an open panel (upgrades / path) after the state it shows changed.
 function refreshModal() { if (modalRefresh && !$('#modal').hidden) { const f = modalRefresh; f(); } }
 
@@ -105,6 +108,7 @@ let currentChar = null;
 
 function render() {
   checkCommander();
+  syncSound();
   $('#gold').textContent = state.gold;
   $('#keys').textContent = state.keys;
   const navScreen = screen === 'character' ? 'world' : screen;
@@ -371,7 +375,7 @@ async function bindPlace() {
     if (!v.isConnected) return;
     v.querySelector('.w3-loading')?.remove();
     const scene = mountOasis(v, { palette: c.palette, ...placeState(), sky: skyInfo, weather: currentWeather(),
-      onCharacter: () => FX.toast(`${c.name}: ${randomLine()}`) });
+      onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${randomLine()}`); } });
     oasis = { char: c.id, scene };
     loadWeather();
   } catch (err) {
@@ -381,6 +385,36 @@ async function bindPlace() {
 }
 const LINES = ['الحمد لله', 'حيّ على الصلاة', 'اللهم أعنّي على ذكرك وشكرك', 'سبحان الله وبحمده', 'الصلاة نور'];
 const randomLine = () => LINES[Math.floor(Math.random() * LINES.length)];
+
+// ---------- Sound ----------
+const WX_SOUND = { clear: [0, 0, 0.3], cloudy: [0, 0, 0.5], overcast: [0, 0, 0.6], fog: [0, 0, 0.2], rain: [1, 0, 0.6], storm: [1.4, 0, 1], snow: [0, 1, 0.4] };
+function syncSound() {
+  const { elev } = skyInfo();
+  const [rain, snow, wind] = WX_SOUND[currentWeather()] || WX_SOUND.clear;
+  SND.setScene({ screen, night: Math.max(0, Math.min(1, (3 - elev) / 13)), rain, snow, wind, storm: currentWeather() === 'storm' });
+}
+
+function showSettings() {
+  const st = SND.settings();
+  const slider = (k, label) => `<label class="snd-row"><span>${label}</span><input type="range" min="0" max="1" step="0.05" value="${st[k]}" data-snd="${k}"><b>${Math.round(st[k] * 100)}</b></label>`;
+  modal(`
+    <h2>⚙️ الإعدادات</h2>
+    <section class="set-block">
+      <div class="row between"><h3>🔊 الصوت</h3><label class="switch"><input type="checkbox" id="snd-on" ${st.enabled ? 'checked' : ''}><span></span></label></div>
+      ${slider('master', '🎚 الصوت العام')}
+      ${SND.MAIN.map((k) => slider(k, SND.SOUND_LABELS[k])).join('')}
+      <details class="snd-more"><summary>تفاصيل كل صوت</summary>${SND.DETAIL.map((k) => slider(k, SND.SOUND_LABELS[k])).join('')}</details>
+      <div class="row wrap"><button class="btn ghost" data-snd-test="coin">🪙 جرّب</button><button class="btn ghost" data-snd-test="prayer">🕌 جرّب</button><button class="btn ghost" data-snd-test="levelUp">⬆ جرّب</button><button class="btn ghost" data-snd-test="thunder">⛈ جرّب</button></div>
+    </section>
+    <section class="set-block">
+      <h3>🌤 الوقت والجو</h3>
+      <button class="btn" data-open-atmo>تغيير الوقت والطقس</button>
+    </section>`);
+  $('#snd-on').onchange = (e) => { SND.set('enabled', e.target.checked); };
+  document.querySelectorAll('[data-snd]').forEach((el) => (el.oninput = () => { SND.set(el.dataset.snd, +el.value); el.nextElementSibling.textContent = Math.round(el.value * 100); }));
+  document.querySelectorAll('[data-snd-test]').forEach((el) => (el.onclick = () => SND.sfx[el.dataset.sndTest]()));
+  bind();
+}
 
 // ---------- Sky & weather ----------
 // Sun elevation follows the real prayer times of the chosen city: dawn at Fajr,
@@ -625,6 +659,7 @@ const warPlaces = () => REGIONS.filter((r) => r.characterId).map((r) => {
 });
 
 function showWarMap() {
+  if ($('#modal').hidden) SND.sfx.paper();
   const places = warPlaces();
   const count = (id) => places.filter((p) => p.status === id).length;
   modal(`
@@ -865,7 +900,7 @@ function startCupFlow(cupId) {
     if (!r.ok) return FX.toast(r.reason, 'err');
     cupChannel = r.challenge.channel;
     scheduleSave(); closeModal(); render();
-    FX.banner(`بدأ تحدّي ${cup.name}`, `${cup.days} يوم — المبلغ مؤمَّن عند ${r.challenge.partner}. بالتوفيق!`, '🏆');
+    SND.sfx.unlock(); FX.banner(`بدأ تحدّي ${cup.name}`, `${cup.days} يوم — المبلغ مؤمَّن عند ${r.challenge.partner}. بالتوفيق!`, '🏆');
   };
   bind();
 }
@@ -891,8 +926,8 @@ function judgeFlow(id) {
     const r = C.judge(state, id, e.currentTarget.pin.value, won);
     if (!r.ok) return FX.toast(r.reason, 'err');
     scheduleSave(); closeModal(); render();
-    if (won) { FX.banner(`🏆 ${cup.name}`, `مبروك! رجع المبلغ لرصيدك${C.keyReward(cup) ? ` وربحت 🗝 ${C.keyReward(cup)}` : ''}.`, '🏆'); FX.confetti(); }
-    else FX.toast(`خسارة ${cup.name} — المبلغ صار لـ ${ch.partner}`, 'err');
+    if (won) { SND.sfx.fanfare(); FX.banner(`🏆 ${cup.name}`, `مبروك! رجع المبلغ لرصيدك${C.keyReward(cup) ? ` وربحت 🗝 ${C.keyReward(cup)}` : ''}.`, '🏆'); FX.confetti(); }
+    else { SND.sfx.lose(); } if (!won) FX.toast(`خسارة ${cup.name} — المبلغ صار لـ ${ch.partner}`, 'err');
   };
 }
 
@@ -965,6 +1000,8 @@ function enter(id) {
   go('character');
 }
 
+document.addEventListener('click', (e) => { if (e.target.closest('button, [data-spot], [data-war]')) SND.sfx.click(); }, true);
+
 function bind() {
   const on = (attr, fn) => document.querySelectorAll(`[${attr}]`).forEach((el) => (el.onclick = () => fn(el.getAttribute(attr), el)));
   const inWindow = (c, t) => {
@@ -978,7 +1015,7 @@ function bind() {
     const [c, t] = v.split(':');
     if (!inWindow(c, t)) return;
     const r = act(E.reportTask(state, c, t, true, { date: dayFor(c) }), el);
-    if (r.ok && oasis?.char === c) oasis.scene.pray();
+    if (r.ok && oasis?.char === c) { oasis.scene.pray(); SND.sfx.prayer(); }
   });
   on('data-open-upgrades', showUpgrades);
   on('data-open-path', showPath);
@@ -1012,10 +1049,11 @@ function bind() {
   on('data-ranks', showRanks);
 }
 
-function go(s) { screen = s; closeModal(); render(); window.scrollTo(0, 0); }
+function go(s) { if (s !== screen) SND.sfx.whoosh(); screen = s; closeModal(); render(); window.scrollTo(0, 0); }
 
 document.querySelectorAll('.nav-btn').forEach((b) => (b.onclick = () => go(b.dataset.screen)));
 $('#modal-close').onclick = closeModal;
+$('#settings').onclick = showSettings;
 $('#modal').onclick = (e) => { if (e.target.id === 'modal' && e.currentTarget.dataset.closable === 'true') closeModal(); };
 $('#account').onclick = () => {
   modal(`

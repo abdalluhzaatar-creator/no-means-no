@@ -3,6 +3,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { Sky } from './vendor/Sky.js';
+import { sfx } from './audio.js';
 
 const SIZE = 420;             // world width in units (x); depth is 0.75 of it
 const DEPTH = SIZE * 0.75;
@@ -674,7 +675,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     moon.material.opacity = night * (1 - WX.dim * 0.7); moonGlow.material.opacity = 0.35 * night * (1 - WX.dim);
     for (const m of meteors) {
       if (clearSky < 0.3) { m.line.material.opacity = 0; m.headS.material.opacity = 0; continue; }
-      if (m.life <= 0) { m.next -= dt; if (m.next <= 0) { launch(m); m.life = 0.0001; m.next = 1.5 + Math.random() * 4; } continue; }
+      if (m.life <= 0) { m.next -= dt; if (m.next <= 0) { launch(m); sfx.meteor(); m.life = 0.0001; m.next = 1.5 + Math.random() * 4; } continue; }
       m.life += dt; const k = m.life / m.dur;
       if (k >= 1) { m.life = 0; m.line.material.opacity = 0; m.headS.material.opacity = 0; continue; }
       const head = m.from.clone().addScaledVector(m.dir, k), tail = m.from.clone().addScaledVector(m.dir, Math.max(0, k - 0.25));
@@ -696,7 +697,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
       for (let i = 0; i < SN; i++) { const o = i * 3; let y = snPos[o + 1] - dt * 6; if (y < -5) { y = 140; snPos[o] = cx + (Math.random() - 0.5) * 260; snPos[o + 2] = cz + (Math.random() - 0.5) * 260; } snPos[o + 1] = y; snPos[o] += Math.sin(t + i) * dt; }
       snowP.geometry.attributes.position.needsUpdate = true;
     }
-    if (wxKind === 'storm' && t > nextBolt) { flash.intensity = 5; nextBolt = t + 4 + Math.random() * 8; }
+    if (wxKind === 'storm' && t > nextBolt) { flash.intensity = 5; setTimeout(sfx.thunder, 600 + Math.random() * 1500); nextBolt = t + 4 + Math.random() * 8; }
     flash.intensity *= 0.85;
     for (const o of pickables) if (o.userData.float != null) { o.position.y = o.userData.float + Math.sin(t * 0.8) * 0.9; o.rotation.y = t * 0.05; o.userData.tick?.(t); }
     renderer.render(scene, camera);

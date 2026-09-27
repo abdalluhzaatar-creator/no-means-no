@@ -473,3 +473,20 @@ body.in-store { min-height: 100vh; background-attachment: fixed; }
 .front .meter { width: min(360px, 90%); color: #f6e7c4; }
 .front .btn.ghost { color: #f6e7c4; border-color: #f6e7c455; }
 .world-atmo { position: fixed; top: 12px; inset-inline-start: 12px; z-index: 21; cursor: pointer; } @media (max-width: 720px) { .world-atmo { top: 58px; } }
+
+/* Settings */
+.gear { font-size: 1.05rem; }
+.set-block { display: grid; gap: 10px; padding: 12px 0; border-top: 1px solid var(--line); }
+.set-block h3 { margin: 0; }
+.snd-row { display: grid; grid-template-columns: 1fr 1.4fr 36px; gap: 10px; align-items: center; font-weight: 600; }
+.snd-row input { width: 100%; accent-color: var(--primary); }
+.snd-row b { text-align: center; color: var(--muted); font-size: .85rem; }
+.snd-more summary { cursor: pointer; font-weight: 700; color: var(--primary); padding: 6px 0; }
+.snd-more .snd-row { margin: 6px 0; }
+.switch { position: relative; width: 50px; height: 28px; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch span { position: absolute; inset: 0; background: var(--line); border-radius: 99px; cursor: pointer; transition: .2s; }
+.switch span::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: .2s; }
+.switch input:checked + span { background: var(--primary); }
+.switch input:checked + span::after { transform: translateX(22px); }
+@media (max-width: 720px) { .snd-row { grid-template-columns: 1fr 1fr 30px; font-size: .9rem; } }
