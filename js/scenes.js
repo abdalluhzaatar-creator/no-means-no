@@ -10,6 +10,7 @@ export function characterSVG(def, level = 1, { size = 120, locked = false } = {}
   const g = glowId();
   const aura = locked ? 0 : 18 + level * 3;
   const holdsBook = def.id === 'scholar';
+  const PROPS = { athlete: '🏋', empath: '💗', host: '🤝', builder: '🛠', merchant: '🪙', keeper: '🌱' };
   return `
 <svg viewBox="0 0 120 150" width="${size}" height="${size * 1.25}" class="char-svg ${locked ? 'locked' : ''}" aria-label="${def.name}">
   <defs><radialGradient id="${g}"><stop offset="0" stop-color="${p.glow}" stop-opacity=".75"/><stop offset="1" stop-color="${p.glow}" stop-opacity="0"/></radialGradient></defs>
@@ -29,6 +30,7 @@ export function characterSVG(def, level = 1, { size = 120, locked = false } = {}
     const a = (i / 6) * Math.PI * 2;
     return `<circle cx="${60 + Math.cos(a) * 34}" cy="${60 + Math.sin(a) * 34}" r="2" fill="${p.glow}" class="orbit" style="animation-delay:${i * 0.3}s"/>`;
   }).join('') : ''}
+  ${!locked && PROPS[def.id] ? `<text x="88" y="118" text-anchor="middle" font-size="20">${PROPS[def.id]}</text>` : ''}
   ${locked ? `<text x="60" y="100" text-anchor="middle" font-size="30">🔒</text>` : ''}
 </svg>`;
 }
@@ -87,7 +89,91 @@ function library(f, theme) {
   ${f.has('globe') ? `<g transform="translate(120,180)"><line y1="0" y2="20" stroke="#c9a45c" stroke-width="3"/><circle cy="-10" r="16" fill="#3f7d6e"/><path d="M-10 -18 q6 6 2 12 q8 2 10 10" stroke="#c9a45c" fill="none" stroke-width="2"/></g>` : ''}`;
 }
 
-const REGION_DRAWERS = { sanctuary, library };
+
+// ---------- Dimension places (each shows its own identity) ----------
+const skyGrad = (g, top, bottom) => `<defs><linearGradient id="${g}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${top}"/><stop offset="1" stop-color="${bottom}"/></linearGradient></defs><rect width="400" height="260" fill="url(#${g})"/>`;
+
+// Physical: stadium with running track, weights and a podium.
+function body() {
+  const g = glowId();
+  return `${skyGrad(g, '#4aa3df', '#d6ecfa')}
+  <path d="M0 120 Q200 60 400 120 V170 H0Z" fill="#b8b2a6"/>${Array.from({ length: 9 }, (_, i) => `<rect x="${i * 46}" y="${98 + Math.abs(4 - i) * 5}" width="40" height="${50 - Math.abs(4 - i) * 5}" fill="${i % 2 ? '#c0392b' : '#a93226'}"/>`).join('')}
+  <rect x="0" y="160" width="400" height="100" fill="#3fa34d"/>
+  <ellipse cx="200" cy="215" rx="190" ry="44" fill="none" stroke="#c0392b" stroke-width="18"/>
+  <ellipse cx="200" cy="215" rx="190" ry="44" fill="none" stroke="#fff" stroke-width="1.5" stroke-dasharray="6 6"/>
+  <g transform="translate(70,200)"><rect x="-26" y="-3" width="52" height="6" fill="#555"/><rect x="-32" y="-14" width="8" height="28" rx="2" fill="#222"/><rect x="24" y="-14" width="8" height="28" rx="2" fill="#222"/></g>
+  <g transform="translate(330,208)"><rect x="-24" y="-18" width="16" height="18" fill="#cfd4da"/><rect x="-8" y="-30" width="16" height="30" fill="#ffc83d"/><rect x="8" y="-12" width="16" height="12" fill="#cd7f32"/></g>
+  ${[30, 370].map((x) => `<rect x="${x - 3}" y="40" width="6" height="80" fill="#888"/><rect x="${x - 14}" y="32" width="28" height="12" fill="#fff" opacity=".9"/>`).join('')}`;
+}
+
+// Emotional: calm lake at sunset, blossom trees, heart-shaped island.
+function heart() {
+  const g = glowId();
+  return `${skyGrad(g, '#f6a5c0', '#ffe3c9')}
+  <circle cx="300" cy="90" r="30" fill="#fff1d6" opacity=".9"/>
+  <path d="M0 150 Q100 125 200 145 T400 140 V260 H0Z" fill="#9fcf8a"/>
+  <ellipse cx="200" cy="205" rx="160" ry="40" fill="#7fc4d6"/>
+  <path d="M200 222 C170 200 170 180 190 180 C198 180 200 188 200 190 C200 188 202 180 210 180 C230 180 230 200 200 222Z" fill="#6fae5a"/>
+  <circle cx="200" cy="186" r="5" fill="#ff7aa2"/>
+  ${[50, 110, 300, 355].map((x, i) => `<rect x="${x - 3}" y="${118 + (i % 2) * 8}" width="6" height="40" fill="#7a5a3c"/>${[[-14, 0], [0, -12], [14, 0], [0, 6]].map(([dx, dy]) => `<circle cx="${x + dx}" cy="${116 + (i % 2) * 8 + dy}" r="14" fill="${i % 2 ? '#ffb3cc' : '#ff9ebb'}"/>`).join('')}`).join('')}
+  ${[80, 150, 250, 320].map((x, i) => `<path d="M${x} ${60 + i * 7} c-4-6-12-2-6 4l6 6 6-6c6-6-2-10-6-4z" fill="#ff7aa2" opacity=".7"/>`).join('')}`;
+}
+
+// Social: village square with houses, market stalls and a fountain.
+function social() {
+  const g = glowId();
+  const house = (x, w, h, c, r) => `<rect x="${x}" y="${190 - h}" width="${w}" height="${h}" fill="${c}"/><path d="M${x - 6} ${190 - h} L${x + w / 2} ${170 - h} L${x + w + 6} ${190 - h}Z" fill="${r}"/><rect x="${x + w / 2 - 6}" y="${170}" width="12" height="20" fill="#5a3a22"/><rect x="${x + 8}" y="${200 - h}" width="10" height="10" fill="#ffe7a8"/><rect x="${x + w - 18}" y="${200 - h}" width="10" height="10" fill="#ffe7a8"/>`;
+  return `${skyGrad(g, '#7fc4ef', '#e6f4fb')}
+  ${house(10, 70, 80, '#f1d8b0', '#b5523b')}${house(90, 60, 100, '#e8c79a', '#8e3b3b')}${house(250, 60, 95, '#f3e1c2', '#b5523b')}${house(320, 70, 75, '#e2c59a', '#7a3a2a')}
+  <rect x="0" y="190" width="400" height="70" fill="#d9c7a3"/>
+  ${Array.from({ length: 12 }, (_, i) => `<rect x="${i * 34}" y="195" width="30" height="12" fill="#cbb58c"/>`).join('')}
+  <g transform="translate(200,215)"><ellipse rx="40" ry="10" fill="#7fb7c4"/><rect x="-5" y="-30" width="10" height="28" fill="#e9e4d8"/><path d="M0 -30 q-16 -8 -24 16 M0 -30 q16 -8 24 16" stroke="#bfe3ea" stroke-width="2" fill="none"/></g>
+  ${[[150, '#c0392b'], [215, '#2f6f5e']].map(([x, c]) => `<rect x="${x}" y="160" width="40" height="30" fill="#7a5a3c"/><path d="M${x - 4} 160 h48 l-6 -14 h-36z" fill="${c}"/>`).join('')}
+  <path d="M0 150 Q100 140 200 150" stroke="#8a6b45" stroke-width="1.5" fill="none"/>${[20, 60, 100, 140, 180].map((x, i) => `<path d="M${x} ${146 + (i % 2) * 2} l6 10 l6 -10z" fill="${['#e74c3c', '#f1c40f', '#3498db', '#2ecc71'][i % 4]}"/>`).join('')}`;
+}
+
+// Professional: a rising tower with a crane, workshop and gears.
+function career() {
+  const g = glowId();
+  return `${skyGrad(g, '#2c3e50', '#f5a35c')}
+  ${[[30, 90], [80, 60], [300, 70], [350, 100]].map(([x, h]) => `<rect x="${x}" y="${190 - h}" width="40" height="${h}" fill="#34495e"/>${Array.from({ length: Math.floor(h / 16) }, (_, r) => `<rect x="${x + 6}" y="${196 - h + r * 16}" width="8" height="8" fill="#f5d06b"/><rect x="${x + 24}" y="${196 - h + r * 16}" width="8" height="8" fill="#f5d06b" opacity=".6"/>`).join('')}`).join('')}
+  <rect x="160" y="40" width="80" height="150" fill="#2c3e50"/>
+  ${Array.from({ length: 8 }, (_, r) => [0, 1, 2].map((c) => `<rect x="${170 + c * 22}" y="${52 + r * 17}" width="14" height="10" fill="#ffd68a" opacity="${(r + c) % 3 ? 1 : .5}"/>`).join('')).join('')}
+  <path d="M248 190 V20 h4 V190z M250 24 h110 v4 H250z M340 28 v40" stroke="#e67e22" stroke-width="4" fill="#e67e22"/><rect x="332" y="68" width="16" height="12" fill="#e67e22"/>
+  <rect x="0" y="190" width="400" height="70" fill="#5d6d7e"/>
+  ${[[90, 222, 18], [120, 232, 11]].map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="none" stroke="#e67e22" stroke-width="5" stroke-dasharray="4 3"/><circle cx="${x}" cy="${y}" r="${r / 3}" fill="#e67e22"/>`).join('')}
+  <rect x="270" y="210" width="70" height="30" fill="#7f8c8d"/><rect x="280" y="200" width="50" height="10" fill="#95a5a6"/>`;
+}
+
+// Financial: a treasury with a golden dome, vault door and coin piles.
+function wealth() {
+  const g = glowId();
+  return `${skyGrad(g, '#1e6b52', '#bfe8cf')}
+  <rect x="100" y="95" width="200" height="100" fill="#f1ead8"/>
+  <path d="M90 95 L200 60 L310 95Z" fill="#e2d6b8"/>
+  <path d="M160 60 Q200 10 240 60Z" fill="#ffc83d"/><rect x="198" y="18" width="4" height="12" fill="#ffc83d"/>
+  ${[115, 145, 245, 275].map((x) => `<rect x="${x}" y="100" width="12" height="90" fill="#fbf8f2"/>`).join('')}
+  <circle cx="200" cy="150" r="30" fill="#8a8f96" stroke="#ffc83d" stroke-width="5"/>${[0, 60, 120, 180, 240, 300].map((a) => `<line x1="200" y1="150" x2="${200 + Math.cos(a * Math.PI / 180) * 24}" y2="${150 + Math.sin(a * Math.PI / 180) * 24}" stroke="#5a5f66" stroke-width="3"/>`).join('')}<circle cx="200" cy="150" r="7" fill="#ffc83d"/>
+  <rect x="0" y="195" width="400" height="65" fill="#cfc2a0"/>
+  ${[[50, 220, 5], [340, 222, 6], [90, 236, 3]].map(([x, y, n]) => Array.from({ length: n }, (_, i) => `<ellipse cx="${x}" cy="${y - i * 5}" rx="14" ry="4" fill="#ffc83d" stroke="#b8860b"/>`).join('')).join('')}
+  <path d="M300 240 l12 -24 l12 24z" fill="#ffc83d" stroke="#b8860b"/><rect x="36" y="160" width="28" height="34" fill="#7a5a3c"/><rect x="36" y="152" width="28" height="10" fill="#5a3a22"/><circle cx="50" cy="176" r="4" fill="#ffc83d"/>`;
+}
+
+// Environmental: a giant tree of life, greenhouse, river and flowers.
+function nature() {
+  const g = glowId();
+  return `${skyGrad(g, '#87cefa', '#eafaf1')}
+  <path d="M0 150 Q120 110 240 140 T400 130 V260 H0Z" fill="#6fae5a"/>
+  <path d="M0 230 Q100 205 200 220 T400 210" stroke="#5dade2" stroke-width="14" fill="none"/>
+  <path d="M190 200 Q185 150 196 110 L204 110 Q215 150 210 200Z" fill="#6b4a2a"/>
+  ${[[200, 80, 60], [160, 100, 40], [240, 100, 40], [200, 50, 38], [175, 70, 34], [228, 68, 34]].map(([x, y, r], i) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${['#3e8e41', '#4caf50', '#43a047', '#66bb6a', '#388e3c', '#5cb85c'][i]}"/>`).join('')}
+  ${[[170, 70], [225, 60], [205, 100], [180, 95]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="4" fill="#ffeb3b"/>`).join('')}
+  <path d="M290 200 V160 Q325 130 360 160 V200Z" fill="#bfe9f7" opacity=".7" stroke="#fff" stroke-width="2"/><path d="M325 136 V200 M290 180 H360" stroke="#fff" stroke-width="2"/>
+  ${[20, 50, 80, 120, 260, 380].map((x, i) => `<circle cx="${x}" cy="${178 + (i % 2) * 8}" r="4" fill="${['#e74c3c', '#f1c40f', '#9b59b6', '#ff7aa2'][i % 4]}"/><line x1="${x}" y1="${182 + (i % 2) * 8}" x2="${x}" y2="${192 + (i % 2) * 8}" stroke="#2e7d32" stroke-width="2"/>`).join('')}
+  <path d="M60 60 q10 -8 20 0 q10 -8 20 0" stroke="#333" stroke-width="2" fill="none"/>`;
+}
+
+const REGION_DRAWERS = { sanctuary, library, body, heart, social, career, wealth, nature };
 
 export function regionSVG(def, features, characterMarkup = '', { locked = false } = {}) {
   const draw = REGION_DRAWERS[def.id] || sanctuary;

@@ -449,3 +449,4 @@ body.in-store .foot { display: none; }
 body.view-mode .hud .cup-side, body.view-mode .hud .dock, body.view-mode .hud .hud-top, body.view-mode .topbar { opacity: 0; pointer-events: none; transition: opacity .3s; }
 body.view-mode .view-toggle { background: #ffc83d; color: #2a2210; }
 @media (max-width: 720px) { .view-toggle { bottom: auto; top: 150px; inset-inline-start: 10px; } }
+body.in-store { min-height: 100vh; background-attachment: fixed; }
