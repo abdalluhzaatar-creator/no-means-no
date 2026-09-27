@@ -104,6 +104,7 @@ function render() {
   const navScreen = screen === 'character' ? 'world' : screen;
   document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.screen === navScreen));
   document.body.classList.toggle('in-scene', screen === 'character' && sceneFor(currentChar));
+  document.body.classList.toggle('in-world', screen === 'world');
   // A live 3D place only refreshes its overlay, so animations and camera survive.
   if (screen === 'character' && oasis && oasis.char === currentChar && $('#place-view')) {
     $('#hud').innerHTML = placeHUD();
@@ -227,7 +228,7 @@ function renderWorld() {
   worldSpots = spots;
   return `
   <div class="world-view" id="world-view"><div class="w3-loading">جارٍ تحميل العالم…</div></div>
-  <p class="muted map-help">اسحب لتتنقّل · كبّر وصغّر بعجلة الماوس أو بإصبعين · زر الماوس الأيمن للدوران · اضغط على مكان لتدخله</p>`;
+  <p class="map-help">اسحب لتتنقّل · كبّر وصغّر بعجلة الماوس أو بإصبعين · زر الماوس الأيمن للدوران · اضغط على مكان لتدخله</p>`;
 }
 
 // The 3D world is mounted after the screen HTML is in place; falls back to the flat map.
@@ -435,7 +436,6 @@ function placeHUD() {
   const next = E.nextRegionUpgrade(state, r.id);
   return `
   <div class="hud-top">
-    <button class="hud-btn" data-go="world" aria-label="العودة للعالم">→ العالم</button>
     <div class="plate">
       <div class="plate-avatar" style="--glow:${c.palette.glow}">☪</div>
       <div class="plate-body">
