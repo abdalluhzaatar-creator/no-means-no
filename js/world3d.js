@@ -60,6 +60,9 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
       const k = Math.exp(-((x - s.x) ** 2 + (z - s.z) ** 2) / 260);
       h = h * (1 - k) + 6 * k;
     }
+    // Below the waterline, drop the seabed steeply so it never sits at the same depth
+    // as the water surface (that z-fighting made the sea blink).
+    if (h < 1.5) h = h - (1.5 - h) * 2 - 1.5;
     return h;
   };
 
@@ -74,7 +77,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0xbfd4e2, 0.0026);
-  const camera = new THREE.PerspectiveCamera(45, 1, 0.5, 5000);
+  const camera = new THREE.PerspectiveCamera(45, 1, 2, 5000);
 
   const sky = new Sky();
   sky.scale.setScalar(4000);
@@ -132,8 +135,9 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
 
   // ---------- sea ----------
   const waterGeo = new THREE.PlaneGeometry(3000, 3000, 1, 1); waterGeo.rotateX(-Math.PI / 2);
-  const water = new THREE.Mesh(waterGeo, new THREE.MeshPhysicalMaterial({
-    color: 0x1f6f8b, roughness: 0.08, metalness: 0.1, transmission: 0, transparent: false, clearcoat: 1,
+  const water = new THREE.Mesh(waterGeo, new THREE.MeshStandardMaterial({
+    color: 0x1f6f8b, roughness: 0.32, metalness: 0.05,
+    polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
   }));
   water.position.y = SEA; water.receiveShadow = true;
   const waveTex = (() => {
@@ -144,9 +148,9 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
       const i = (y * 256 + x) * 4; img.data[i] = 128 + (m - n) * 900; img.data[i + 1] = 128 + (k - n) * 900; img.data[i + 2] = 255; img.data[i + 3] = 255;
     }
     g.putImageData(img, 0, 0);
-    const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(60, 60); return t;
+    const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(60, 60); t.anisotropy = 8; return t;
   })();
-  water.material.normalMap = waveTex; water.material.normalScale.set(0.35, 0.35);
+  water.material.normalMap = waveTex; water.material.normalScale.set(0.12, 0.12);
   scene.add(water);
 
   // ---------- forests & rocks (instanced) ----------
