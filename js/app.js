@@ -358,7 +358,7 @@ function showRanks(id) {
 
 // Inside a character: a 3D place with the character, and a game HUD over it.
 // Places without a 3D scene yet use the classic layout.
-const sceneFor = (charId) => charId === 'worshipper';
+const sceneFor = (charId) => !!E.findCharacter(charId);
 let oasis = null;
 let questsCollapsed = true;
 const placeState = () => {
@@ -371,6 +371,14 @@ async function bindPlace() {
   if (!v) return;
   const c = E.findCharacter(currentChar);
   try {
+    if (c.id !== 'worshipper') {
+      const { mountPlace } = await import('./place3d.js');
+      if (!v.isConnected) return;
+      v.querySelector('.w3-loading')?.remove();
+      const scene = mountPlace(v, { regionId: c.regionId, palette: c.palette, sky: skyInfo, onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${['يلا نكمل!', 'خطوة كل يوم', 'أنا جاهز', 'الاستمرار سر النجاح'][Math.random() * 4 | 0]}`); } });
+      oasis = { char: c.id, scene };
+      return;
+    }
     const { mountOasis } = await import('./oasis3d.js');
     if (!v.isConnected) return;
     v.querySelector('.w3-loading')?.remove();
@@ -531,7 +539,7 @@ function placeHUD() {
         })() : ''}
       </div>
     </div>
-    ${prayerNowLine()}
+    ${c.id === 'worshipper' ? prayerNowLine() : ''}
     <button class="hud-chip atmo" data-open-atmo>${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}${timeOverride === "auto" ? ` · ${fmtTime(new Date())}` : ""}${liveWeather?.temp != null && weatherOverride === 'auto' ? ` · ${liveWeather.temp}°` : ''}</button>
   </div>
 
@@ -1048,7 +1056,7 @@ function bind() {
     const [c, t] = v.split(':');
     if (!inWindow(c, t)) return;
     const r = act(E.reportTask(state, c, t, true, { date: dayFor(c) }), el);
-    if (r.ok && oasis?.char === c) { oasis.scene.pray(); SND.sfx.prayer(); }
+    if (r.ok && oasis?.char === c) { oasis.scene.pray(); if (c === 'worshipper') SND.sfx.prayer(); }
   });
   on('data-open-upgrades', showUpgrades);
   on('data-open-path', showPath);
