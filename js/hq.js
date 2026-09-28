@@ -1,5 +1,6 @@
 // Headquarters: the commander levels up on his own from the player's progress.
-// Level = 1 + 2 per place opened after the first + 1 per character level gained.
+// Every 3 keys collected raise him one rank.
+export const KEYS_PER_RANK = 3;
 import { REGIONS, CHARACTERS, COMMAND_RANKS } from './content.js';
 
 export const homePlaces = () => REGIONS.filter((r) => r.characterId);
@@ -14,15 +15,15 @@ export function commander(s) {
   });
   const fromPlaces = Math.max(0, opened.length - 1) * 2;
   const fromChars = chars.reduce((a, c) => a + c.gained, 0);
-  const level = 1 + fromPlaces + fromChars;
-  let ri = 0;
-  COMMAND_RANKS.forEach(([min], i) => { if (level >= min) ri = i; });
+  // Every KEYS_PER_RANK keys collected (ever) promote the commander by themselves.
+  const earned = s.stats?.keysEarned || 0;
+  const ri = Math.min(COMMAND_RANKS.length - 1, Math.floor(earned / KEYS_PER_RANK));
   const next = COMMAND_RANKS[ri + 1];
-  const cur = COMMAND_RANKS[ri][0];
+  const have = next ? earned - ri * KEYS_PER_RANK : KEYS_PER_RANK;
   return {
-    level, rank: COMMAND_RANKS[ri][1], rankIndex: ri,
-    nextRank: next?.[1] || null, toNext: next ? next[0] - level : 0,
-    rankProgress: next ? (level - cur) / (next[0] - cur) : 1,
+    level: ri + 1, rank: COMMAND_RANKS[ri][1], rankIndex: ri, keysEarned: earned,
+    nextRank: next?.[1] || null, toNext: next ? KEYS_PER_RANK - have : 0, keysInRank: have,
+    rankProgress: have / KEYS_PER_RANK,
     opened, places, chars, fromPlaces, fromChars,
   };
 }

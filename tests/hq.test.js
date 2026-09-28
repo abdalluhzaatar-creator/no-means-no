@@ -9,12 +9,15 @@ t('new player: commander level 1, rank جندي', () => {
   const c = commander(E.newState());
   assert.equal(c.level, 1); assert.equal(c.rank, 'جندي');
 });
-t('opening a place adds 2 levels; a character level adds 1', () => {
+t('every 3 keys collected promote the commander automatically', () => {
   const s = E.newState();
-  s.regions.library = { level: 1 }; s.characters.scholar = { stage: 0, level: 1 };
-  assert.equal(commander(s).level, 3);
-  s.characters.worshipper.level = 3;
-  assert.equal(commander(s).level, 5);
-  assert.equal(commander(s).rank, 'رقيب');
+  s.stats.keysEarned = 2;
+  assert.equal(commander(s).rank, 'جندي'); assert.equal(commander(s).toNext, 1);
+  s.stats.keysEarned = 3; s.keys = 0; // spent keys still count
+  assert.equal(commander(s).rank, 'عريف');
+  s.stats.keysEarned = 7;
+  assert.equal(commander(s).rank, 'رقيب'); assert.equal(commander(s).keysInRank, 1);
+  s.stats.keysEarned = 999;
+  assert.equal(commander(s).rank, 'فريق'); assert.equal(commander(s).nextRank, null);
 });
 console.log(`\n${passed} hq tests passed`);

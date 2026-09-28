@@ -1,7 +1,7 @@
 // UI layer: renders screens from state, calls engine actions, saves, plays effects.
-import { CHARACTERS, REGIONS, CUPS, JOD_TO_USD, RANKS } from './content.js';
+import { CHARACTERS, REGIONS, CUPS, JOD_TO_USD, RANKS, COMMAND_RANKS } from './content.js';
 import * as C from './cups.js';
-import { commander } from './hq.js';
+import { commander, KEYS_PER_RANK } from './hq.js';
 import { warMapSVG, WAR } from './warmap.js';
 import * as E from './engine.js';
 import { createStorage } from './storage.js';
@@ -659,13 +659,26 @@ async function bindHQ() {
     const { mountHQ } = await import('./hq3d.js');
     if (!v.isConnected) return;
     v.querySelector('.w3-loading')?.remove();
-    hqScene = mountHQ(v, { places: warPlaces(), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, ...innerState(), onRoom: (r) => document.body.classList.toggle('in-dungeon', r === 'dungeon'), sky: skyInfo, onTable: showWarMap, onCommander: () => FX.toast(`القائد: ${cm.toNext ? `باقي ${cm.toNext} مستوى للرتبة ${cm.nextRank}` : 'أعلى رتبة! 🫡'}`) });
+    hqScene = mountHQ(v, { places: warPlaces(), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, ...innerState(), onRoom: (r) => document.body.classList.toggle('in-dungeon', r === 'dungeon'), sky: skyInfo, onTable: showWarMap, onCommander: showCommandRanks });
   } catch (err) { console.warn('3D HQ unavailable', err); v.innerHTML = ''; }
 }
+// All commander ranks: each one takes KEYS_PER_RANK keys.
+function showCommandRanks() {
+  const cm = commander(state);
+  modal(`
+    <h2>🫡 رتب القائد</h2>
+    <p class="muted">كل ${KEYS_PER_RANK} مفاتيح تجمعها يترقّى القائد تلقائيًا. جمعت ${cm.keysEarned} 🗝.</p>
+    <ol class="path">${COMMAND_RANKS.map(([, name], i) => {
+      const cls = i < cm.rankIndex ? 'done' : i === cm.rankIndex ? 'current' : '';
+      const need = i === 0 ? 'البداية' : `🗝 ${i * KEYS_PER_RANK} مفاتيح`;
+      return `<li class="${cls}" style="--rank:#7a5a1f"><b class="rk">${name}</b><span>${need}</span></li>`;
+    }).join('')}</ol>`);
+}
+
 // Celebrate when the commander's level went up since the last look.
 function checkCommander() {
   const cm = commander(state);
-  if (lastCmdLevel != null && cm.level > lastCmdLevel) FX.banner(`ترقية القائد — ${cm.rank}`, `وصل القائد للمستوى ${cm.level}`, '🫡');
+  if (lastCmdLevel != null && cm.level > lastCmdLevel) FX.banner(`ترقية القائد — ${cm.rank}`, `جمعت ${KEYS_PER_RANK} مفاتيح فترقّى القائد تلقائيًا`, '🫡');
   lastCmdLevel = cm.level;
 }
 // The eight dimensions with their war status.
@@ -742,8 +755,8 @@ function hqHUD() {
       <div class="plate-avatar" style="--glow:#ffc83d">🫡</div>
       <div class="plate-body">
         <div class="plate-name">القائد <span class="plate-place">· مقر القيادة</span></div>
-        <div class="plate-row"><span class="rank" style="--rank:#7a5a1f">${cm.rank} · ${cm.level}</span></div>
-        <div class="meter"><span class="meter-label">${cm.nextRank ? `🎖 نحو ${cm.nextRank}` : '🎖 أعلى رتبة'}</span><b><bdi>${cm.nextRank ? `باقي ${cm.toNext}` : '✔'}</bdi></b><div class="xp"><span style="width:${Math.round(cm.rankProgress * 100)}%"></span></div></div>
+        <div class="plate-row"><button class="rank" data-cmd-ranks style="--rank:#7a5a1f" title="اعرض كل الرتب">${cm.rank} ▾</button></div>
+        <div class="meter" data-cmd-ranks><span class="meter-label">${cm.nextRank ? `🗝 نحو ${cm.nextRank}` : '🎖 أعلى رتبة'}</span><b><bdi>${cm.nextRank ? `${cm.keysInRank}/${KEYS_PER_RANK}` : '✔'}</bdi></b><div class="xp"><span style="width:${Math.round(cm.rankProgress * 100)}%"></span></div></div>
       </div>
     </div>
   </div>
@@ -752,10 +765,11 @@ function hqHUD() {
     <button class="hud-chip warmap-btn" data-war-map>🗺 خريطة الحرب</button>
     <div class="challenge-card report ${reportOpen ? 'open' : ''}">
       <button class="report-title" data-toggle-report>📋 تقرير القائد <span>${reportOpen ? '▴' : '▾'}</span></button>
-      <small class="muted-w">مستواه يرتفع لحاله: +2 لكل مكان تفتحه، و+1 لكل مستوى تطوّره بأي شخصية.</small>
-      <div class="report-row"><span>🗺 الأماكن المفتوحة</span><b>${cm.opened.length} / ${cm.places.length}</b><em>+${cm.fromPlaces}</em></div>
+      <small class="muted-w">يترقّى لحاله: كل ${KEYS_PER_RANK} مفاتيح تجمعها = رتبة جديدة.</small>
+      <div class="report-row"><span>🗺 الأماكن المفتوحة</span><b>${cm.opened.length} / ${cm.places.length}</b></div>
       <ul class="report-list">${cm.places.map((r) => `<li class="${state.regions[r.id] ? 'on' : ''}">${state.regions[r.id] ? '✔' : '🔒'} ${r.name}</li>`).join('')}</ul>
-      <div class="report-row"><span>⬆ تطوير الشخصيات</span><b>${cm.fromChars}</b><em>+${cm.fromChars}</em></div>
+      <div class="report-row"><span>🗝 مفاتيح جمعتها</span><b>${cm.keysEarned}</b></div>
+      <div class="report-row"><span>⬆ الشخصيات</span></div>
       <ul class="report-list">${cm.chars.map((c) => `<li class="on">${c.def.name} — ${E.rankName(c.ch)}</li>`).join('')}</ul>
       <div class="report-row"><span>🏆 كؤوس</span><b>${won}</b></div>
       <div class="report-row"><span>🗝 مفاتيح جاهزة</span><b>${state.keys}</b></div>
@@ -1075,6 +1089,7 @@ function bind() {
     const def = E.activeTasks(E.findCharacter(c), state.characters[c]).find((x) => x.id === t);
     failDialog(def.title, def.penalty, (pen) => act(E.reportTask(state, c, t, false, { applyPenalty: pen, date: dayFor(c) })));
   });
+  on('data-cmd-ranks', showCommandRanks);
   on('data-level', (id, el) => act(E.levelUpCharacter(state, id), el));
   on('data-upgrade', (id, el) => act(E.upgradeRegion(state, id), el));
   on('data-buy', (v, el) => { const [k, id] = v.split(':'); act(E.buy(state, k, id), el); });
@@ -1121,5 +1136,6 @@ document.getElementById('keys-box')?.addEventListener('click', () => {
     <h2>🗝 المفاتيح</h2>
     <p>معك <b>${state.keys}</b> ${state.keys === 1 ? 'مفتاح' : 'مفاتيح'}.</p>
     <p>بالمفتاح <b>تفتح منطقة جديدة</b> على الخريطة، أو <b>ترفع رتبة</b> شخصية (مثل برونز 1 → برونز 2 فتُضاف قراءة صفحة من القرآن).</p>
+    <p>وكل ${KEYS_PER_RANK} مفاتيح تجمعها يترقّى القائد تلقائيًا 🫡.</p>
     <p class="muted">تكسب مفتاحًا كل 15 يومًا كاملًا متتاليًا.</p>`);
 });
