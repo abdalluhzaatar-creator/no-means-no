@@ -1,5 +1,5 @@
 // UI layer: renders screens from state, calls engine actions, saves, plays effects.
-import { CHARACTERS, REGIONS, CUPS, JOD_TO_USD } from './content.js';
+import { CHARACTERS, REGIONS, CUPS, JOD_TO_USD, RANKS } from './content.js';
 import * as C from './cups.js';
 import { commander } from './hq.js';
 import { warMapSVG, WAR } from './warmap.js';
@@ -308,52 +308,44 @@ const bar = (cur, max, label) => `
   <div class="bar"><span style="width:${Math.round((cur / max) * 100)}%"></span></div></div>`;
 
 // Level path of the current stage + progress toward the next key and level.
+// The rank ladder: every level is a rank (Bronze 1 → Platinum 3). Each rank may add a
+// daily task; 15 complete days in a row promote you automatically.
+function rankLadder(c) {
+  const out = [];
+  c.stages.forEach((st) => { (st.levels || [null, null, null, null, null]).forEach((lv) => out.push(lv)); });
+  return RANKS.map((r, i) => ({ ...r, adds: out[i]?.adds, designed: !!out[i] }));
+}
 function progressionPanel(c, ch) {
   if (!c.stages) return '';
-  const stage = c.stages[ch.stage];
   const live = E.liveProgress(ch, dayFor(c.id));
-  const next = E.nextLevel(c, ch);
-  const levels = stage.levels;
-  let action;
-  if (next.max) action = '<span class="muted">أعلى رتبة ✨</span>';
-  else if (next.undesigned) action = `<p class="muted">مستويات ${esc(stage.name)} ستُضاف قريبًا.</p>`;
-  else {
-    const ready = ch.levelReady && state.keys >= 1;
-    const why = !ch.levelReady ? `أكمل ${c.daysPerLevel} يومًا كاملًا متتاليًا` : state.keys < 1 ? 'تحتاج مفتاحًا 🗝' : '';
-    action = `<button class="btn primary" data-level="${c.id}" ${ready ? '' : 'disabled'}>
-      ${next.promotion ? `ارتقِ إلى ${esc(next.promotion)}` : `ارفع إلى المستوى ${next.level}`} — 🗝 1</button>
-      ${why ? `<small class="muted why">${why}</small>` : ''}`;
-  }
+  const cur = E.totalLevel(ch);
+  const ladder = rankLadder(c);
+  const first = c.id === 'worshipper' ? 'الصلوات الخمس في وقتها' : c.tasks.map((t) => t.title).join(' + ');
+  const shown = ladder.slice(0, Math.max(6, cur + 2));
   return `
   <section class="card">
-    <div class="row between"><h3>طريق ${c.name}</h3><button class="rank" data-ranks="${c.id}" title="اعرض ترتيب الرتب" style="--rank:${stage.color || 'var(--primary)'}">${esc(stage.name)} · مستوى ${ch.level} ▾</button></div>
-    ${levels ? `<ol class="path">${levels.map((lv, i) => {
-      const n = i + 1;
-      const cls = n < ch.level ? 'done' : n === ch.level ? 'current' : '';
-      const what = n === 1 && ch.stage === 0 ? 'الصلوات الخمس في وقتها' : lv.adds.map((a) => a.title).join(' + ') || '—';
-      return `<li class="${cls}"><b>${n}</b><span>${esc(what)}</span></li>`;
-    }).join('')}</ol>` : ''}
-    ${ch.stage === 0 ? '<p class="muted small-text">بعد المستوى 5 ترتقي إلى <b>برونز 1</b>، ثم فضّي ← ذهبي ← بلاتينيوم (كل رتبة من 1 إلى 3).</p>' : ''}
-    ${bar(ch.levelReady ? c.daysPerLevel : live.levelDays, c.daysPerLevel, ch.levelReady ? 'المستوى جاهز للرفع ✔' : 'أيام كاملة متتالية لهذا المستوى')}
+    <div class="row between"><h3>الترقّي</h3><button class="rank" data-ranks="${c.id}" title="اعرض كل الرتب" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))} ▾</button></div>
+    <ol class="path">${shown.map((r, i) => {
+      const n = i + 1, cls = n < cur ? 'done' : n === cur ? 'current' : '';
+      const what = n === 1 ? first : r.designed ? (r.adds.map((a) => '+ ' + a.title).join('، ') || '—') : 'قريبًا';
+      return `<li class="${cls}" style="--rank:${r.color}"><b class="rk">${esc(r.name)}</b><span>${esc(what)}</span></li>`;
+    }).join('')}</ol>
+    ${bar(live.levelDays, c.daysPerLevel, `أيام كاملة متتالية نحو ${esc(ladder[cur]?.name || 'الرتبة التالية')}`)}
     ${c.keyEveryDays ? bar(live.keyDays, c.keyEveryDays, 'أيام كاملة متتالية نحو المفتاح التالي 🗝') : ''}
-    <p class="muted small-text">اليوم الكامل = إنجاز كل مهام اليوم. أي فرض فائت يُصفّر العدّاد.</p>
-    <div class="row wrap">${action}</div>
+    <p class="muted small-text">كل ${c.daysPerLevel} يومًا كاملًا متتاليًا ترتقي رتبة تلقائيًا. اليوم الكامل = إنجاز كل مهام اليوم، وأي مهمة فائتة تُصفّر العدّاد.</p>
   </section>`;
 }
 
-// The full rank ladder, with the character's current place highlighted.
 function showRanks(id) {
   const c = E.findCharacter(id);
-  const ch = state.characters[id];
+  const cur = E.totalLevel(state.characters[id]);
   modal(`
-    <h2>ترتيب الرتب</h2>
-    <p class="muted">كل رتبة فيها 5 مستويات. تكمل المستوى 5 فترتقي للرتبة التالية.</p>
-    <ol class="ladder">${c.stages.map((st, i) => {
-      const cls = i < ch.stage ? 'done' : i === ch.stage ? 'current' : '';
-      return `<li class="${cls}" style="--rank:${st.color || 'var(--primary)'}">
-        <b>${i + 1}</b><span>${esc(st.name)}</span>
-        <small>${i < ch.stage ? '✔ تجاوزتها' : i === ch.stage ? `أنت هنا · مستوى ${ch.level}` : st.levels ? '' : 'قريبًا'}</small></li>`;
-    }).join('')}</ol>`);
+    <h2>الرتب</h2>
+    <p class="muted">تبدأ من برونز 1. كل ${c.daysPerLevel} يومًا كاملًا متتاليًا ترتقي رتبة.</p>
+    <ol class="ladder">${rankLadder(c).map((r, i) => `
+      <li class="${i + 1 < cur ? 'done' : i + 1 === cur ? 'current' : ''}" style="--rank:${r.color}">
+        <b>${i + 1}</b><span>${esc(r.name)}</span>
+        <small>${i + 1 < cur ? '✔' : i + 1 === cur ? 'أنت هنا' : r.designed ? '' : 'قريبًا'}</small></li>`).join('')}</ol>`);
 }
 
 // Inside a character: a 3D place with the character, and a game HUD over it.
@@ -528,7 +520,7 @@ function placeHUD() {
       <div class="plate-body">
         <div class="plate-name">${c.name} <span class="plate-place">· ${r.name}</span></div>
         <div class="plate-row">
-          ${stage ? `<button class="rank" data-ranks="${c.id}" style="--rank:${stage.color || 'var(--primary)'}">${esc(stage.name)} · ${ch.level}</button>` : ''}
+          ${stage ? `<button class="rank" data-ranks="${c.id}" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))}</button>` : ''}
           <span class="plate-streak" title="أطول سلسلة">🔥 ${best}</span>
         </div>
         ${live ? (() => {
@@ -552,7 +544,7 @@ function placeHUD() {
 
   <div class="dock">
     <button class="dock-btn" data-open-upgrades>🛠<span>طوّر ${r.name}</span>${next && state.gold >= next.cost ? '<i class="dot"></i>' : ''}</button>
-    ${c.stages ? `<button class="dock-btn" data-open-path>🧭<span>طريق ${c.name}</span>${ch.levelReady && state.keys >= 1 ? '<i class="dot"></i>' : ''}</button>` : ''}
+    ${c.stages ? `<button class="dock-btn" data-open-path>🧭<span>الترقّي</span></button>` : ''}
     ${c.id === 'worshipper' ? `<button class="dock-btn" data-pick-location>📍<span>${state.location ? esc(state.location.name) : 'مدينتك'}</span></button>` : ''}
   </div>`;
 }
@@ -597,7 +589,7 @@ function renderCharacter() {
   <section class="hero card">
     <div class="hero-scene">${regionSVG(r, region ? E.regionFeatures(state, r.id) : new Set(), characterSVG(c, artLevel(ch), { size: 80 }))}</div>
     <div class="hero-info">
-      <h2>${c.name} ${stage ? `<button class="lvl lvl-btn" data-ranks="${c.id}" title="اعرض ترتيب الرتب">${esc(stage.name)} · ${ch.level} ▾</button>` : ''}</h2>
+      <h2>${c.name} ${stage ? `<button class="lvl lvl-btn" data-ranks="${c.id}" title="اعرض الرتب">${esc(E.rankName(ch))} ▾</button>` : ''}</h2>
       <p class="muted">${c.desc}</p>
       <h3 class="sub">${r.name} ${region ? `<span class="lvl">مستوى ${region.level}</span>` : ''}</h3>
       ${region ? `
@@ -762,7 +754,7 @@ function hqHUD() {
       <div class="report-row"><span>🗺 الأماكن المفتوحة</span><b>${cm.opened.length} / ${cm.places.length}</b><em>+${cm.fromPlaces}</em></div>
       <ul class="report-list">${cm.places.map((r) => `<li class="${state.regions[r.id] ? 'on' : ''}">${state.regions[r.id] ? '✔' : '🔒'} ${r.name}</li>`).join('')}</ul>
       <div class="report-row"><span>⬆ تطوير الشخصيات</span><b>${cm.fromChars}</b><em>+${cm.fromChars}</em></div>
-      <ul class="report-list">${cm.chars.map((c) => `<li class="on">${c.def.name} — ${c.def.stages?.[c.ch.stage]?.name ? `${c.def.stages[c.ch.stage].name} · ` : ''}مستوى ${c.ch.level}</li>`).join('')}</ul>
+      <ul class="report-list">${cm.chars.map((c) => `<li class="on">${c.def.name} — ${E.rankName(c.ch)}</li>`).join('')}</ul>
       <div class="report-row"><span>🏆 كؤوس</span><b>${won}</b></div>
       <div class="report-row"><span>🗝 مفاتيح جاهزة</span><b>${state.keys}</b></div>
     </div>

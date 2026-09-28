@@ -58,36 +58,26 @@ t('a skipped day also resets the chain', () => {
   assert.equal(s.characters[W].perfectStreak, 1);
 });
 
-t('level-up needs 15 perfect days AND a key', () => {
+t('you start at Bronze 1; 15 perfect days promote to Bronze 2 and add Quran', () => {
   const s = E.newState();
+  assert.equal(E.rankName(s.characters[W]), 'برونز 1');
   for (let d = 1; d <= 14; d++) perfectDay(s, d);
-  assert.equal(E.levelUpCharacter(s, W).ok, false);
-  assert.ok(perfectDay(s, 15).some((e) => e.type === 'levelReady'));
-  assert.equal(s.keys, 1);
-  assert.ok(E.levelUpCharacter(s, W).ok);
-  assert.equal(s.keys, 0);
-  assert.equal(s.characters[W].level, 2);
+  assert.equal(E.rankName(s.characters[W]), 'برونز 1');
+  assert.ok(perfectDay(s, 15).some((e) => e.type === 'rank' && e.rank === 'برونز 2'));
+  assert.equal(E.rankName(s.characters[W]), 'برونز 2');
+  assert.equal(s.keys, 1, 'the key is still earned');
   assert.ok(E.activeTasks(def(), s.characters[W]).some((x) => x.id === 'quran'));
 });
 
-t('levels 2-5 add Quran, adhkar, sunnah, qiyam; level 5 done -> Bronze 1', () => {
+t('each rank adds its task: Bronze 3 adhkar, Silver 1 sunnah, Silver 2 qiyam', () => {
   const s = E.newState();
   let n = 0;
-  for (let lvl = 1; lvl <= 5; lvl++) {
-    for (let i = 0; i < 15; i++) perfectDay(s, ++n);
-    s.keys = Math.max(s.keys, 1);
-    const r = E.levelUpCharacter(s, W);
-    assert.ok(r.ok, r.reason);
-  }
+  for (let k = 0; k < 4; k++) for (let i = 0; i < 15; i++) perfectDay(s, ++n);
   const ch = s.characters[W];
-  assert.equal(def().stages[ch.stage].name, 'برونز 1');
-  assert.equal(ch.level, 1);
-  assert.deepEqual(E.activeTasks(def(), ch).map((x) => x.id),
-    [...PRAYERS, 'quran', 'adhkar_am', 'adhkar_pm', 'sunnah', 'qiyam']);
-  // Bronze 1 levels are not designed yet.
+  assert.equal(E.rankName(ch), 'فضّي 2');
+  assert.deepEqual(E.activeTasks(def(), ch).map((x) => x.id), [...PRAYERS, 'quran', 'adhkar_am', 'adhkar_pm', 'sunnah', 'qiyam']);
   for (let i = 0; i < 15; i++) perfectDay(s, ++n);
-  s.keys = 1;
-  assert.match(E.levelUpCharacter(s, W).reason, /لم تُصمَّم/);
+  assert.equal(E.rankName(s.characters[W]), 'فضّي 3');
 });
 
 t('ranks go Bronze 1-3, Silver, Gold, Platinum', () => {
@@ -177,7 +167,7 @@ t('war status: coming → ongoing → crushed on a miss → fierce after one mor
   E.reportTask(s, W, 'fajr', false, { date: day(1) });
   const st = E.warStatus(s, san);
   assert.equal(st.id, 'crushed'); assert.equal(st.need, 2);
-  s.characters[W].levelReady = true; s.keys = 1;
+  s.characters[W].levelReady = true;
   assert.ok(E.levelUpCharacter(s, W).ok);
   assert.equal(E.warStatus(s, san).id, 'fierce');
 });

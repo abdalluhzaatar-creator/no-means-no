@@ -1,7 +1,7 @@
 // Pure game logic. No DOM, no storage. Every action takes the state and
 // returns { ok, events } after mutating state in place; the UI turns events
 // into effects (gold burst, level-up, unlock).
-import { CHARACTERS, REGIONS } from './content.js';
+import { CHARACTERS, REGIONS, RANKS } from './content.js';
 
 export const SAVE_VERSION = 3;
 
@@ -210,7 +210,10 @@ function checkPerfectDay(s, def, ch, date, events) {
     ch.levelDays++;
     if (ch.levelDays >= def.daysPerLevel) {
       ch.levelReady = true;
-      events.push({ type: 'levelReady', name: def.name });
+      // 15 complete days in a row promote to the next rank by themselves.
+      const up = levelUpCharacter(s, def.id);
+      if (up.ok) events.push(...up.events);
+      else events.push({ type: 'levelReady', name: def.name });
     }
   }
 }
@@ -225,16 +228,13 @@ export function levelUpCharacter(s, id) {
   if (next.max) return fail('أعلى مستوى');
   if (next.undesigned) return fail(`مستويات ${next.undesigned} لم تُصمَّم بعد`);
   if (!ch.levelReady) return fail(`أكمل ${def.daysPerLevel} يومًا كاملًا متتاليًا أولًا`);
-  if (s.keys < 1) return fail('تحتاج مفتاحًا');
-  s.keys--;
   ch.stage = next.stage;
   ch.level = next.level;
   ch.levelReady = false;
   ch.levelDays = 0;
-  const stageName = def.stages[ch.stage].name;
-  addLog(s, `⬆ ${def.name} → ${stageName} · مستوى ${ch.level}`);
-  const events = [{ type: 'levelUp', kind: 'character', name: def.name, level: ch.level, label: stageName }];
-  if (next.promotion) events.push({ type: 'rank', name: def.name, rank: next.promotion });
+  const stageName = rankName(ch);
+  addLog(s, `⬆ ${def.name} → ${stageName}`);
+  const events = [{ type: 'rank', name: def.name, rank: stageName }];
   return done(s, events);
 }
 
@@ -372,6 +372,9 @@ export function demoState() {
 // ---------- War map (خريطة الحرب) ----------
 // Overall level of a character: 5 levels per stage.
 export const totalLevel = (ch) => (ch.stage || 0) * 5 + (ch.level || 1);
+// Each level is a rank: level 1 = Bronze 1, level 2 = Bronze 2 … level 12 = Platinum 3.
+export const rankName = (ch) => RANKS[totalLevel(ch) - 1]?.name || `مستوى ${totalLevel(ch)}`;
+export const rankColor = (ch) => RANKS[totalLevel(ch) - 1]?.color || '#3f7d6e';
 
 // coming  — the place is not opened yet (حرب قادمة)
 // ongoing — opened, no defeat recorded (حرب مستمرة)
