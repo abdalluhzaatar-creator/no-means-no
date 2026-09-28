@@ -151,12 +151,13 @@ function render() {
 }
 
 // ---------- Prayer times ----------
-// Worshipper tasks follow the "prayer day" (Fajr to next Fajr) when a location is set.
-const prayerNow = () => (state.location ? prayerDay(new Date(), state.location) : null);
-const dayFor = (charId) => (charId === 'worshipper' && state.location ? prayerNow().day : E.today());
+// Prayers belong to the calendar day: they can be logged any time until midnight.
+const noonOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12);
+const prayerNow = () => (state.location ? prayerDay(noonOf(new Date()), state.location) : null);
+const dayFor = () => E.today();
 
-// A prayer whose time ended without being reported is recorded as missed (no gold
-// penalty) — which resets the key and level counters.
+// A prayer still unlogged when the day ends (midnight) is recorded as missed (no gold
+// penalty) — which resets the key counter.
 function autoMissPrayers() {
   const ch = state.characters.worshipper;
   if (!ch || !state.location) return;
@@ -172,23 +173,26 @@ function autoMissPrayers() {
     if (p.lastDate !== pd.day || p.lastResult !== 'success') continue;
     const ws = windowState(w, now);
     // Old records have no timestamp: trust them only once the prayer's time is over.
-    const early = ws === 'upcoming' || (p.at ? p.at < +w.start : ws !== 'over');
+    const early = ws === 'upcoming' || (p.at && p.at < +w.start);
     if (early && E.revokeTask(state, 'worshipper', t.id, pd.day)) revoked.push(t.title);
   }
   if (revoked.length) {
     scheduleSave();
     FX.banner('أُلغيت صلوات سُجّلت قبل وقتها', revoked.join('، '), '↩');
   }
+  const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 12);
+  const yd = prayerDay(y, state.location), yKey = E.today(y);
   for (const t of E.activeTasks(E.findCharacter('worshipper'), ch)) {
-    if (!t.prayer || windowState(pd.windows[t.prayer], now) !== 'over') continue;
-    if (+pd.windows[t.prayer].end < (state.location.since || 0)) continue;
-    if (E.taskDoneToday(E.taskProgress(state, 'worshipper', t.id), pd.day)) continue;
-    E.reportTask(state, 'worshipper', t.id, false, { applyPenalty: false, date: pd.day });
+    if (!t.prayer) continue;
+    if (+yd.windows[t.prayer].end < (state.location.since || 0)) continue;
+    const p = E.taskProgress(state, 'worshipper', t.id);
+    if (p.lastDate && p.lastDate >= yKey) continue;
+    E.reportTask(state, 'worshipper', t.id, false, { applyPenalty: false, date: yKey });
     missed.push(t.title);
   }
   if (missed.length) {
     scheduleSave();
-    FX.banner('فات وقت الصلاة', `${missed.join('، ')} — بدأ العدّ من جديد`, '⏳');
+    FX.banner('صلوات الأمس لم تُسجَّل', `${missed.join('، ')} — حُسبت فائتة وبدأ العدّ من جديد`, '⏳');
   }
 }
 
@@ -196,7 +200,7 @@ function pickLocation() {
   const cur = state.location;
   modal(`
     <h2>أوقات الصلاة</h2>
-    <p class="muted">اختر مدينتك لتعرف اللعبة أوقات الصلاة. كل صلاة تُسجَّل فقط في وقتها، وإذا انتهى وقتها قبل أن تسجّلها تُحسب فائتة.</p>
+    <p class="muted">اختر مدينتك لتعرف اللعبة أوقات الصلاة. تُسجَّل الصلاة بعد دخول وقتها، ولك حتى الساعة 12 بالليل لتسجيلها؛ بعدها تُحسب فائتة.</p>
     <div class="chips">${CITIES.map((c, i) => `<button class="chip ${cur?.name === c.name ? 'on' : ''}" data-city="${i}">${c.name}</button>`).join('')}</div>
     <p><button class="btn ghost small" id="geo">📍 استخدم موقعي الحالي</button></p>
     <label class="form">طريقة الحساب
@@ -227,7 +231,6 @@ function taskRow(charId, t) {
   if (doneToday) actions = `<span class="result">${p.lastResult === 'success' ? '✔ صلّيتها' : '✘ فاتت'}</span>`;
   else if (t.prayer && !state.location) actions = '<button class="btn small" data-pick-location>اختر مدينتك</button>';
   else if (ws === 'upcoming') actions = `<span class="result">لم يدخل وقتها بعد</span>`;
-  else if (ws === 'over') actions = '<span class="result">انتهى وقتها</span>';
   else actions = `<button class="btn ok" data-task-ok="${charId}:${t.id}">أنجزت</button>
            <button class="btn bad" data-task-fail="${charId}:${t.id}">لم أنجز</button>`;
   return `
@@ -309,7 +312,7 @@ const bar = (cur, max, label) => `
 
 // Level path of the current stage + progress toward the next key and level.
 // The rank ladder: every level is a rank (Bronze 1 → Platinum 3). Each rank may add a
-// daily task; 15 complete days in a row promote you automatically.
+// daily task; raising to the next rank costs one key.
 function rankLadder(c) {
   const out = [];
   c.stages.forEach((st) => { (st.levels || [null, null, null, null, null]).forEach((lv) => out.push(lv)); });
@@ -328,11 +331,12 @@ function progressionPanel(c, ch) {
     <ol class="path">${shown.map((r, i) => {
       const n = i + 1, cls = n < cur ? 'done' : n === cur ? 'current' : '';
       const what = n === 1 ? first : r.designed ? (r.adds.map((a) => '+ ' + a.title).join('، ') || '—') : 'قريبًا';
-      return `<li class="${cls}" style="--rank:${r.color}"><b class="rk">${esc(r.name)}</b><span>${esc(what)}</span></li>`;
+      const unlock = n === cur + 1 && r.designed
+        ? `<button class="btn small ${state.keys ? 'primary' : ''}" data-level="${c.id}" ${state.keys ? '' : 'disabled'} title="يحتاج مفتاحًا">🗝 1 افتح</button>` : '';
+      return `<li class="${cls}" style="--rank:${r.color}"><b class="rk">${esc(r.name)}</b><span>${esc(what)}</span>${unlock}</li>`;
     }).join('')}</ol>
-    ${bar(live.levelDays, c.daysPerLevel, `أيام كاملة متتالية نحو ${esc(ladder[cur]?.name || 'الرتبة التالية')}`)}
     ${c.keyEveryDays ? bar(live.keyDays, c.keyEveryDays, 'أيام كاملة متتالية نحو المفتاح التالي 🗝') : ''}
-    <p class="muted small-text">كل ${c.daysPerLevel} يومًا كاملًا متتاليًا ترتقي رتبة تلقائيًا. اليوم الكامل = إنجاز كل مهام اليوم، وأي مهمة فائتة تُصفّر العدّاد.</p>
+    <p class="muted small-text">كل ${c.keyEveryDays} يومًا كاملًا متتاليًا تكسب مفتاحًا 🗝، وبالمفتاح ترفع رتبتك أو تفتح منطقة. اليوم الكامل = إنجاز كل مهام اليوم، وأي مهمة فائتة تُصفّر العدّاد.</p>
   </section>`;
 }
 
@@ -341,7 +345,7 @@ function showRanks(id) {
   const cur = E.totalLevel(state.characters[id]);
   modal(`
     <h2>الرتب</h2>
-    <p class="muted">تبدأ من برونز 1. كل ${c.daysPerLevel} يومًا كاملًا متتاليًا ترتقي رتبة.</p>
+    <p class="muted">تبدأ من برونز 1. كل رتبة جديدة تُفتح بمفتاح 🗝.</p>
     <ol class="ladder">${rankLadder(c).map((r, i) => `
       <li class="${i + 1 < cur ? 'done' : i + 1 === cur ? 'current' : ''}" style="--rank:${r.color}">
         <b>${i + 1}</b><span>${esc(r.name)}</span>
@@ -524,10 +528,8 @@ function placeHUD() {
           <span class="plate-streak" title="أطول سلسلة">🔥 ${best}</span>
         </div>
         ${live ? (() => {
-          const lv = ch.levelReady ? c.daysPerLevel : live.levelDays;
           const row = (icon, label, cur, max) => `<div class="meter" data-open-path title="${label}"><span class="meter-label">${icon} ${label}</span><b><bdi>${cur}/${max}</bdi></b><div class="xp"><span style="width:${Math.round((cur / max) * 100)}%"></span></div></div>`;
-          return row('📅', ch.levelReady ? 'المستوى جاهز ✔' : 'أيام للمستوى', lv, c.daysPerLevel)
-            + (c.keyEveryDays ? row('🗝', 'أيام للمفتاح', live.keyDays, c.keyEveryDays) : '');
+          return c.keyEveryDays ? row('🗝', 'أيام للمفتاح', live.keyDays, c.keyEveryDays) : '';
         })() : ''}
       </div>
     </div>
@@ -700,7 +702,7 @@ function showFront(id) {
       <h2>${r.name}</h2>
       <div class="front-status">${w.name}</div>
       <p>${why}</p>
-      ${ch ? `<div class="meter dark"><span class="meter-label">📅 أيام نحو المستوى التالي</span><b><bdi>${E.liveProgress(ch, dayFor(c.id)).levelDays}/${c.daysPerLevel || 15}</bdi></b><div class="xp"><span style="width:${Math.round((E.liveProgress(ch, dayFor(c.id)).levelDays / (c.daysPerLevel || 15)) * 100)}%"></span></div></div>` : ''}
+      ${ch ? `<div class="meter dark"><span class="meter-label">🗝 أيام نحو المفتاح التالي</span><b><bdi>${E.liveProgress(ch, dayFor(c.id)).keyDays}/${c.keyEveryDays || 15}</bdi></b><div class="xp"><span style="width:${Math.round((E.liveProgress(ch, dayFor(c.id)).keyDays / (c.keyEveryDays || 15)) * 100)}%"></span></div></div>` : ''}
       <div class="row wrap">
         <button class="btn ghost" id="back-map">← الخريطة</button>
         ${ch ? `<button class="btn primary" id="go-front">اذهب إلى الجبهة</button>` : `<button class="btn primary" id="go-front">المتجر</button>`}
@@ -1040,8 +1042,8 @@ function bind() {
   const inWindow = (c, t) => {
     const def = E.findCharacter(c).tasks.find((x) => x.id === t);
     if (!def?.prayer || c !== 'worshipper') return true;
-    const ok = windowState(prayerNow().windows[def.prayer], new Date()) === 'open';
-    if (!ok) { FX.toast('ليس وقت هذه الصلاة', 'err'); render(); }
+    const ok = windowState(prayerNow().windows[def.prayer], new Date()) !== 'upcoming';
+    if (!ok) { FX.toast('لم يدخل وقت هذه الصلاة بعد', 'err'); render(); }
     return ok;
   };
   on('data-task-ok', (v, el) => {
@@ -1111,3 +1113,13 @@ $('#account').onclick = () => {
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#modal').dataset.closable === 'true') closeModal(); });
 
 boot();
+
+// The key box at the top explains what keys are for.
+document.getElementById('keys-box')?.addEventListener('click', () => {
+  if (!state) return;
+  modal(`
+    <h2>🗝 المفاتيح</h2>
+    <p>معك <b>${state.keys}</b> ${state.keys === 1 ? 'مفتاح' : 'مفاتيح'}.</p>
+    <p>بالمفتاح <b>تفتح منطقة جديدة</b> على الخريطة، أو <b>ترفع رتبة</b> شخصية (مثل برونز 1 → برونز 2 فتُضاف قراءة صفحة من القرآن).</p>
+    <p class="muted">تكسب مفتاحًا كل 15 يومًا كاملًا متتاليًا.</p>`);
+});

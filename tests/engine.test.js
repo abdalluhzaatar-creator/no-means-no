@@ -58,25 +58,27 @@ t('a skipped day also resets the chain', () => {
   assert.equal(s.characters[W].perfectStreak, 1);
 });
 
-t('you start at Bronze 1; 15 perfect days promote to Bronze 2 and add Quran', () => {
+t('you start at Bronze 1; a key (not days) raises you to Bronze 2 and adds Quran', () => {
   const s = E.newState();
   assert.equal(E.rankName(s.characters[W]), 'برونز 1');
-  for (let d = 1; d <= 14; d++) perfectDay(s, d);
-  assert.equal(E.rankName(s.characters[W]), 'برونز 1');
-  assert.ok(perfectDay(s, 15).some((e) => e.type === 'rank' && e.rank === 'برونز 2'));
-  assert.equal(E.rankName(s.characters[W]), 'برونز 2');
-  assert.equal(s.keys, 1, 'the key is still earned');
+  assert.equal(E.levelUpCharacter(s, W).ok, false, 'no key yet');
+  for (let d = 1; d <= 15; d++) perfectDay(s, d);
+  assert.equal(E.rankName(s.characters[W]), 'برونز 1', 'no automatic promotion');
+  assert.equal(s.keys, 1);
+  const up = E.levelUpCharacter(s, W);
+  assert.ok(up.events.some((e) => e.type === 'rank' && e.rank === 'برونز 2'));
+  assert.equal(s.keys, 0, 'the key is spent');
   assert.ok(E.activeTasks(def(), s.characters[W]).some((x) => x.id === 'quran'));
 });
 
 t('each rank adds its task: Bronze 3 adhkar, Silver 1 sunnah, Silver 2 qiyam', () => {
   const s = E.newState();
-  let n = 0;
-  for (let k = 0; k < 4; k++) for (let i = 0; i < 15; i++) perfectDay(s, ++n);
+  s.keys = 5;
+  for (let k = 0; k < 4; k++) assert.ok(E.levelUpCharacter(s, W).ok);
   const ch = s.characters[W];
   assert.equal(E.rankName(ch), 'فضّي 2');
   assert.deepEqual(E.activeTasks(def(), ch).map((x) => x.id), [...PRAYERS, 'quran', 'adhkar_am', 'adhkar_pm', 'sunnah', 'qiyam']);
-  for (let i = 0; i < 15; i++) perfectDay(s, ++n);
+  assert.ok(E.levelUpCharacter(s, W).ok);
   assert.equal(E.rankName(s.characters[W]), 'فضّي 3');
 });
 
@@ -167,7 +169,7 @@ t('war status: coming → ongoing → crushed on a miss → fierce after one mor
   E.reportTask(s, W, 'fajr', false, { date: day(1) });
   const st = E.warStatus(s, san);
   assert.equal(st.id, 'crushed'); assert.equal(st.need, 2);
-  s.characters[W].levelReady = true;
+  s.keys = 1;
   assert.ok(E.levelUpCharacter(s, W).ok);
   assert.equal(E.warStatus(s, san).id, 'fierce');
 });

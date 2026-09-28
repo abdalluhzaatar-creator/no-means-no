@@ -206,19 +206,9 @@ function checkPerfectDay(s, def, ch, date, events) {
       events.push({ type: 'key', from: def.name });
     }
   }
-  if (def.daysPerLevel && !ch.levelReady) {
-    ch.levelDays++;
-    if (ch.levelDays >= def.daysPerLevel) {
-      ch.levelReady = true;
-      // 15 complete days in a row promote to the next rank by themselves.
-      const up = levelUpCharacter(s, def.id);
-      if (up.ok) events.push(...up.events);
-      else events.push({ type: 'levelReady', name: def.name });
-    }
-  }
 }
 
-// Raise a level: needs the level's consecutive days done, and costs one key.
+// Raise to the next rank: costs one key.
 export function levelUpCharacter(s, id) {
   const def = findCharacter(id);
   const ch = s.characters[id];
@@ -227,7 +217,8 @@ export function levelUpCharacter(s, id) {
   if (!next) return fail('لا مستويات لهذه الشخصية');
   if (next.max) return fail('أعلى مستوى');
   if (next.undesigned) return fail(`مستويات ${next.undesigned} لم تُصمَّم بعد`);
-  if (!ch.levelReady) return fail(`أكمل ${def.daysPerLevel} يومًا كاملًا متتاليًا أولًا`);
+  if ((s.keys || 0) < 1) return fail('تحتاج مفتاحًا 🗝 لرفع الرتبة');
+  s.keys--;
   ch.stage = next.stage;
   ch.level = next.level;
   ch.levelReady = false;
