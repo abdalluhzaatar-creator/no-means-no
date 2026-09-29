@@ -60,7 +60,7 @@ async function loadGame() {
   if (!state.location) setTimeout(pickLocation, 300);
   // Keep following the clock: record missed prayers and refresh the windows.
   setInterval(() => { autoMissPrayers(); if ($('#modal').hidden) render(); }, 30000);
-  if (!raw) setTimeout(() => FX.banner('أهلًا بك', 'ادخل إلى المُصلّي من العالم وسجّل صلواتك اليوم.'), 400);
+  if (!raw) setTimeout(() => FX.banner('أهلًا بك', 'ادخل إلى البعد الروحي من العالم وسجّل صلواتك اليوم.'), 400);
 }
 
 function showLogin() {
@@ -310,34 +310,52 @@ const bar = (cur, max, label) => `
   <div class="prog"><div class="row between"><small>${label}</small><small><bdi>${cur} / ${max}</bdi></small></div>
   <div class="bar"><span style="width:${Math.round((cur / max) * 100)}%"></span></div></div>`;
 
-// Level path of the current stage + progress toward the next key and level.
-// The rank ladder: every level is a rank (Bronze 1 → Platinum 3). Each rank may add a
-// daily task; raising to the next rank costs one key.
+// The rank ladder (Bronze 1 → Platinum 3). The player writes each rank's tasks;
+// reaching a rank adds them on top of the earlier ones. Raising a rank costs one key.
 function rankLadder(c) {
-  const out = [];
-  c.stages.forEach((st) => { (st.levels || [null, null, null, null, null]).forEach((lv) => out.push(lv)); });
-  return RANKS.map((r, i) => ({ ...r, adds: out[i]?.adds, designed: !!out[i] }));
+  const plan = E.planOf(c, state.characters[c.id]);
+  return RANKS.map((r, i) => ({ ...r, adds: plan[i] || [] }));
 }
 function progressionPanel(c, ch) {
   if (!c.stages) return '';
   const live = E.liveProgress(ch, dayFor(c.id));
   const cur = E.totalLevel(ch);
   const ladder = rankLadder(c);
-  const first = c.id === 'worshipper' ? 'الصلوات الخمس في وقتها' : c.tasks.map((t) => t.title).join(' + ');
-  const shown = ladder.slice(0, Math.max(6, cur + 2));
   return `
   <section class="card">
     <div class="row between"><h3>الترقّي</h3><button class="rank" data-ranks="${c.id}" title="اعرض كل الرتب" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))} ▾</button></div>
-    <ol class="path">${shown.map((r, i) => {
+    <p class="muted small-text">أنت تقرّر مهام كل رتبة: اضغط ✎ واكتب مهمة في كل سطر.</p>
+    <ol class="path">${ladder.map((r, i) => {
       const n = i + 1, cls = n < cur ? 'done' : n === cur ? 'current' : '';
-      const what = n === 1 ? first : r.designed ? (r.adds.map((a) => '+ ' + a.title).join('، ') || '—') : 'قريبًا';
-      const unlock = n === cur + 1 && r.designed
+      const what = r.adds.length ? r.adds.map((a) => (n === 1 ? '' : '+ ') + a.title).join('، ') : 'لم تكتب مهامها بعد';
+      const unlock = n === cur + 1 && r.adds.length
         ? `<button class="btn small ${state.keys ? 'primary' : ''}" data-level="${c.id}" ${state.keys ? '' : 'disabled'} title="يحتاج مفتاحًا">🗝 1 افتح</button>` : '';
-      return `<li class="${cls}" style="--rank:${r.color}"><b class="rk">${esc(r.name)}</b><span>${esc(what)}</span>${unlock}</li>`;
+      return `<li class="${cls}" style="--rank:${r.color}"><b class="rk">${esc(r.name)}</b><span>${esc(what)}</span>${unlock}<button class="btn small ghost" data-edit-rank="${c.id}:${i}" title="اكتب مهام هذه الرتبة">✎</button></li>`;
     }).join('')}</ol>
     ${c.keyEveryDays ? bar(live.keyDays, c.keyEveryDays, 'أيام كاملة متتالية نحو المفتاح التالي 🗝') : ''}
     <p class="muted small-text">كل ${c.keyEveryDays} يومًا كاملًا متتاليًا تكسب مفتاحًا 🗝، وبالمفتاح ترفع رتبتك أو تفتح منطقة. اليوم الكامل = إنجاز كل مهام اليوم، وأي مهمة فائتة تُصفّر العدّاد.</p>
   </section>`;
+}
+
+// Write one rank's tasks, one per line; the game turns them into daily tasks.
+function editRank(v) {
+  const [id, i] = v.split(':'), c = E.findCharacter(id), idx = +i;
+  const r = rankLadder(c)[idx];
+  const back = () => showPath();
+  modal(`
+    <h2>✎ ${esc(r.name)}</h2>
+    <p class="muted">اكتب كل مهمة بسطر لحالها. ${idx === 0 ? 'هاي مهامك اليومية من البداية.' : 'بتنضاف لمهامك لما توصل هاي الرتبة، فوق مهام الرتب اللي قبلها.'}</p>
+    <textarea id="rank-text" rows="7" dir="rtl" placeholder="مثال:\nقراءة صفحة من القرآن\nالمشي نصف ساعة">${esc(r.adds.map((t) => t.title).join('\n'))}</textarea>
+    <p class="muted small-text">سطر فاضي بينحذف، والمهمة اللي بتضل بنفس الاسم بتحتفظ بسلسلتها.</p>
+    <div class="row wrap"><button class="btn primary" id="rank-save">حفظ</button><button class="btn ghost" id="rank-cancel">رجوع</button></div>`);
+  modalRefresh = null;
+  $('#rank-text').focus();
+  $('#rank-cancel').onclick = back;
+  $('#rank-save').onclick = () => {
+    const res = E.setRankPlan(state, id, idx, $('#rank-text').value);
+    if (!res.ok) return FX.toast(res.reason, 'err');
+    scheduleSave(); FX.toast('حُفظت مهام ' + r.name); render(); back();
+  };
 }
 
 function showRanks(id) {
@@ -345,11 +363,11 @@ function showRanks(id) {
   const cur = E.totalLevel(state.characters[id]);
   modal(`
     <h2>الرتب</h2>
-    <p class="muted">تبدأ من برونز 1. كل رتبة جديدة تُفتح بمفتاح 🗝.</p>
+    <p class="muted">تبدأ من برونز 1. كل رتبة جديدة تُفتح بمفتاح 🗝، ومهامها أنت بتكتبها.</p>
     <ol class="ladder">${rankLadder(c).map((r, i) => `
       <li class="${i + 1 < cur ? 'done' : i + 1 === cur ? 'current' : ''}" style="--rank:${r.color}">
         <b>${i + 1}</b><span>${esc(r.name)}</span>
-        <small>${i + 1 < cur ? '✔' : i + 1 === cur ? 'أنت هنا' : r.designed ? '' : 'قريبًا'}</small></li>`).join('')}</ol>`);
+        <small>${i + 1 < cur ? '✔' : i + 1 === cur ? 'أنت هنا' : r.adds.length ? `${r.adds.length} مهام` : 'فاضية'}</small></li>`).join('')}</ol>`);
 }
 
 // Inside a character: a 3D place with the character, and a game HUD over it.
@@ -522,7 +540,7 @@ function placeHUD() {
     <div class="plate">
       <div class="plate-avatar" style="--glow:${c.palette.glow}">☪</div>
       <div class="plate-body">
-        <div class="plate-name">${c.name} <span class="plate-place">· ${r.name}</span></div>
+        <div class="plate-name">${c.name === r.name ? r.name : `${c.name} <span class="plate-place">· ${r.name}</span>`}</div>
         <div class="plate-row">
           ${stage ? `<button class="rank" data-ranks="${c.id}" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))}</button>` : ''}
           <span class="plate-streak" title="أطول سلسلة">🔥 ${best}</span>
@@ -1054,7 +1072,7 @@ document.addEventListener('click', (e) => { if (e.target.closest('button, [data-
 function bind() {
   const on = (attr, fn) => document.querySelectorAll(`[${attr}]`).forEach((el) => (el.onclick = () => fn(el.getAttribute(attr), el)));
   const inWindow = (c, t) => {
-    const def = E.findCharacter(c).tasks.find((x) => x.id === t);
+    const def = E.activeTasks(E.findCharacter(c), state.characters[c]).find((x) => x.id === t);
     if (!def?.prayer || c !== 'worshipper') return true;
     const ok = windowState(prayerNow().windows[def.prayer], new Date()) !== 'upcoming';
     if (!ok) { FX.toast('لم يدخل وقت هذه الصلاة بعد', 'err'); render(); }
@@ -1097,6 +1115,7 @@ function bind() {
   on('data-go', go);
   on('data-spot', openSpot);
   on('data-ranks', showRanks);
+  on('data-edit-rank', editRank);
 }
 
 function go(s) { if (s !== screen) SND.sfx.whoosh(); screen = s; closeModal(); render(); window.scrollTo(0, 0); }

@@ -15,7 +15,7 @@ const plainStages = () => [{ id: 'start', name: 'البداية', levels: Array.
 export const CHARACTERS = [
   {
     id: 'worshipper',
-    name: 'المُصلّي',
+    name: 'البعد الروحي',
     title: 'رجل يصلّي',
     desc: 'شاب متديّن، هادئ ومنضبط. يبدأ رحلته بسجادة صلاة وقلب حاضر.',
     regionId: 'sanctuary',

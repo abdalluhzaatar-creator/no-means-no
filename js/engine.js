@@ -148,25 +148,52 @@ const fail = (reason) => ({ ok: false, reason, events: [] });
 
 // ---------- Progression (stages × 5 levels) ----------
 // Tasks active for this character now: base tasks + every level's additions so far.
-export function activeTasks(def, ch) {
-  const list = [...def.tasks];
-  if (!def.stages || !ch) return list;
-  def.stages.forEach((st, si) => {
-    if (!st.levels || si > ch.stage) return;
-    st.levels.forEach((lv, li) => { if (si < ch.stage || li < ch.level) list.push(...lv.adds); });
+// ---------- The player's own rank plan ----------
+// Each character has one list of tasks per rank (Bronze 1 … Platinum 3), written by
+// the player. Reaching a rank adds its tasks on top of every earlier rank's.
+export const RANK_COUNT = RANKS.length;
+export function defaultPlan(def) {
+  const plan = Array.from({ length: RANK_COUNT }, () => []);
+  plan[0] = def.tasks.map((t) => ({ ...t }));
+  let i = 1;
+  (def.stages || []).forEach((st) => (st.levels || []).forEach((lv, li) => {
+    if (!(st === def.stages[0] && li === 0)) { if (i < RANK_COUNT) plan[i] = lv.adds.map((t) => ({ ...t })); i++; }
+  }));
+  return plan;
+}
+export function planOf(def, ch) { return ch?.plan || defaultPlan(def); }
+
+// Replace one rank's tasks with the player's written lines. A line matching an
+// existing task keeps it (and its streak / prayer time); new lines become new tasks.
+export function setRankPlan(s, id, rankIndex, text) {
+  const def = findCharacter(id), ch = s.characters[id];
+  if (!def || !ch) return fail('غير مملوكة');
+  if (rankIndex < 0 || rankIndex >= RANK_COUNT) return fail('رتبة غير موجودة');
+  const lines = String(text).split('\n').map((l) => l.replace(/^[\s\-•*+\d.)]+/, '').trim().slice(0, 80)).filter(Boolean);
+  const uniq = [...new Set(lines)].slice(0, 12);
+  const plan = planOf(def, ch).map((r) => r.map((t) => ({ ...t })));
+  const known = plan.flat();
+  plan[rankIndex] = uniq.map((title) => {
+    const old = known.find((t) => t.title === title);
+    if (old) { plan.forEach((r, i) => { if (i !== rankIndex) plan[i] = r.filter((t) => t.id !== old.id); }); return old; }
+    return { id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title, reward: 20, penalty: 10 };
   });
-  return list;
+  ch.plan = plan;
+  addLog(s, `✎ ${def.name}: ${RANKS[rankIndex].name}`);
+  return done(s, []);
 }
 
-// What the next level-up would unlock, or why it can't happen yet.
+export function activeTasks(def, ch) {
+  if (!def.stages || !ch) return [...def.tasks];
+  return planOf(def, ch).slice(0, totalLevel(ch)).flat();
+}
+
+// What the next rank would unlock, or why it can't happen yet.
 export function nextLevel(def, ch) {
   if (!def.stages) return null;
-  const stage = def.stages[ch.stage];
-  if (!stage.levels) return { undesigned: stage.name };
-  if (ch.level < 5) return { stage: ch.stage, level: ch.level + 1, adds: stage.levels?.[ch.level]?.adds ?? [] };
-  const next = def.stages[ch.stage + 1];
-  if (!next) return { max: true };
-  return { stage: ch.stage + 1, level: 1, promotion: next.name };
+  const n = totalLevel(ch); // index of the next rank
+  if (n >= RANK_COUNT) return { max: true };
+  return { stage: Math.floor(n / 5), level: (n % 5) + 1, adds: planOf(def, ch)[n] };
 }
 
 // Streak values shown to the player: they reset silently after a skipped day.
@@ -216,7 +243,7 @@ export function levelUpCharacter(s, id) {
   const next = nextLevel(def, ch);
   if (!next) return fail('لا مستويات لهذه الشخصية');
   if (next.max) return fail('أعلى مستوى');
-  if (next.undesigned) return fail(`مستويات ${next.undesigned} لم تُصمَّم بعد`);
+  if (!next.adds.length) return fail('اكتب مهام هذه الرتبة أولًا ✎');
   if ((s.keys || 0) < 1) return fail('تحتاج مفتاحًا 🗝 لرفع الرتبة');
   s.keys--;
   ch.stage = next.stage;

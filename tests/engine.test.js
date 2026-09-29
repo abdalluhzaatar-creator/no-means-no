@@ -78,8 +78,24 @@ t('each rank adds its task: Bronze 3 adhkar, Silver 1 sunnah, Silver 2 qiyam', (
   const ch = s.characters[W];
   assert.equal(E.rankName(ch), 'فضّي 2');
   assert.deepEqual(E.activeTasks(def(), ch).map((x) => x.id), [...PRAYERS, 'quran', 'adhkar_am', 'adhkar_pm', 'sunnah', 'qiyam']);
+  assert.equal(E.levelUpCharacter(s, W).ok, false, 'Silver 3 has no tasks written yet');
+  assert.ok(E.setRankPlan(s, W, 5, 'صيام الاثنين').ok);
   assert.ok(E.levelUpCharacter(s, W).ok);
   assert.equal(E.rankName(s.characters[W]), 'فضّي 3');
+  assert.equal(E.activeTasks(def(), ch).at(-1).title, 'صيام الاثنين');
+});
+
+t('the player writes each rank: lines become tasks, known lines keep their task', () => {
+  const s = E.newState();
+  const ch = s.characters[W];
+  assert.ok(E.setRankPlan(s, W, 1, '- قراءة صفحة من القرآن\n\nالمشي نصف ساعة\nالمشي نصف ساعة').ok);
+  const r2 = E.planOf(def(), ch)[1];
+  assert.equal(r2.length, 2, 'blank and repeated lines are dropped');
+  assert.equal(r2[0].id, 'quran', 'an existing task keeps its id and streak');
+  assert.equal(r2[1].title, 'المشي نصف ساعة');
+  assert.ok(E.setRankPlan(s, W, 0, 'صلاة الفجر في وقتها').ok);
+  assert.deepEqual(E.activeTasks(def(), ch).map((x) => x.id), ['fajr'], 'rank 1 is editable too');
+  assert.equal(E.activeTasks(def(), ch)[0].prayer, 'fajr', 'prayer timing is kept');
 });
 
 t('ranks go Bronze 1-3, Silver, Gold, Platinum', () => {

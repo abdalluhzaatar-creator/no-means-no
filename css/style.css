@@ -505,3 +505,6 @@ body.in-dungeon .hud .cup-side, body.in-dungeon .hud .dock, body.in-dungeon .hud
 .path li b.rk { width: auto; min-width: 70px; padding: 2px 10px; border-radius: 99px; background: var(--rank); color: #fff; font-size: .8rem; white-space: nowrap; } .path li.current b.rk { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--rank); }
 .keys-box { cursor: pointer; }
 .path li .btn.small { margin-inline-start: auto; }
+#rank-text { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); resize: vertical; line-height: 1.8; }
+.path li .btn.ghost { padding: 2px 8px; }
+.path li .btn.small { white-space: nowrap; }
