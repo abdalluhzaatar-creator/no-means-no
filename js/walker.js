@@ -13,7 +13,8 @@ export function createWalker({ hero, camera, dom, container, ground = 0, blocked
 
   const onKey = (e) => {
     if (e.target.closest?.('input, textarea, select') || !enabled) return;
-    const k = e.key.toLowerCase();
+    // Physical key position, so WASD works on any keyboard layout (e.g. Arabic).
+    const k = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', Space: ' ' }[e.code] || e.key.toLowerCase();
     if (!['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) return;
     e.preventDefault();
     if (e.type === 'keydown') { keys.add(k); if (k === ' ') jump(); } else keys.delete(k);

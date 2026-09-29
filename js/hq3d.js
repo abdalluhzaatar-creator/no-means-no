@@ -313,7 +313,7 @@ export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 
   // One interaction prompt: press E (or tap it on touch screens).
   let action = null;
   prompt.onclick = () => action?.();
-  const onE = (e) => { if (e.key.toLowerCase() === 'e' || e.key === 'ث') { if (action && !prompt.hidden && document.getElementById('modal')?.hidden === true) { e.preventDefault(); action(); } } };
+  const onE = (e) => { if (e.code === 'KeyE' || e.key.toLowerCase() === 'e') { if (action && !prompt.hidden && document.getElementById('modal')?.hidden === true) { e.preventDefault(); action(); } } };
   window.addEventListener('keydown', onE);
   const showPrompt = (text, fn) => { action = fn; prompt.hidden = false; prompt.innerHTML = `<kbd>E</kbd> ${text}`; };
   let childLevel = child, futureLevel = future;

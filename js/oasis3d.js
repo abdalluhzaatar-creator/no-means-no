@@ -632,7 +632,7 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
   let vy = 0, grounded = true, walkAmt = 0, facing = Math.PI, stepT = 0;
   const onKey = (e) => {
     if (e.target.closest?.('input, textarea, select')) return;
-    const k = e.key.toLowerCase();
+    const k = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', Space: ' ' }[e.code] || e.key.toLowerCase();
     if (!['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) return;
     e.preventDefault();
     if (e.type === 'keydown') { keys.add(k); if (k === ' ') jump(); } else keys.delete(k);
