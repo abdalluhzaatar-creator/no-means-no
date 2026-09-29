@@ -158,37 +158,37 @@ const dayFor = () => E.today();
 
 // A prayer still unlogged when the day ends (midnight) is recorded as missed (no gold
 // penalty) — which resets the key counter.
+const hasPrayers = (c) => !!state.characters[c.id] && E.activeTasks(c, state.characters[c.id]).some((t) => t.prayer);
 function autoMissPrayers() {
-  const ch = state.characters.worshipper;
-  if (!ch || !state.location) return;
+  if (!state.location) return;
   const pd = prayerNow();
   const now = new Date();
-  const missed = [];
-  // First, cancel prayers recorded before their time began (e.g. from older versions).
-  const revoked = [];
-  for (const t of E.activeTasks(E.findCharacter('worshipper'), ch)) {
-    if (!t.prayer) continue;
-    const w = pd.windows[t.prayer];
-    const p = E.taskProgress(state, 'worshipper', t.id);
-    if (p.lastDate !== pd.day || p.lastResult !== 'success') continue;
-    const ws = windowState(w, now);
-    // Old records have no timestamp: trust them only once the prayer's time is over.
-    const early = ws === 'upcoming' || (p.at && p.at < +w.start);
-    if (early && E.revokeTask(state, 'worshipper', t.id, pd.day)) revoked.push(t.title);
+  const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 12);
+  const yd = prayerDay(y, state.location), yKey = E.today(y);
+  const missed = [], revoked = [];
+  for (const c of CHARACTERS) {
+    const ch = state.characters[c.id];
+    if (!ch) continue;
+    for (const t of E.activeTasks(c, ch)) {
+      if (!t.prayer) continue;
+      // Cancel prayers recorded before their time began.
+      const w = pd.windows[t.prayer];
+      const p = E.taskProgress(state, c.id, t.id);
+      if (p.lastDate === pd.day && p.lastResult === 'success') {
+        const early = windowState(w, now) === 'upcoming' || (p.at && p.at < +w.start);
+        if (early && E.revokeTask(state, c.id, t.id, pd.day)) revoked.push(t.title);
+        continue;
+      }
+      // After midnight, yesterday's unlogged prayers count as missed.
+      if (+yd.windows[t.prayer].end < (state.location.since || 0)) continue;
+      if (p.lastDate && p.lastDate >= yKey) continue;
+      E.reportTask(state, c.id, t.id, false, { applyPenalty: false, date: yKey });
+      missed.push(t.title);
+    }
   }
   if (revoked.length) {
     scheduleSave();
     FX.banner('أُلغيت صلوات سُجّلت قبل وقتها', revoked.join('، '), '↩');
-  }
-  const y = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 12);
-  const yd = prayerDay(y, state.location), yKey = E.today(y);
-  for (const t of E.activeTasks(E.findCharacter('worshipper'), ch)) {
-    if (!t.prayer) continue;
-    if (+yd.windows[t.prayer].end < (state.location.since || 0)) continue;
-    const p = E.taskProgress(state, 'worshipper', t.id);
-    if (p.lastDate && p.lastDate >= yKey) continue;
-    E.reportTask(state, 'worshipper', t.id, false, { applyPenalty: false, date: yKey });
-    missed.push(t.title);
   }
   if (missed.length) {
     scheduleSave();
@@ -223,7 +223,7 @@ function taskRow(charId, t) {
   const date = dayFor(charId);
   const p = E.taskProgress(state, charId, t.id);
   const doneToday = E.taskDoneToday(p, date);
-  const pd = t.prayer && charId === 'worshipper' ? prayerNow() : null;
+  const pd = t.prayer ? prayerNow() : null;
   const w = pd?.windows[t.prayer];
   const ws = w ? windowState(w, new Date()) : null;
   const timeInfo = w ? `<small class="ptime ${ws}">🕰 ${fmtTime(w.start)} – ${fmtTime(w.end)}</small>` : '';
@@ -323,7 +323,7 @@ function progressionPanel(c, ch) {
   const ladder = rankLadder(c);
   return `
   <section class="card">
-    <div class="row between"><h3>الترقّي</h3><button class="rank" data-ranks="${c.id}" title="اعرض كل الرتب" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))} ▾</button></div>
+    <div class="row between"><h3>🎖 الرتب</h3><button class="rank" data-ranks="${c.id}" title="اعرض كل الرتب" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))} ▾</button></div>
     <p class="muted small-text">أنت تقرّر مهام كل رتبة: اضغط ✎ واكتب مهمة في كل سطر.</p>
     <ol class="path">${ladder.map((r, i) => {
       const n = i + 1, cls = n < cur ? 'done' : n === cur ? 'current' : '';
@@ -551,7 +551,7 @@ function placeHUD() {
         })() : ''}
       </div>
     </div>
-    ${c.id === 'worshipper' ? prayerNowLine() : ''}
+    ${hasPrayers(c) ? prayerNowLine() : ''}
     <button class="hud-chip atmo" data-open-atmo>${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}${timeOverride === "auto" ? ` · ${fmtTime(new Date())}` : ""}${liveWeather?.temp != null && weatherOverride === 'auto' ? ` · ${liveWeather.temp}°` : ''}</button>
   </div>
 
@@ -564,8 +564,9 @@ function placeHUD() {
 
   <div class="dock">
     <button class="dock-btn" data-open-upgrades>🛠<span>طوّر ${r.name}</span>${next && state.gold >= next.cost ? '<i class="dot"></i>' : ''}</button>
-    ${c.stages ? `<button class="dock-btn" data-open-path>🧭<span>الترقّي</span></button>` : ''}
-    ${c.id === 'worshipper' ? `<button class="dock-btn" data-pick-location>📍<span>${state.location ? esc(state.location.name) : 'مدينتك'}</span></button>` : ''}
+    ${c.stages ? `<button class="dock-btn promote-btn" data-promote>⬆<span>ترقية</span>${E.nextLevel(c, ch)?.adds?.length && state.keys ? '<i class="dot"></i>' : ''}</button>
+    <button class="dock-btn" data-open-path>🎖<span>الرتب</span></button>` : ''}
+    ${hasPrayers(c) ? `<button class="dock-btn" data-pick-location>📍<span>${state.location ? esc(state.location.name) : 'مدينتك'}</span></button>` : ''}
   </div>`;
 }
 
@@ -582,6 +583,31 @@ function showUpgrades() {
     </div>
     ${next ? `<button class="btn primary" data-upgrade="${r.id}" ${state.gold < next.cost ? 'disabled' : ''}>طوّر: ${next.label} — ${goldTxt(next.cost)}</button>` : '<span class="muted">المكان مكتمل ✨</span>'}`);
   modalRefresh = showUpgrades;
+  bind();
+}
+
+// The level-up screen: where you are, what the next rank adds, and one big button.
+function showPromote() {
+  const c = E.findCharacter(currentChar), ch = state.characters[c.id];
+  const next = E.nextLevel(c, ch), n = E.totalLevel(ch);
+  const nextRank = RANKS[n];
+  let body;
+  if (!next || next.max) body = '<p>وصلت أعلى رتبة 🏆</p>';
+  else {
+    const adds = next.adds || [];
+    body = `
+      <div class="promote-steps"><span class="rank" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))}</span><b>←</b><span class="rank" style="--rank:${nextRank.color}">${esc(nextRank.name)}</span></div>
+      <p class="muted">بتنضاف لمهامك اليومية:</p>
+      ${adds.length ? `<ul class="promote-adds">${adds.map((t) => `<li>+ ${esc(t.title)}${t.prayer ? ' 🕰' : ''}</li>`).join('')}</ul>` : '<p><b>ما كتبت مهام هاي الرتبة لسا.</b></p>'}
+      <p>التكلفة: <b>🗝 1</b> · معك <b>${state.keys}</b></p>
+      <div class="row wrap">
+        ${adds.length ? `<button class="btn primary big" data-level="${c.id}" ${state.keys ? '' : 'disabled'}>⬆ ترقَّ إلى ${esc(nextRank.name)}</button>` : ''}
+        <button class="btn ghost" data-edit-rank="${c.id}:${n}">✎ اكتب مهام ${esc(nextRank.name)}</button>
+      </div>
+      ${state.keys ? '' : `<p class="muted small-text">ما معك مفاتيح. بتكسب مفتاح كل ${c.keyEveryDays} يوم كامل ورا بعض.</p>`}`;
+  }
+  modal(`<h2>⬆ ترقية</h2>${body}`);
+  modalRefresh = showPromote;
   bind();
 }
 
@@ -621,7 +647,7 @@ function renderCharacter() {
     </div>
   </section>
   <section class="card">
-    <div class="row between"><h3>مهام اليوم</h3>${c.id === 'worshipper' ? `<button class="chip" data-pick-location>📍 ${state.location ? esc(state.location.name) + ' · تغيير' : 'اختر مدينتك'}</button>` : ''}</div>
+    <div class="row between"><h3>مهام اليوم</h3>${hasPrayers(c) ? `<button class="chip" data-pick-location>📍 ${state.location ? esc(state.location.name) + ' · تغيير' : 'اختر مدينتك'}</button>` : ''}</div>
     <ul class="tasks">${E.activeTasks(c, ch).map((t) => taskRow(c.id, t)).join('')}</ul>
   </section>
   ${progressionPanel(c, ch)}`;
@@ -1073,7 +1099,7 @@ function bind() {
   const on = (attr, fn) => document.querySelectorAll(`[${attr}]`).forEach((el) => (el.onclick = () => fn(el.getAttribute(attr), el)));
   const inWindow = (c, t) => {
     const def = E.activeTasks(E.findCharacter(c), state.characters[c]).find((x) => x.id === t);
-    if (!def?.prayer || c !== 'worshipper') return true;
+    if (!def?.prayer || !state.location) return true;
     const ok = windowState(prayerNow().windows[def.prayer], new Date()) !== 'upcoming';
     if (!ok) { FX.toast('لم يدخل وقت هذه الصلاة بعد', 'err'); render(); }
     return ok;
@@ -1116,6 +1142,7 @@ function bind() {
   on('data-spot', openSpot);
   on('data-ranks', showRanks);
   on('data-edit-rank', editRank);
+  on('data-promote', showPromote);
 }
 
 function go(s) { if (s !== screen) SND.sfx.whoosh(); screen = s; closeModal(); render(); window.scrollTo(0, 0); }

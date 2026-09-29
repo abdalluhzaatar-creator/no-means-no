@@ -165,6 +165,9 @@ export function planOf(def, ch) { return ch?.plan || defaultPlan(def); }
 
 // Replace one rank's tasks with the player's written lines. A line matching an
 // existing task keeps it (and its streak / prayer time); new lines become new tasks.
+const PRAYER_WORDS = { fajr: 'فجر', dhuhr: 'ظهر', asr: 'عصر', maghrib: 'مغرب', isha: 'عشاء' };
+export const prayerIn = (title) => (/صلا[ةه]|صلي|أصلي/.test(title) ? Object.keys(PRAYER_WORDS).find((k) => title.includes(PRAYER_WORDS[k])) : undefined);
+
 export function setRankPlan(s, id, rankIndex, text) {
   const def = findCharacter(id), ch = s.characters[id];
   if (!def || !ch) return fail('غير مملوكة');
@@ -173,10 +176,16 @@ export function setRankPlan(s, id, rankIndex, text) {
   const uniq = [...new Set(lines)].slice(0, 12);
   const plan = planOf(def, ch).map((r) => r.map((t) => ({ ...t })));
   const known = plan.flat();
+  // Prayers already tied to a task in another rank (or earlier in this list).
+  const taken = new Set(plan.filter((_, i) => i !== rankIndex).flat().map((t) => t.prayer).filter(Boolean));
   plan[rankIndex] = uniq.map((title) => {
     const old = known.find((t) => t.title === title);
-    if (old) { plan.forEach((r, i) => { if (i !== rankIndex) plan[i] = r.filter((t) => t.id !== old.id); }); return old; }
-    return { id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title, reward: 20, penalty: 10 };
+    if (old) { if (old.prayer) taken.add(old.prayer); plan.forEach((r, i) => { if (i !== rankIndex) plan[i] = r.filter((t) => t.id !== old.id); }); return old; }
+    const t = { id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title, reward: 20, penalty: 10 };
+    // A line naming one of the five prayers is tied to that prayer's time (once per plan).
+    const pr = prayerIn(title);
+    if (pr && !taken.has(pr)) { t.prayer = pr; taken.add(pr); }
+    return t;
   });
   ch.plan = plan;
   addLog(s, `✎ ${def.name}: ${RANKS[rankIndex].name}`);

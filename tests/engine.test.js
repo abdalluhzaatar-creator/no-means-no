@@ -190,4 +190,12 @@ t('war status: coming → ongoing → crushed on a miss → fierce after one mor
   assert.equal(E.warStatus(s, san).id, 'fierce');
 });
 
+t('a written line naming a prayer is tied to that prayer time', () => {
+  const s = E.newState();
+  assert.equal(E.prayerIn('صلاة الضحى'), undefined);
+  assert.equal(E.prayerIn('قراءة سورة العصر'), undefined, 'needs the word صلاة');
+  assert.ok(E.setRankPlan(s, W, 0, 'صلاة المغرب بالمسجد\nصلاة الفجر جماعة').ok);
+  assert.deepEqual(E.activeTasks(def(), s.characters[W]).map((x) => x.prayer), ['maghrib', 'fajr']);
+});
+
 console.log(`\n${passed} tests passed`);
