@@ -513,3 +513,16 @@ body.in-dungeon .hud .cup-side, body.in-dungeon .hud .dock, body.in-dungeon .hud
 .promote-adds li { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
 .btn.big { padding: 12px 22px; font-size: 1.05em; }
 .dock-btn.promote-btn { border-color: #ffc83d; }
+
+/* Times per day */
+.times { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.times i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--gold); }
+.times i.on { background: var(--gold); }
+.times b { font-size: .8rem; margin-inline-start: 4px; }
+.task-edit { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+.task-edit input { padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font: inherit; min-width: 0; }
+.te-times { display: inline-flex; align-items: center; gap: 4px; font-weight: 800; }
+.te-times input { width: 62px; text-align: center; }
+.te-times small { color: var(--muted); font-weight: 500; }
+.task-main { flex: 1; }
+.task strong small { white-space: nowrap; font-weight: 500; }

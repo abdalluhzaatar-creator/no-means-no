@@ -16,39 +16,17 @@ export const CHARACTERS = [
   {
     id: 'worshipper',
     name: 'البعد الروحي',
-    title: 'رجل يصلّي',
-    desc: 'شاب متديّن، هادئ ومنضبط. يبدأ رحلته بسجادة صلاة وقلب حاضر.',
+    desc: 'هادئ ومنضبط. أنت بتحدد مهامه اليومية وكم مرة باليوم.',
     regionId: 'sanctuary',
     cost: {},
     starter: true,
     requires: [],
-    // A "perfect day" = every task of the current level reported as done.
-    keyEveryDays: 15, // consecutive perfect days → 1 key (max one key per 15 days)
-    daysPerLevel: 15, // consecutive perfect days needed before a level can be raised (costs 1 key)
-    // Base daily tasks, always active.
-    tasks: [
-      { id: 'fajr', prayer: 'fajr', title: 'صلاة الفجر في وقتها', reward: 30, penalty: 15 },
-      { id: 'dhuhr', prayer: 'dhuhr', title: 'صلاة الظهر في وقتها', reward: 20, penalty: 10 },
-      { id: 'asr', prayer: 'asr', title: 'صلاة العصر في وقتها', reward: 20, penalty: 10 },
-      { id: 'maghrib', prayer: 'maghrib', title: 'صلاة المغرب في وقتها', reward: 20, penalty: 10 },
-      { id: 'isha', prayer: 'isha', title: 'صلاة العشاء في وقتها', reward: 20, penalty: 10 },
-    ],
-    // Progression: stages of 5 levels. Each level may add daily tasks on top of
-    // everything before it. Finishing level 5 of a stage moves to the next stage.
-    // A stage with `levels: null` is announced but not designed yet.
-    stages: [
-      { id: 'start', name: 'البداية', levels: [
-        { adds: [] },
-        { adds: [{ id: 'quran', title: 'قراءة صفحة من القرآن', reward: 20, penalty: 10 }] },
-        { adds: [
-          { id: 'adhkar_am', title: 'أذكار الصباح', reward: 15, penalty: 5 },
-          { id: 'adhkar_pm', title: 'أذكار المساء', reward: 15, penalty: 5 },
-        ] },
-        { adds: [{ id: 'sunnah', title: 'صلاة السنن الرواتب', reward: 25, penalty: 10 }] },
-        { adds: [{ id: 'qiyam', title: 'قيام الليل', reward: 30, penalty: 10 }] },
-      ] },
-      ...RANKS.map((r) => ({ ...r, levels: null })),
-    ],
+    // A "perfect day" = every task done as many times as it needs that day.
+    keyEveryDays: 15, // consecutive perfect days → 1 key
+    daysPerLevel: 15,
+    // No preset tasks: the player writes each rank's tasks (and times per day).
+    tasks: [],
+    stages: plainStages(),
     palette: { robe: '#fbfaf6', accent: '#3f7d6e', skin: '#f3d3b6', glow: '#f4d58d' },
   },
   {
@@ -180,7 +158,7 @@ export const REGIONS = [
     id: 'sanctuary',
     name: 'البعد الروحي',
     dimension: 'spiritual',
-    desc: 'قصر السكينة: ساحة صلاة بين الحدائق، تزدهر كلما التزمت بصلاتك وذكرك.',
+    desc: 'قصر السكينة: ساحة هادئة بين الحدائق، تزدهر كلما التزمت بمهامك اليومية.',
     characterId: 'worshipper',
     cost: {},
     starter: true,

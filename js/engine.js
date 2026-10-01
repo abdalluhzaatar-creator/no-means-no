@@ -90,6 +90,7 @@ export function newState() {
 }
 
 // Fill in anything missing from older saves so content additions never break a save.
+const OLD_PRAYER_IDS = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
 export function migrate(raw) {
   const base = newState();
   if (!raw || typeof raw !== 'object') return base;
@@ -103,6 +104,9 @@ export function migrate(raw) {
   s.keys = +raw.keys || 0;
   delete s.habits; delete s.projects; delete s.activeCharacter;
   s.log = Array.isArray(raw.log) ? raw.log : [];
+  // The spiritual dimension no longer comes with the five prayers: the player sets its tasks.
+  const w = s.characters.worshipper;
+  if (w?.plan) w.plan = w.plan.map((r) => (r || []).filter((t) => !OLD_PRAYER_IDS.includes(t.id)));
   s.version = SAVE_VERSION;
   return s;
 }
@@ -168,22 +172,37 @@ export function planOf(def, ch) { return ch?.plan || defaultPlan(def); }
 const PRAYER_WORDS = { fajr: 'فجر', dhuhr: 'ظهر', asr: 'عصر', maghrib: 'مغرب', isha: 'عشاء' };
 export const prayerIn = (title) => (/صلا[ةه]|صلي|أصلي/.test(title) ? Object.keys(PRAYER_WORDS).find((k) => title.includes(PRAYER_WORDS[k])) : undefined);
 
-export function setRankPlan(s, id, rankIndex, text) {
+// Lines like "صلاة × 5" or "مشي x2" carry a times-per-day count.
+const parseLine = (l) => {
+  const m = String(l).replace(/^[\s\-•*+\d.)]+(?=\D)/, '').trim().match(/^(.*?)\s*(?:[×xX*]\s*(\d{1,2}))?$/);
+  return { title: (m?.[1] || '').trim(), times: +m?.[2] || 1 };
+};
+export const MAX_TIMES = 20;
+
+export function setRankPlan(s, id, rankIndex, input) {
   const def = findCharacter(id), ch = s.characters[id];
   if (!def || !ch) return fail('غير مملوكة');
   if (rankIndex < 0 || rankIndex >= RANK_COUNT) return fail('رتبة غير موجودة');
-  const lines = String(text).split('\n').map((l) => l.replace(/^[\s\-•*+\d.)]+/, '').trim().slice(0, 80)).filter(Boolean);
-  const uniq = [...new Set(lines)].slice(0, 12);
+  const items = (Array.isArray(input) ? input : String(input).split('\n').map(parseLine))
+    .map((x) => ({ title: String(x.title || '').trim().slice(0, 80), times: Math.max(1, Math.min(MAX_TIMES, Math.round(+x.times) || 1)) }))
+    .filter((x) => x.title);
+  const seen = new Set();
+  const uniq = items.filter((x) => !seen.has(x.title) && seen.add(x.title)).slice(0, 12);
   const plan = planOf(def, ch).map((r) => r.map((t) => ({ ...t })));
   const known = plan.flat();
   // Prayers already tied to a task in another rank (or earlier in this list).
   const taken = new Set(plan.filter((_, i) => i !== rankIndex).flat().map((t) => t.prayer).filter(Boolean));
-  plan[rankIndex] = uniq.map((title) => {
+  plan[rankIndex] = uniq.map(({ title, times }) => {
     const old = known.find((t) => t.title === title);
-    if (old) { if (old.prayer) taken.add(old.prayer); plan.forEach((r, i) => { if (i !== rankIndex) plan[i] = r.filter((t) => t.id !== old.id); }); return old; }
-    const t = { id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title, reward: 20, penalty: 10 };
-    // A line naming one of the five prayers is tied to that prayer's time (once per plan).
-    const pr = prayerIn(title);
+    if (old) {
+      plan.forEach((r, i) => { if (i !== rankIndex) plan[i] = r.filter((t) => t.id !== old.id); });
+      const t = { ...old, times };
+      if (times > 1) delete t.prayer; else if (old.prayer) taken.add(old.prayer);
+      return t;
+    }
+    const t = { id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title, times, reward: 20, penalty: 10 };
+    // A once-a-day line naming one of the five prayers is tied to that prayer's time (once per plan).
+    const pr = times === 1 ? prayerIn(title) : undefined;
     if (pr && !taken.has(pr)) { t.prayer = pr; taken.add(pr); }
     return t;
   });
@@ -222,11 +241,8 @@ function breakChain(ch) {
 // Called after every task report: if all of today's tasks are done, count a perfect day.
 function checkPerfectDay(s, def, ch, date, events) {
   if (ch.lastPerfectDate === date) return;
-  const all = activeTasks(def, ch).every((t) => {
-    const p = s.tasks[`${def.id}.${t.id}`];
-    return p?.lastDate === date && p.lastResult === 'success';
-  });
-  if (!all) return;
+  const list = activeTasks(def, ch);
+  if (!list.length || !list.every((t) => taskComplete(s.tasks[`${def.id}.${t.id}`], date))) return;
   if (!ch.lastPerfectDate || dayDiff(ch.lastPerfectDate, date) > 1) breakChain(ch);
   ch.lastPerfectDate = date;
   ch.perfectStreak++;
@@ -272,11 +288,20 @@ export function taskProgress(s, charId, taskId) {
   return s.tasks[taskKey(charId, taskId)] || { streak: 0, lastDate: null, lastResult: null };
 }
 
-export const taskDoneToday = (p, date = today()) => p.lastDate === date;
+// A task may be needed several times a day (`times`). Today's progress lives in
+// { lastDate, count, lastResult: 'partial' | 'success' | 'fail' }; `doneDate` is the
+// last day it was fully completed (older saves only have lastResult 'success').
+export const timesOf = (task) => Math.max(1, task?.times || 1);
+export const taskComplete = (p, date) => p?.lastDate === date && p.lastResult === 'success';
+// Settled for the day: completed or failed (a partial day is still open).
+export const taskDoneToday = (p, date = today()) => p.lastDate === date && p.lastResult !== 'partial';
+export const countToday = (p, date = today()) => (p.lastDate !== date ? 0 : p.lastResult === 'partial' ? p.count || 0 : p.lastResult === 'success' ? p.count || 1 : p.count || 0);
+const lastDone = (p) => p.doneDate ?? (p.lastResult === 'success' ? p.lastDate : null);
 
 export function currentStreak(p, date = today()) {
-  if (!p.lastDate || p.lastResult !== 'success') return 0;
-  return dayDiff(p.lastDate, date) <= 1 ? p.streak : 0;
+  const d = lastDone(p);
+  if (!d || p.lastResult === 'fail') return 0;
+  return dayDiff(d, date) <= 1 ? p.streak || 0 : 0;
 }
 
 export function reportTask(s, charId, taskId, success, { applyPenalty = true, date = today() } = {}) {
@@ -288,10 +313,13 @@ export function reportTask(s, charId, taskId, success, { applyPenalty = true, da
   const p = { ...taskProgress(s, charId, taskId) };
   if (taskDoneToday(p, date)) return fail('سجّلت نتيجة اليوم بالفعل');
   const events = [];
+  const times = timesOf(task);
+  p.doneDate = lastDone(p);
+  const count = countToday(p, date) + (success ? 1 : 0);
   if (success) {
-    p.streak = currentStreak(p, date) + 1;
     s.stats.tasksCompleted++;
-    gainGold(s, task.reward, `✔ ${task.title}`, events);
+    gainGold(s, task.reward, `✔ ${task.title}${times > 1 ? ` (${count}/${times})` : ''}`, events);
+    if (count >= times) { p.streak = currentStreak(p, date) + 1; p.doneDate = date; }
   } else {
     p.streak = 0;
     s.stats.tasksFailed++;
@@ -301,10 +329,11 @@ export function reportTask(s, charId, taskId, success, { applyPenalty = true, da
     else addLog(s, `✘ ${task.title} (بدون عقوبة)`);
   }
   p.lastDate = date;
-  p.lastResult = success ? 'success' : 'fail';
+  p.count = count;
+  p.lastResult = !success ? 'fail' : count >= times ? 'success' : 'partial';
   p.at = Date.now(); // when it was reported (used to reject reports made outside a prayer's time)
   s.tasks[taskKey(charId, taskId)] = p;
-  if (success) checkPerfectDay(s, def, ch, date, events);
+  if (p.lastResult === 'success') checkPerfectDay(s, def, ch, date, events);
   return done(s, events);
 }
 
@@ -331,6 +360,28 @@ export function revokeTask(s, charId, taskId, date) {
   }
   addLog(s, `↩ أُلغي: ${task?.title ?? taskId} (سُجّلت قبل وقتها)`, -back);
   return true;
+}
+
+// ---------- End of day ----------
+// Every task must be fully done and logged by the end of its day. When a new day
+// starts, whatever was left unfinished on the last day played counts as missed
+// (no gold penalty), which breaks the chain.
+export function closeDays(s, now = today()) {
+  const last = s.lastDay;
+  s.lastDay = now;
+  if (!last || last >= now) return [];
+  const missed = [];
+  for (const def of CHARACTERS) {
+    const ch = s.characters[def.id];
+    if (!ch) continue;
+    for (const t of activeTasks(def, ch)) {
+      const p = taskProgress(s, def.id, t.id);
+      if (taskDoneToday(p, last) || (p.lastDate && p.lastDate > last)) continue;
+      reportTask(s, def.id, t.id, false, { applyPenalty: false, date: last });
+      missed.push(t.title);
+    }
+  }
+  return missed;
 }
 
 // ---------- Regions ----------
