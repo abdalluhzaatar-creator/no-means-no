@@ -71,8 +71,7 @@ export function shopStatus(state, kind, item) {
 }
 
 // ---------- State ----------
-const newCharacter = () => ({ stage: 0, level: 1 });
-const newDay = () => ({ goal: null, streak: 0, keyDays: 0, lastFullDate: null });
+const newCharacter = () => ({ stage: 0, level: 1, perfectStreak: 0, lastPerfectDate: null, keyDays: 0, levelDays: 0, levelReady: false });
 
 export function newState() {
   const s = {
@@ -82,8 +81,6 @@ export function newState() {
     stats: { goldEarned: 0, goldLost: 0, tasksCompleted: 0, tasksFailed: 0, bestStreak: 0, keysEarned: 0 },
     characters: {},
     regions: {},
-    day: newDay(),
-    intro: 0, // onboarding step reached (see app.js)
     tasks: {}, // progress per task: `${characterId}.${taskId}` -> { streak, lastDate, lastResult }
     log: [],
   };
@@ -104,7 +101,6 @@ export function migrate(raw) {
   s.regions = { ...base.regions, ...(raw.regions || {}) };
   s.tasks = raw.tasks && typeof raw.tasks === 'object' ? raw.tasks : {};
   s.keys = +raw.keys || 0;
-  s.day = { ...newDay(), ...(raw.day || {}) };
   delete s.habits; delete s.projects; delete s.activeCharacter;
   s.log = Array.isArray(raw.log) ? raw.log : [];
   s.version = SAVE_VERSION;
@@ -209,49 +205,42 @@ export function nextLevel(def, ch) {
   return { stage: Math.floor(n / 5), level: (n % 5) + 1, adds: planOf(def, ch)[n] };
 }
 
-// ---------- The day (shared by every dimension) ----------
-// A "full day" = the player finished at least `goal` of today's tasks (the player
-// picks the number). Every KEY_EVERY full days in a row earn one key.
-export const KEY_EVERY = 15;
-export const allTodayTasks = (s) => CHARACTERS.filter((c) => s.characters[c.id])
-  .flatMap((c) => activeTasks(c, s.characters[c.id]).map((t) => ({ ...t, charId: c.id, charName: c.name, regionId: c.regionId })));
-export const dayGoal = (s) => {
-  const total = allTodayTasks(s).length;
-  return Math.max(1, Math.min(total || 1, s.day?.goal || total || 1));
-};
-export function doneToday(s, date = today()) {
-  return allTodayTasks(s).filter((t) => {
-    const p = s.tasks[`${t.charId}.${t.id}`];
-    return p?.lastDate === date && p.lastResult === 'success';
-  }).length;
-}
-export function setDayGoal(s, n) {
-  const total = allTodayTasks(s).length;
-  s.day.goal = Math.max(1, Math.min(total, Math.round(+n) || 1));
-  return done(s, []);
-}
-// Chain values shown to the player: they reset silently after a day without a full day.
-export function dayProgress(s, date = today()) {
-  const d = s.day;
-  const alive = d.lastFullDate && dayDiff(d.lastFullDate, date) <= 1;
-  return { streak: alive ? d.streak : 0, keyDays: alive ? d.keyDays : 0, fullToday: d.lastFullDate === date, done: doneToday(s, date), goal: dayGoal(s) };
+// Streak values shown to the player: they reset silently after a skipped day.
+export function liveProgress(ch, date = today()) {
+  const alive = ch.lastPerfectDate && dayDiff(ch.lastPerfectDate, date) <= 1;
+  return alive
+    ? { perfectStreak: ch.perfectStreak, keyDays: ch.keyDays, levelDays: ch.levelDays }
+    : { perfectStreak: 0, keyDays: 0, levelDays: 0 };
 }
 
-function checkFullDay(s, date, events) {
-  const d = s.day;
-  if (d.lastFullDate === date || doneToday(s, date) < dayGoal(s)) return;
-  if (!d.lastFullDate || dayDiff(d.lastFullDate, date) > 1) { d.streak = 0; d.keyDays = 0; }
-  d.lastFullDate = date;
-  d.streak++;
-  s.stats.bestStreak = Math.max(s.stats.bestStreak, d.streak);
-  events.push({ type: 'perfectDay', streak: d.streak });
-  d.keyDays++;
-  if (d.keyDays >= KEY_EVERY) {
-    d.keyDays = 0;
-    s.keys++;
-    s.stats.keysEarned++;
-    addLog(s, '🗝 مفتاح جديد');
-    events.push({ type: 'key' });
+function breakChain(ch) {
+  ch.perfectStreak = 0;
+  ch.keyDays = 0;
+  ch.levelDays = 0;
+}
+
+// Called after every task report: if all of today's tasks are done, count a perfect day.
+function checkPerfectDay(s, def, ch, date, events) {
+  if (ch.lastPerfectDate === date) return;
+  const all = activeTasks(def, ch).every((t) => {
+    const p = s.tasks[`${def.id}.${t.id}`];
+    return p?.lastDate === date && p.lastResult === 'success';
+  });
+  if (!all) return;
+  if (!ch.lastPerfectDate || dayDiff(ch.lastPerfectDate, date) > 1) breakChain(ch);
+  ch.lastPerfectDate = date;
+  ch.perfectStreak++;
+  s.stats.bestStreak = Math.max(s.stats.bestStreak, ch.perfectStreak);
+  events.push({ type: 'perfectDay', streak: ch.perfectStreak });
+  if (def.keyEveryDays) {
+    ch.keyDays++;
+    if (ch.keyDays >= def.keyEveryDays) {
+      ch.keyDays = 0;
+      s.keys++;
+      s.stats.keysEarned++;
+      addLog(s, `🗝 مفتاح جديد من ${def.name}`);
+      events.push({ type: 'key', from: def.name });
+    }
   }
 }
 
@@ -268,6 +257,8 @@ export function levelUpCharacter(s, id) {
   s.keys--;
   ch.stage = next.stage;
   ch.level = next.level;
+  ch.levelReady = false;
+  ch.levelDays = 0;
   const stageName = rankName(ch);
   addLog(s, `⬆ ${def.name} → ${stageName}`);
   const events = [{ type: 'rank', name: def.name, rank: stageName }];
@@ -304,6 +295,7 @@ export function reportTask(s, charId, taskId, success, { applyPenalty = true, da
   } else {
     p.streak = 0;
     s.stats.tasksFailed++;
+    breakChain(ch); // one missed task breaks the key and level chains
     ch.defeat = { level: totalLevel(ch), date }; // a crushing defeat at this level (see warStatus)
     if (applyPenalty && task.penalty > 0) loseGold(s, task.penalty, `✘ ${task.title}`, events);
     else addLog(s, `✘ ${task.title} (بدون عقوبة)`);
@@ -312,7 +304,7 @@ export function reportTask(s, charId, taskId, success, { applyPenalty = true, da
   p.lastResult = success ? 'success' : 'fail';
   p.at = Date.now(); // when it was reported (used to reject reports made outside a prayer's time)
   s.tasks[taskKey(charId, taskId)] = p;
-  if (success) checkFullDay(s, date, events);
+  if (success) checkPerfectDay(s, def, ch, date, events);
   return done(s, events);
 }
 
@@ -329,13 +321,13 @@ export function revokeTask(s, charId, taskId, date) {
   s.gold -= back;
   s.stats.goldEarned = Math.max(0, s.stats.goldEarned - back);
   s.stats.tasksCompleted = Math.max(0, s.stats.tasksCompleted - 1);
-  const d = s.day;
-  if (d.lastFullDate === date && doneToday(s, date) < dayGoal(s)) {
-    d.streak = Math.max(0, d.streak - 1);
-    d.keyDays = Math.max(0, d.keyDays - 1);
+  if (ch.lastPerfectDate === date) {
+    ch.perfectStreak = Math.max(0, ch.perfectStreak - 1);
+    ch.keyDays = Math.max(0, ch.keyDays - 1);
+    if (!ch.levelReady) ch.levelDays = Math.max(0, ch.levelDays - 1);
     const prev = new Date(date);
     prev.setUTCDate(prev.getUTCDate() - 1);
-    d.lastFullDate = d.streak ? prev.toISOString().slice(0, 10) : null;
+    ch.lastPerfectDate = ch.perfectStreak ? prev.toISOString().slice(0, 10) : null;
   }
   addLog(s, `↩ أُلغي: ${task?.title ?? taskId} (سُجّلت قبل وقتها)`, -back);
   return true;
@@ -389,15 +381,7 @@ export function buy(s, kind, id) {
 // ---------- World map ----------
 // Visible: owned places. Teaser: a locked place whose `revealedBy` place is owned.
 // Everything else stays under fog.
-// Systems that appear step by step, so a new player starts with just the day's tasks.
-export const FEATURES = {
-  hq: { when: (s) => (s.stats.keysEarned || 0) >= 1, title: 'انفتح مقر القيادة 🏰', text: 'أخذت أول مفتاح! من المقر بتشوف رتبتك العامة وخريطة الحرب لكل الأبعاد.' },
-  trophies: { when: (s) => REGIONS.filter((r) => r.characterId && s.regions[r.id]).length >= 2, title: 'انفتحت جزيرة الكؤوس 🏆', text: 'فتحت بعد ثاني! بالجزيرة بتتحدى حالك مع شخص تثق فيه وبتربح كؤوس ومفاتيح.' },
-};
-export const featureOpen = (s, id) => !FEATURES[id] || FEATURES[id].when(s);
-
 export function mapVisibility(s, region) {
-  if (!featureOpen(s, region.id)) return 'hidden';
   if (s.regions[region.id]) return 'owned';
   const by = region.map?.revealedBy;
   return by && s.regions[by] ? 'teaser' : 'hidden';

@@ -24,10 +24,10 @@ t('level 1 worshipper has exactly the 5 prayers', () => {
 t('a perfect day needs all 5 prayers', () => {
   const s = E.newState();
   for (const p of PRAYERS.slice(0, 4)) E.reportTask(s, W, p, true, { date: day(1) });
-  assert.equal(s.day.streak, 0);
+  assert.equal(s.characters[W].perfectStreak, 0);
   const ev = E.reportTask(s, W, 'isha', true, { date: day(1) }).events;
   assert.ok(ev.some((e) => e.type === 'perfectDay'));
-  assert.equal(s.day.streak, 1);
+  assert.equal(s.characters[W].perfectStreak, 1);
 });
 
 t('15 consecutive perfect days give exactly one key', () => {
@@ -42,11 +42,11 @@ t('15 consecutive perfect days give exactly one key', () => {
   assert.equal(s.keys, 2);
 });
 
-t('a day that misses the goal resets the key counter', () => {
+t('a missed prayer resets the key and level counters', () => {
   const s = E.newState();
   for (let d = 1; d <= 10; d++) perfectDay(s, d);
   E.reportTask(s, W, 'asr', false, { date: day(11), applyPenalty: false });
-  assert.equal(E.dayProgress(s, day(12)).keyDays, 0);
+  assert.deepEqual(E.liveProgress(s.characters[W], day(11)), { perfectStreak: 0, keyDays: 0, levelDays: 0 });
   for (let d = 12; d <= 25; d++) perfectDay(s, d);
   assert.equal(s.keys, 0, 'only 14 days since the miss');
 });
@@ -55,7 +55,7 @@ t('a skipped day also resets the chain', () => {
   const s = E.newState();
   for (let d = 1; d <= 10; d++) perfectDay(s, d);
   perfectDay(s, 12);
-  assert.equal(s.day.streak, 1);
+  assert.equal(s.characters[W].perfectStreak, 1);
 });
 
 t('you start at Bronze 1; a key (not days) raises you to Bronze 2 and adds Quran', () => {
@@ -143,11 +143,11 @@ t('revokeTask cancels an early prayer and takes back its gold and perfect day', 
   const s = E.newState();
   perfectDay(s, 1);
   const gold = s.gold;
-  assert.equal(s.day.streak, 1);
+  assert.equal(s.characters[W].perfectStreak, 1);
   assert.ok(E.revokeTask(s, W, 'isha', day(1)));
   assert.equal(s.gold, gold - 20);
-  assert.equal(s.day.streak, 0);
-  assert.equal(s.day.keyDays, 0);
+  assert.equal(s.characters[W].perfectStreak, 0);
+  assert.equal(s.characters[W].keyDays, 0);
   assert.equal(E.taskDoneToday(E.taskProgress(s, W, 'isha'), day(1)), false);
   assert.ok(E.reportTask(s, W, 'isha', true, { date: day(1) }).ok, 'can be reported again in its time');
 });
@@ -196,22 +196,6 @@ t('a written line naming a prayer is tied to that prayer time', () => {
   assert.equal(E.prayerIn('قراءة سورة العصر'), undefined, 'needs the word صلاة');
   assert.ok(E.setRankPlan(s, W, 0, 'صلاة المغرب بالمسجد\nصلاة الفجر جماعة').ok);
   assert.deepEqual(E.activeTasks(def(), s.characters[W]).map((x) => x.prayer), ['maghrib', 'fajr']);
-});
-
-t('the player picks how many tasks make a full day', () => {
-  const s = E.newState();
-  assert.equal(E.dayGoal(s), 5, 'default: all of today\'s tasks');
-  E.setDayGoal(s, 3);
-  E.reportTask(s, W, 'fajr', true, { date: day(1) });
-  E.reportTask(s, W, 'dhuhr', false, { date: day(1), applyPenalty: false });
-  E.reportTask(s, W, 'asr', true, { date: day(1) });
-  assert.equal(E.dayProgress(s, day(1)).fullToday, false);
-  const ev = E.reportTask(s, W, 'maghrib', true, { date: day(1) }).events;
-  assert.ok(ev.some((e) => e.type === 'perfectDay'), '3 of 5 is enough, a missed one does not break it');
-  E.setDayGoal(s, 99);
-  assert.equal(E.dayGoal(s), 5, 'capped at the number of tasks');
-  E.setDayGoal(s, 0);
-  assert.equal(E.dayGoal(s), 1);
 });
 
 console.log(`\n${passed} tests passed`);

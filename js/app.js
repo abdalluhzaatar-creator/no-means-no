@@ -14,7 +14,7 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const goldTxt = (n) => `<span class="gold-inline">🪙 ${n}</span>`;
 
-let storage, state, screen = 'today';
+let storage, state, screen = 'world';
 
 // ---------- Save ----------
 let saveTimer;
@@ -55,14 +55,12 @@ async function loadGame() {
   if (!raw) scheduleSave();
   $('#account').textContent = storage.accountName ? `👤 ${storage.accountName}` : '👤 حسابك';
   $('#app').hidden = false;
-  // Systems already open for an existing save are not announced again.
-  if (!state.seenFeatures) { state.seenFeatures = {}; for (const id in E.FEATURES) if (E.featureOpen(state, id)) state.seenFeatures[id] = true; }
   autoMissPrayers();
   render();
-  if ((state.intro || 0) < INTRO.length) setTimeout(showIntro, 300);
-  else if (!state.location) setTimeout(pickLocation, 300);
+  if (!state.location) setTimeout(pickLocation, 300);
   // Keep following the clock: record missed prayers and refresh the windows.
   setInterval(() => { autoMissPrayers(); if ($('#modal').hidden) render(); }, 30000);
+  if (!raw) setTimeout(() => FX.banner('أهلًا بك', 'ادخل إلى البعد الروحي من العالم وسجّل صلواتك اليوم.'), 400);
 }
 
 function showLogin() {
@@ -108,18 +106,7 @@ function ask(text, onYes) {
 // Screens: 'world' (default), 'character' (inside one character's place), 'shop'.
 let currentChar = null;
 
-// Announce each step-by-step system once, when it first opens.
-function checkFeatures() {
-  state.seenFeatures ||= {};
-  for (const [id, f] of Object.entries(E.FEATURES)) {
-    if (state.seenFeatures[id] || !E.featureOpen(state, id)) continue;
-    state.seenFeatures[id] = true; scheduleSave();
-    setTimeout(() => FX.banner(f.title, f.text, '✨'), 1200);
-  }
-}
-
 function render() {
-  checkFeatures();
   checkCommander();
   syncSound();
   $('#gold').textContent = state.gold;
@@ -153,7 +140,7 @@ function render() {
   isle?.dispose(); isle = null;
   if (screen === 'world' && disposeWorld && worldKey === worldSignature() && $('#world-view')) { const a = $('.world-atmo'); if (a) a.textContent = `${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}${timeOverride === "auto" ? ` · ${fmtTime(new Date())}` : ""}`; bind(); return; }
   oasis?.scene.dispose(); oasis = null;
-  const view = { today: renderToday, world: renderWorld, character: renderCharacter, shop: renderShop, trophies: renderTrophies, hq: renderHQ }[screen];
+  const view = { world: renderWorld, character: renderCharacter, shop: renderShop, trophies: renderTrophies, hq: renderHQ }[screen];
   $('#screen').innerHTML = view();
   bind();
   bindWorld();
@@ -241,7 +228,7 @@ function taskRow(charId, t) {
   const ws = w ? windowState(w, new Date()) : null;
   const timeInfo = w ? `<small class="ptime ${ws}">🕰 ${fmtTime(w.start)} – ${fmtTime(w.end)}</small>` : '';
   let actions;
-  if (doneToday) actions = `<span class="result">${p.lastResult === 'success' ? (t.prayer ? '✔ صلّيتها' : '✔ أنجزتها') : '✘ فاتت'}</span>`;
+  if (doneToday) actions = `<span class="result">${p.lastResult === 'success' ? '✔ صلّيتها' : '✘ فاتت'}</span>`;
   else if (t.prayer && !state.location) actions = '<button class="btn small" data-pick-location>اختر مدينتك</button>';
   else if (ws === 'upcoming') actions = `<span class="result">لم يدخل وقتها بعد</span>`;
   else actions = `<button class="btn ok" data-task-ok="${charId}:${t.id}">أنجزت</button>
@@ -251,80 +238,10 @@ function taskRow(charId, t) {
     <div class="task-main">
       <strong>${esc(t.title)}</strong>
       ${timeInfo}
-      <small class="muted">🪙 <bdi>+${t.reward}</bdi> · 🔥 ${E.currentStreak(p, date)}</small>
+      <small class="muted"><bdi>+${t.reward}</bdi> / <bdi>−${t.penalty}</bdi> · 🔥 ${E.currentStreak(p, date)}</small>
     </div>
     <div class="task-actions">${actions}</div>
   </li>`;
-}
-
-// ---------- Today: the home screen ----------
-// Every task of every dimension in one list, with the day's goal and the key chain.
-function renderToday() {
-  const d = E.dayProgress(state);
-  const all = E.allTodayTasks(state);
-  const pct = Math.min(100, Math.round((d.done / d.goal) * 100));
-  const groups = CHARACTERS.filter((c) => state.characters[c.id]).map((c) => {
-    const r = E.findRegion(c.regionId), ch = state.characters[c.id];
-    const tasks = E.activeTasks(c, ch);
-    return `
-    <section class="card today-group">
-      <div class="row between">
-        <h3>${esc(r.name)} <span class="rank" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))}</span></h3>
-        <button class="btn small ghost" data-enter-char="${c.id}">ادخل ←</button>
-      </div>
-      ${tasks.length ? `<ul class="tasks">${tasks.map((t) => taskRow(c.id, t)).join('')}</ul>` : '<p class="muted">ما في مهام. ادخل واكتب مهامك من "الرتب".</p>'}
-    </section>`;
-  }).join('');
-  return `
-  <div class="today">
-    <section class="card today-head">
-      <p class="today-rule">كل يوم بتعمل مهامك ← كل <b>${E.KEY_EVERY}</b> يوم كامل ورا بعض بتاخد مفتاح 🗝 ← بالمفتاح بتفتح بعد جديد أو بترفع رتبتك.</p>
-      <div class="today-ring ${d.fullToday ? 'full' : ''}" style="--p:${pct}">
-        <div><b>${d.done}<small>/${d.goal}</small></b><span>${d.fullToday ? 'يوم كامل ✔' : 'مهام اليوم'}</span></div>
-      </div>
-      <div class="goal-row">
-        <span>🎯 اليوم بينحسب كامل إذا عملت</span>
-        <div class="stepper"><button class="btn small" data-goal="-1" aria-label="أقل">−</button><b>${d.goal}</b><button class="btn small" data-goal="1" aria-label="أكثر">+</button></div>
-        <span>من ${all.length} مهام</span>
-      </div>
-      <div class="chain">
-        <span>🔥 <b>${d.streak}</b> يوم كامل ورا بعض</span>
-        ${bar(d.keyDays, E.KEY_EVERY, '🗝 أيام كاملة نحو المفتاح الجاي')}
-      </div>
-      ${state.location ? '' : '<button class="btn" data-pick-location>📍 اختر مدينتك لأوقات الصلاة</button>'}
-    </section>
-    ${groups}
-    <p class="muted small-text center">سجّل مهامك لحد الساعة 12 بالليل. إذا ما وصلت هدفك اليوم، العداد بيرجع من الصفر بكرة.</p>
-  </div>`;
-}
-
-// First-run guide: four short steps, shown once (state.intro counts the steps seen).
-const INTRO = [
-  ['📋', 'هاي مهامك اليوم', 'كل يوم بتسجّل شو عملت: ✔ أنجزت أو ✘ لم أنجز.'],
-  ['🎯', 'انت بتحدد الهدف', 'اختار كم مهمة لازم تعمل عشان ينحسب اليوم "كامل". بتقدر تغيّره بأي وقت من فوق.'],
-  ['🗝', '15 يوم كامل = مفتاح', 'إذا عملت هدفك 15 يوم ورا بعض بتاخد مفتاح. إذا فوّتت يوم، العدّاد بيرجع صفر.'],
-  ['⬆', 'شو بتعمل بالمفتاح؟', 'بتفتح بعد جديد من الخريطة (جسدي، فكري، عاطفي…) أو بترفع رتبتك فتنضاف مهام جديدة انت بتكتبها. والذهب 🪙 بتطوّر وتزيّن فيه أماكنك.'],
-];
-function showIntro() {
-  const i = state.intro || 0;
-  if (i >= INTRO.length) return;
-  const [icon, title, text] = INTRO[i];
-  modal(`
-    <div class="intro">
-      <div class="intro-icon">${icon}</div>
-      <h2>${title}</h2>
-      <p>${text}</p>
-      ${i === 1 ? `<div class="stepper big"><button class="btn" data-goal="-1">−</button><b>${E.dayGoal(state)}</b><button class="btn" data-goal="1">+</button></div><p class="muted small-text">من ${E.allTodayTasks(state).length} مهام اليوم</p>` : ''}
-      <div class="intro-dots">${INTRO.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('')}</div>
-      <button class="btn primary big" id="intro-next">${i === INTRO.length - 1 ? 'يلا نبلّش' : 'التالي ←'}</button>
-    </div>`, { closable: false });
-  modalRefresh = showIntro;
-  bind();
-  $('#intro-next').onclick = () => {
-    state.intro = i + 1; scheduleSave();
-    if (state.intro >= INTRO.length) { modalRefresh = null; closeModal(); if (!state.location) setTimeout(pickLocation, 300); }
-    else showIntro();
-  };
 }
 
 // World: a big fogged map. Owned places are clear; the next place shows its price.
@@ -343,7 +260,7 @@ function renderWorld() {
   return `
   <div class="world-view" id="world-view"><div class="w3-loading">جارٍ تحميل العالم…</div></div>
   <button class="hud-chip atmo world-atmo" data-open-atmo>${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}${timeOverride === "auto" ? ` · ${fmtTime(new Date())}` : ""}</button>
-  <p class="map-help">كل مكان = بعد من حياتك، والمقفول بتفتحه بمفتاح 🗝 · اسحب لتتنقّل · كبّر وصغّر بعجلة الماوس أو بإصبعين · زر الماوس الأيمن للدوران · اضغط على مكان لتدخله</p>`;
+  <p class="map-help">اسحب لتتنقّل · كبّر وصغّر بعجلة الماوس أو بإصبعين · زر الماوس الأيمن للدوران · اضغط على مكان لتدخله</p>`;
 }
 
 // The 3D world is mounted after the screen HTML is in place; falls back to the flat map.
@@ -401,6 +318,7 @@ function rankLadder(c) {
 }
 function progressionPanel(c, ch) {
   if (!c.stages) return '';
+  const live = E.liveProgress(ch, dayFor(c.id));
   const cur = E.totalLevel(ch);
   const ladder = rankLadder(c);
   return `
@@ -414,7 +332,8 @@ function progressionPanel(c, ch) {
         ? `<button class="btn small ${state.keys ? 'primary' : ''}" data-level="${c.id}" ${state.keys ? '' : 'disabled'} title="يحتاج مفتاحًا">🗝 1 افتح</button>` : '';
       return `<li class="${cls}" style="--rank:${r.color}"><b class="rk">${esc(r.name)}</b><span>${esc(what)}</span>${unlock}<button class="btn small ghost" data-edit-rank="${c.id}:${i}" title="اكتب مهام هذه الرتبة">✎</button></li>`;
     }).join('')}</ol>
-    <p class="muted small-text">كل رتبة جديدة بتفتحها بمفتاح 🗝 من زر "ترقية".</p>
+    ${c.keyEveryDays ? bar(live.keyDays, c.keyEveryDays, 'أيام كاملة متتالية نحو المفتاح التالي 🗝') : ''}
+    <p class="muted small-text">كل ${c.keyEveryDays} يومًا كاملًا متتاليًا تكسب مفتاحًا 🗝، وبالمفتاح ترفع رتبتك أو تفتح منطقة. اليوم الكامل = إنجاز كل مهام اليوم، وأي مهمة فائتة تُصفّر العدّاد.</p>
   </section>`;
 }
 
@@ -613,7 +532,7 @@ function placeHUD() {
   const tasks = E.activeTasks(c, ch);
   const date = dayFor(c.id);
   const done = tasks.filter((t) => E.taskDoneToday(E.taskProgress(state, c.id, t.id), date)).length;
-  const live = c.stages ? E.dayProgress(state, date) : null;
+  const live = c.stages ? E.liveProgress(ch, date) : null;
   const best = Math.max(0, ...tasks.map((t) => E.currentStreak(E.taskProgress(state, c.id, t.id), date)));
   const next = E.nextRegionUpgrade(state, r.id);
   return `
@@ -628,7 +547,7 @@ function placeHUD() {
         </div>
         ${live ? (() => {
           const row = (icon, label, cur, max) => `<div class="meter" data-open-path title="${label}"><span class="meter-label">${icon} ${label}</span><b><bdi>${cur}/${max}</bdi></b><div class="xp"><span style="width:${Math.round((cur / max) * 100)}%"></span></div></div>`;
-          return row('🗝', 'أيام للمفتاح', live.keyDays, E.KEY_EVERY);
+          return c.keyEveryDays ? row('🗝', 'أيام للمفتاح', live.keyDays, c.keyEveryDays) : '';
         })() : ''}
       </div>
     </div>
@@ -657,7 +576,7 @@ function showUpgrades() {
   const region = state.regions[r.id];
   const next = E.nextRegionUpgrade(state, r.id);
   modal(`
-    <h2>🛠 طوّر ${r.name} <span class="lvl">تطوير ${region.level}</span></h2>
+    <h2>🛠 طوّر ${r.name} <span class="lvl">مستوى ${region.level}</span></h2>
     <p class="muted">كل تطوير يظهر في المكان نفسه.</p>
     <div class="upgrade-list">
       ${r.upgrades.map((u) => `<div class="upg ${u.level <= region.level ? 'have' : ''}">${u.level <= region.level ? '✔' : '○'} ${u.label} <small>${goldTxt(u.cost)}</small></div>`).join('')}
@@ -685,7 +604,7 @@ function showPromote() {
         ${adds.length ? `<button class="btn primary big" data-level="${c.id}" ${state.keys ? '' : 'disabled'}>⬆ ترقَّ إلى ${esc(nextRank.name)}</button>` : ''}
         <button class="btn ghost" data-edit-rank="${c.id}:${n}">✎ اكتب مهام ${esc(nextRank.name)}</button>
       </div>
-      ${state.keys ? '' : `<p class="muted small-text">ما معك مفاتيح. بتكسب مفتاح كل ${E.KEY_EVERY} يوم كامل ورا بعض.</p>`}`;
+      ${state.keys ? '' : `<p class="muted small-text">ما معك مفاتيح. بتكسب مفتاح كل ${c.keyEveryDays} يوم كامل ورا بعض.</p>`}`;
   }
   modal(`<h2>⬆ ترقية</h2>${body}`);
   modalRefresh = showPromote;
@@ -718,7 +637,7 @@ function renderCharacter() {
     <div class="hero-info">
       <h2>${c.name} ${stage ? `<button class="lvl lvl-btn" data-ranks="${c.id}" title="اعرض الرتب">${esc(E.rankName(ch))} ▾</button>` : ''}</h2>
       <p class="muted">${c.desc}</p>
-      <h3 class="sub">${r.name} ${region ? `<span class="lvl">تطوير ${region.level}</span>` : ''}</h3>
+      <h3 class="sub">${r.name} ${region ? `<span class="lvl">مستوى ${region.level}</span>` : ''}</h3>
       ${region ? `
         <div class="upgrade-list">
           ${r.upgrades.map((u) => `<div class="upg ${u.level <= region.level ? 'have' : ''}">${u.level <= region.level ? '✔' : '○'} ${u.label} <small>${goldTxt(u.cost)}</small></div>`).join('')}
@@ -812,7 +731,6 @@ const warPlaces = () => REGIONS.filter((r) => r.characterId).map((r) => {
   return { id: r.id, name: r.name, map: r.map, status: w.id, level: w.level, info: w };
 });
 
-const rk = (n) => RANKS[n - 1]?.name || `رتبة ${n}`;
 function showWarMap() {
   if ($('#modal').hidden) SND.sfx.paper();
   const places = warPlaces();
@@ -831,9 +749,9 @@ function showFront(id) {
   const c = E.findCharacter(r.characterId), ch = state.characters[c.id];
   const why = {
     coming: `افتح ${r.name} من المتجر (🗝 ${r.cost?.keys || 0}) لتبدأ هذه الحرب.`,
-    ongoing: `${c.name} يقاتل برتبة ${rk(p.level)} دون هزيمة. حافظ على العدّاد.`,
-    fierce: `هُزمت برتبة ${rk(p.info.defeatLevel)}، ثم نهضت ووصلت ${rk(p.level)}. القتال شرس — لا تتراجع.`,
-    crushed: `انهزمت برتبة ${rk(p.info.defeatLevel)}. لترجع للقتال لازم توصل ${rk(p.info.need)}.`,
+    ongoing: `${c.name} يقاتل في المستوى ${p.level} دون هزيمة. حافظ على العدّاد.`,
+    fierce: `هُزمت عند المستوى ${p.info.defeatLevel}، ثم نهضت ووصلت المستوى ${p.level}. القتال شرس — لا تتراجع.`,
+    crushed: `انكسر العدّاد إلى الصفر عند المستوى ${p.info.defeatLevel}. لتعود إلى حرب طاحنة يجب أن تصل المستوى ${p.info.need}.`,
   }[p.status];
   modal(`
     <div class="front" style="--c:${w.color}">
@@ -841,7 +759,7 @@ function showFront(id) {
       <h2>${r.name}</h2>
       <div class="front-status">${w.name}</div>
       <p>${why}</p>
-      ${ch ? `<div class="meter dark"><span class="meter-label">🗝 أيام نحو المفتاح التالي</span><b><bdi>${E.dayProgress(state).keyDays}/${E.KEY_EVERY}</bdi></b><div class="xp"><span style="width:${Math.round((E.dayProgress(state).keyDays / E.KEY_EVERY) * 100)}%"></span></div></div>` : ''}
+      ${ch ? `<div class="meter dark"><span class="meter-label">🗝 أيام نحو المفتاح التالي</span><b><bdi>${E.liveProgress(ch, dayFor(c.id)).keyDays}/${c.keyEveryDays || 15}</bdi></b><div class="xp"><span style="width:${Math.round((E.liveProgress(ch, dayFor(c.id)).keyDays / (c.keyEveryDays || 15)) * 100)}%"></span></div></div>` : ''}
       <div class="row wrap">
         <button class="btn ghost" id="back-map">← الخريطة</button>
         ${ch ? `<button class="btn primary" id="go-front">اذهب إلى الجبهة</button>` : `<button class="btn primary" id="go-front">المتجر</button>`}
@@ -1140,7 +1058,7 @@ function showCupRules() {
       <li>الطرف الثاني هو من يحدد الفوز أو الخسارة (برمزه السري).</li>
       <li>يُمنع منعًا باتًا بعد بدء التحدي المطالبة بالأموال تحت أي ظرف.</li>
       <li>القنوات هي الأماكن. للتحدي في مكان ثانٍ يجب امتلاك ${C.findCup('silver').name}؛ بناء العادات بالتدريج. ويمكن اختيار المكان الذي تبدأ منه.</li>
-      <li>الفوز بكأس يعطي مفاتيح 🗝 (مفتاح لكل 15 يومًا) — نفس المفاتيح التي تفتح الأماكن وترفع رتبتك.</li>
+      <li>الفوز بكأس يعطي مفاتيح 🗝 (مفتاح لكل 15 يومًا) — نفس المفاتيح التي تفتح الأماكن وترفع مستوى الشخصيات.</li>
       <li>مبلغ التأمين بالدينار = عدد أيام الكأس (الحجري 5 أيام = 5 دنانير).</li>
     </ol>
     <div class="cup-grid small">${CUPS.map((c) => `<div class="cup-tile" style="--c:${c.glow || c.color}">${cupIcon(c, 36)}<b>${c.name}</b><span>${c.days} يوم</span></div>`).join('')}</div>`);
@@ -1225,8 +1143,6 @@ function bind() {
   on('data-ranks', showRanks);
   on('data-edit-rank', editRank);
   on('data-promote', showPromote);
-  on('data-enter-char', (id) => enter(id));
-  on('data-goal', (v) => { E.setDayGoal(state, E.dayGoal(state) + +v); scheduleSave(); render(); });
 }
 
 function go(s) { if (s !== screen) SND.sfx.whoosh(); screen = s; closeModal(); render(); window.scrollTo(0, 0); }

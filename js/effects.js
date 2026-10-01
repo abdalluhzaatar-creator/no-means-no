@@ -75,10 +75,11 @@ export function playEvents(events, origin) {
     setTimeout(() => {
       if (ev.type === 'gold') { floatText(`+${ev.amount} 🪙`, origin, 'plus'); coinBurst(origin); }
       if (ev.type === 'penalty') floatText(`−${ev.amount} 🪙`, origin, 'minus');
-      if (ev.type === 'levelUp') { banner(ev.kind === 'region' ? 'تطوّرت المنطقة!' : 'ترقّيت!', `${ev.name} — ${ev.kind === 'region' ? 'تطوير' : 'رتبة'} ${ev.level}${ev.label ? ' · ' + ev.label : ''}`, '⬆'); confetti(); }
-      if (ev.type === 'perfectDay') banner('يوم كامل ✔', `${ev.streak} ورا بعض — كمّل لتوصل 15 وتاخد مفتاح`, '🔥');
-      if (ev.type === 'key') { banner('حصلت على مفتاح!', ev.from ? `${ev.from}` : '15 يوم كامل ورا بعض 👏 — افتح فيه بعد جديد أو ترقّى', '🗝'); confetti(); }
-      if (ev.type === 'rank') { banner('رتبة جديدة!', `${ev.name}: ${ev.rank} — انضافت مهامها لقائمة اليوم`, '🏅'); confetti(); }
+      if (ev.type === 'levelUp') { banner(ev.kind === 'region' ? 'تطوّرت المنطقة!' : 'ارتفع المستوى!', `${ev.name} — مستوى ${ev.level}${ev.label ? ' · ' + ev.label : ''}`, '⬆'); confetti(); }
+      if (ev.type === 'perfectDay') toast(`يوم كامل ✔ — ${ev.streak} متتالية`);
+      if (ev.type === 'key') { banner('حصلت على مفتاح!', `${ev.from}: 15 يومًا كاملًا متتاليًا`, '🗝'); confetti(); }
+      if (ev.type === 'levelReady') banner('المستوى جاهز!', `${ev.name}: أكملت أيام المستوى — استخدم مفتاحًا لرفع المستوى`, '⭐');
+      if (ev.type === 'rank') { banner('رتبة جديدة!', `${ev.name} أصبح ${ev.rank}`, '🏅'); confetti(); }
       if (ev.type === 'available') banner('محتوى جديد متاح!', `حققت شروط ${ev.name} — تجده في المتجر`, '🔓');
       if (ev.type === 'unlock') { banner('تم الفتح!', `أصبح ${ev.name} ملكك`, '🎉'); confetti(); }
     }, delay);
