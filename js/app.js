@@ -346,31 +346,57 @@ function editRank(v, { first = false } = {}) {
     <div class="task-edit">
       <input class="te-title" maxlength="80" placeholder="اسم المهمة — مثال: الصلاة" value="${esc(t.title)}">
       <label class="te-times" title="كم مرة باليوم">×<input type="number" min="1" max="${E.MAX_TIMES}" value="${E.timesOf(t)}" inputmode="numeric"><small>باليوم</small></label>
-      <button class="btn small ghost te-del" type="button" aria-label="احذف">✕</button>
+      ${first ? '' : '<button class="btn small ghost te-del" type="button" aria-label="احذف">✕</button>'}
     </div>`;
   modal(`
     <h2>${first ? `🎯 حدّد مهامك — ${esc(c.name)}` : `✎ ${esc(r.name)}`}</h2>
     <p class="muted">${idx === E.totalLevel(state.characters[id]) - 1 || idx === 0
-      ? `هاي المهام بتعملها <b>كل يوم</b>. اكتب كل مهمة وكم مرة لازم تعملها باليوم (مثلًا الصلاة × 5). لازم تخلّصها كلها وتسجّلها قبل الساعة 12 بالليل، و<b>15 يوم ورا بعض</b> = مفتاح 🗝 بترقّى فيه.`
+      ? (first ? `اختار <b>مهمة وحدة</b> بتعملها <b>كل يوم</b>، وكم مرة لازم تعملها باليوم (مثلًا الصلاة × 5). لازم تخلّصها وتسجّلها قبل الساعة 12 بالليل.`
+        : `هاي المهام بتعملها <b>كل يوم</b>. اكتب كل مهمة وكم مرة لازم تعملها باليوم (مثلًا الصلاة × 5). لازم تخلّصها كلها وتسجّلها قبل الساعة 12 بالليل، و<b>15 يوم ورا بعض</b> = مفتاح 🗝 بترقّى فيه.`)
       : 'بتنضاف لمهامك لما توصل هاي الرتبة، فوق مهام الرتب اللي قبلها.'}</p>
-    <div id="te-list">${(r.adds.length ? r.adds : [undefined]).map((t) => row(t)).join('')}</div>
-    <button class="btn ghost small" id="te-add" type="button">＋ مهمة ثانية</button>
-    <p class="muted small-text">المهمة اللي بتضل بنفس الاسم بتحتفظ بسلسلتها.</p>
+    <div id="te-list">${(first ? [r.adds[0]] : r.adds.length ? r.adds : [undefined]).map((t) => row(t)).join('')}</div>
+    ${first ? '' : `<button class="btn ghost small" id="te-add" type="button">＋ مهمة ثانية</button>
+    <p class="muted small-text">المهمة اللي بتضل بنفس الاسم بتحتفظ بسلسلتها.</p>`}
     <div class="row wrap"><button class="btn primary" id="rank-save">حفظ</button><button class="btn ghost" id="rank-cancel">${first ? 'لاحقًا' : 'رجوع'}</button></div>`);
   modalRefresh = null;
   const list = $('#te-list');
   const wire = () => list.querySelectorAll('.te-del').forEach((b) => (b.onclick = () => { b.closest('.task-edit').remove(); if (!list.children.length) { list.insertAdjacentHTML('beforeend', row()); wire(); } }));
   wire();
   list.querySelector('.te-title')?.focus();
-  $('#te-add').onclick = () => { list.insertAdjacentHTML('beforeend', row()); wire(); list.lastElementChild.querySelector('.te-title').focus(); };
+  if (!first) $('#te-add').onclick = () => { list.insertAdjacentHTML('beforeend', row()); wire(); list.lastElementChild.querySelector('.te-title').focus(); };
   $('#rank-cancel').onclick = back;
   $('#rank-save').onclick = () => {
-    const items = [...list.querySelectorAll('.task-edit')].map((el) => ({ title: el.querySelector('.te-title').value, times: el.querySelector('.te-times input').value }));
+    const items = [...list.querySelectorAll('.task-edit')].slice(0, first ? 1 : undefined).map((el) => ({ title: el.querySelector('.te-title').value, times: el.querySelector('.te-times input').value }));
     const res = E.setRankPlan(state, id, idx, items);
     if (!res.ok) return FX.toast(res.reason, 'err');
     scheduleSave(); FX.toast('حُفظت مهام ' + r.name);
-    if (first) { questsCollapsed = false; closeModal(); render(); } else { render(); back(); }
+    if (first) { questsCollapsed = false; render(); if (items.some((x) => x.title.trim())) showKeyUses(id); else closeModal(); } else { render(); back(); }
   };
+}
+
+// Shown after the first task is set: stay with it 15 days for a key, and what a key does.
+function showKeyUses(id) {
+  const c = E.findCharacter(id), ch = state.characters[id];
+  const nextRank = RANKS[E.totalLevel(ch)]?.name || 'الرتبة الجاية';
+  const dims = REGIONS.filter((r) => r.characterId);
+  modal(`
+    <div class="keyuse">
+      <div class="keyuse-icon">🗝</div>
+      <h2>خليك مستمر 15 يوم عشان تاخذ مفتاح</h2>
+      <p class="muted">كل يوم بتخلّص فيه مهمتك وبتسجّلها بينحسب. إذا فات يوم، العدّاد بيرجع من الصفر.</p>
+      <h3 class="keyuse-title">استخدامات المفتاح</h3>
+      <ul class="keyuse-list">
+        <li><span>⬆</span><div><b>ترقية الشخصية لـ${esc(nextRank)}</b><small>عشان تقدر تربّي عادة جديدة فوق عادتك.</small></div></li>
+        <li><span>🗺</span><div><b>فتح بُعد جديد من الأبعاد الثمانية</b></div></li>
+      </ul>
+      <div class="dims">${dims.map((r) => `
+        <figure class="dim ${state.regions[r.id] ? 'owned' : ''}">
+          ${regionSVG(r, new Set(), '')}
+          <figcaption>${state.regions[r.id] ? '✔ ' : ''}${esc(r.name)}</figcaption>
+        </figure>`).join('')}</div>
+      <button class="btn primary big" id="keyuse-ok">يلا نبلّش</button>
+    </div>`);
+  $('#keyuse-ok').onclick = closeModal;
 }
 
 function showRanks(id) {

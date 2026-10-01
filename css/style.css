@@ -526,3 +526,19 @@ body.in-dungeon .hud .cup-side, body.in-dungeon .hud .dock, body.in-dungeon .hud
 .te-times small { color: var(--muted); font-weight: 500; }
 .task-main { flex: 1; }
 .task strong small { white-space: nowrap; font-weight: 500; }
+
+/* After the first task: what a key is for */
+.keyuse { text-align: center; }
+.keyuse-icon { font-size: 2.6rem; }
+.keyuse h2 { margin: 4px 0 6px; }
+.keyuse-title { font-weight: 900; color: var(--ink); margin: 16px 0 8px; text-align: start; }
+.keyuse-list { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 8px; text-align: start; }
+.keyuse-list li { display: flex; gap: 10px; align-items: center; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.keyuse-list li > span { font-size: 1.3rem; }
+.keyuse-list small { display: block; color: var(--muted); }
+.dims { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 4px 0 16px; }
+.dim { margin: 0; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: var(--bg); }
+.dim .region-svg { width: 100%; aspect-ratio: 400 / 260; display: block; }
+.dim figcaption { font-size: .72rem; font-weight: 700; padding: 4px 2px; }
+.dim.owned { border-color: var(--gold); }
+@media (max-width: 480px) { .dims { gap: 6px; } .dim figcaption { font-size: .62rem; } }
