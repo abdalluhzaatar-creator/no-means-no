@@ -542,3 +542,22 @@ body.in-dungeon .hud .cup-side, body.in-dungeon .hud .dock, body.in-dungeon .hud
 .dim figcaption { font-size: .72rem; font-weight: 700; padding: 4px 2px; }
 .dim.owned { border-color: var(--gold); }
 @media (max-width: 480px) { .dims { gap: 6px; } .dim figcaption { font-size: .62rem; } }
+
+/* Rank inside a dimension: current → 15 days → next (view only) */
+.rank-step { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.rank-step .rank { font-size: .74rem; padding: 2px 9px; cursor: default; }
+.rank-step .rank.next { opacity: .85; outline: 1px dashed #fff8; outline-offset: 1px; }
+.step-arrow { flex: 1; min-width: 70px; display: grid; gap: 2px; text-align: center; }
+.step-arrow small { font-size: .68rem; font-weight: 700; color: #ffe7a8; white-space: nowrap; }
+.arrow-line { position: relative; display: block; height: 6px; border-radius: 99px; background: rgba(255,255,255,.2); margin-inline-end: 8px; }
+.arrow-line b { display: block; height: 100%; border-radius: inherit; background: linear-gradient(270deg, #f4d58d, #e0a93b); margin-inline-start: 0; }
+/* arrow head points to the next rank (left in RTL) */
+.arrow-line::after { content: ''; position: absolute; inset-inline-end: -8px; top: 50%; transform: translateY(-50%); border: 7px solid transparent; border-inline-start: 9px solid rgba(255,255,255,.55); border-inline-end: 0; }
+[dir=rtl] .arrow-line::after { border-inline-start: 9px solid rgba(255,255,255,.55); }
+.ranks-peek { border: 1px solid rgba(255,255,255,.3); background: rgba(255,255,255,.1); color: #fff; border-radius: 8px; width: 26px; height: 26px; cursor: pointer; font: inherit; line-height: 1; }
+.ranks-peek:hover { background: rgba(255,255,255,.22); }
+
+/* Commander's ranks desk */
+.dim-ranks { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 10px; }
+.dim-ranks li { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.dr-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }

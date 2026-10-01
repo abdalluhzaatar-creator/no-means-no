@@ -341,7 +341,7 @@ function progressionPanel(c, ch) {
 function editRank(v, { first = false } = {}) {
   const [id, i] = v.split(':'), c = E.findCharacter(id), idx = +i;
   const r = rankLadder(c)[idx];
-  const back = () => (first ? closeModal() : showPath());
+  const back = () => (first ? closeModal() : showPath(id));
   const row = (t = { title: '', times: 1 }) => `
     <div class="task-edit">
       <input class="te-title" maxlength="80" placeholder="اسم المهمة — مثال: الصلاة" value="${esc(t.title)}">
@@ -386,7 +386,7 @@ function showKeyUses(id) {
       <p class="muted">كل يوم بتخلّص فيه مهمتك وبتسجّلها بينحسب. إذا فات يوم، العدّاد بيرجع من الصفر.</p>
       <h3 class="keyuse-title">استخدامات المفتاح</h3>
       <ul class="keyuse-list">
-        <li><span>⬆</span><div><b>ترقية الشخصية لـ${esc(nextRank)}</b><small>عشان تقدر تربّي عادة جديدة فوق عادتك.</small></div></li>
+        <li><span>⬆</span><div><b>ترقية الشخصية لـ${esc(nextRank)}</b><small>عشان تقدر تربّي عادة جديدة فوق عادتك — من عند القائد بمقر القيادة.</small></div></li>
         <li><span>🗺</span><div><b>فتح بُعد جديد من الأبعاد الثمانية</b></div></li>
       </ul>
       <div class="dims">${dims.map((r) => `
@@ -404,7 +404,7 @@ function showRanks(id) {
   const cur = E.totalLevel(state.characters[id]);
   modal(`
     <h2>الرتب</h2>
-    <p class="muted">تبدأ من برونز 1. كل رتبة جديدة تُفتح بمفتاح 🗝، ومهامها أنت بتكتبها.</p>
+    <p class="muted">للنظر فقط. تبدأ من برونز 1، وكل رتبة جديدة بتاخدها بمفتاح 🗝 من عند <b>القائد</b> بمقر القيادة.</p>
     <ol class="ladder">${rankLadder(c).map((r, i) => `
       <li class="${i + 1 < cur ? 'done' : i + 1 === cur ? 'current' : ''}" style="--rank:${r.color}">
         <b>${i + 1}</b><span>${esc(r.name)}</span>
@@ -565,6 +565,22 @@ function prayerNowLine() {
   return next ? `<div class="hud-chip">⏳ ${PRAYER_NAMES[next[0]]} ${fmtTime(next[1].start)}</div>` : '';
 }
 
+// Current rank → (arrow: 15 days) → next rank. Ranks are granted by the commander at HQ.
+function rankStep(c, ch, live) {
+  const nextRank = RANKS[E.totalLevel(ch)];
+  const max = c.keyEveryDays || 15, pct = Math.round((live.keyDays / max) * 100);
+  return `
+  <div class="rank-step">
+    <span class="rank" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))}</span>
+    ${nextRank ? `<span class="step-arrow" title="${max} يوم كامل ورا بعض = مفتاح للرتبة الأعلى">
+      <small><bdi>${max}</bdi> يوم · <bdi>${live.keyDays}/${max}</bdi></small>
+      <i class="arrow-line"><b style="width:${pct}%"></b></i>
+    </span>
+    <span class="rank next" style="--rank:${nextRank.color}">${esc(nextRank.name)}</span>` : '<span class="muted-w">أعلى رتبة 🏆</span>'}
+    <button class="ranks-peek" data-ranks="${c.id}" title="اعرض ترتيب الرتب" aria-label="اعرض ترتيب الرتب">▾</button>
+  </div>`;
+}
+
 function placeHUD() {
   const c = E.findCharacter(currentChar);
   const ch = state.characters[c.id];
@@ -582,14 +598,8 @@ function placeHUD() {
       <div class="plate-avatar" style="--glow:${c.palette.glow}">☪</div>
       <div class="plate-body">
         <div class="plate-name">${c.name === r.name ? r.name : `${c.name} <span class="plate-place">· ${r.name}</span>`}</div>
-        <div class="plate-row">
-          ${stage ? `<button class="rank" data-ranks="${c.id}" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))}</button>` : ''}
-          <span class="plate-streak" title="أطول سلسلة">🔥 ${best}</span>
-        </div>
-        ${live ? (() => {
-          const row = (icon, label, cur, max) => `<div class="meter" data-open-path title="${label}"><span class="meter-label">${icon} ${label}</span><b><bdi>${cur}/${max}</bdi></b><div class="xp"><span style="width:${Math.round((cur / max) * 100)}%"></span></div></div>`;
-          return c.keyEveryDays ? row('🗝', 'أيام للمفتاح', live.keyDays, c.keyEveryDays) : '';
-        })() : ''}
+        <div class="plate-row"><span class="plate-streak" title="أطول سلسلة">🔥 ${best}</span></div>
+        ${stage && live ? rankStep(c, ch, live) : ''}
       </div>
     </div>
     ${hasPrayers(c) ? prayerNowLine() : ''}
@@ -605,8 +615,6 @@ function placeHUD() {
 
   <div class="dock">
     <button class="dock-btn" data-open-upgrades>🛠<span>طوّر ${r.name}</span>${next && state.gold >= next.cost ? '<i class="dot"></i>' : ''}</button>
-    ${c.stages ? `<button class="dock-btn promote-btn" data-promote>⬆<span>ترقية</span>${E.nextLevel(c, ch)?.adds?.length && state.keys ? '<i class="dot"></i>' : ''}</button>
-    <button class="dock-btn" data-open-path>🎖<span>الرتب</span></button>` : ''}
     ${hasPrayers(c) ? `<button class="dock-btn" data-pick-location>📍<span>${state.location ? esc(state.location.name) : 'مدينتك'}</span></button>` : ''}
   </div>`;
 }
@@ -627,9 +635,31 @@ function showUpgrades() {
   bind();
 }
 
+const backToDims = '<p><button class="btn ghost small" data-dim-ranks>→ كل الأبعاد</button></p>';
+
+// Commander's ranks desk (HQ): every opened dimension with its rank, the 15-day
+// counter, its rank tasks and promotion. Ranks are granted here, not inside a dimension.
+function showDimRanks() {
+  const list = CHARACTERS.filter((c) => c.stages && state.characters[c.id]);
+  modal(`
+    <h2>🎖 رتب الأبعاد</h2>
+    <p class="muted">القائد هو اللي بيعطي الرتب وبيتابع كل الأبعاد. من هون بتكتب مهام كل رتبة وبترقّي بالمفتاح 🗝 (معك ${state.keys}).</p>
+    <ul class="dim-ranks">${list.map((c) => {
+      const ch = state.characters[c.id], live = E.liveProgress(ch, dayFor(c.id)), next = E.nextLevel(c, ch);
+      const ready = next && !next.max && next.adds?.length && state.keys;
+      return `<li>
+        <div class="dr-head"><b>${esc(c.name)}</b><span class="rank" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))}</span></div>
+        ${bar(live.keyDays, c.keyEveryDays || 15, '🗝 أيام نحو المفتاح')}
+        <div class="row wrap"><button class="btn small" data-open-path="${c.id}">✎ مهام الرتب</button><button class="btn small ${ready ? 'primary' : ''}" data-promote="${c.id}">⬆ ترقية</button></div>
+      </li>`;
+    }).join('')}</ul>`);
+  modalRefresh = showDimRanks;
+  bind();
+}
+
 // The level-up screen: where you are, what the next rank adds, and one big button.
-function showPromote() {
-  const c = E.findCharacter(currentChar), ch = state.characters[c.id];
+function showPromote(id) {
+  const c = E.findCharacter(id), ch = state.characters[c.id];
   const next = E.nextLevel(c, ch), n = E.totalLevel(ch);
   const nextRank = RANKS[n];
   let body;
@@ -647,15 +677,15 @@ function showPromote() {
       </div>
       ${state.keys ? '' : `<p class="muted small-text">ما معك مفاتيح. بتكسب مفتاح كل ${c.keyEveryDays} يوم كامل ورا بعض.</p>`}`;
   }
-  modal(`<h2>⬆ ترقية</h2>${body}`);
-  modalRefresh = showPromote;
+  modal(`<h2>⬆ ترقية ${esc(c.name)}</h2>${body}${backToDims}`);
+  modalRefresh = () => showPromote(id);
   bind();
 }
 
-function showPath() {
-  const c = E.findCharacter(currentChar);
-  modal(progressionPanel(c, state.characters[c.id]).replace('<section class="card">', '<section>'));
-  modalRefresh = showPath;
+function showPath(id) {
+  const c = E.findCharacter(id);
+  modal(progressionPanel(c, state.characters[c.id]).replace('<section class="card">', '<section>').replace('<h3>🎖 الرتب</h3>', `<h3>🎖 رتب ${esc(c.name)}</h3>`) + backToDims);
+  modalRefresh = () => showPath(id);
   bind();
 }
 
@@ -861,6 +891,7 @@ function hqHUD() {
     </div>
   </aside>
   <div class="dock">
+    <button class="dock-btn promote-btn" data-dim-ranks>🎖<span>رتب الأبعاد</span>${CHARACTERS.some((c) => { const ch = state.characters[c.id]; const n = ch && c.stages && E.nextLevel(c, ch); return n && !n.max && n.adds?.length; }) && state.keys ? '<i class="dot"></i>' : ''}</button>
     <button class="dock-btn" data-war-map>🗺<span>خريطة الحرب</span></button>
     <button class="dock-btn" data-go="shop">🛒<span>افتح مكانًا</span></button>
     <button class="dock-btn" data-go="trophies">🏆<span>الكؤوس</span></button>
@@ -1154,7 +1185,8 @@ function bind() {
     if (r.ok && oasis?.char === c) { oasis.scene.pray(); if (c === 'worshipper') SND.sfx.prayer(); }
   });
   on('data-open-upgrades', showUpgrades);
-  on('data-open-path', showPath);
+  on('data-open-path', (id) => showPath(id));
+  on('data-dim-ranks', showDimRanks);
   on('data-open-atmo', showAtmosphere);
   on('data-cup-picker', showCupPicker);
   on('data-war-map', showWarMap);
@@ -1186,7 +1218,7 @@ function bind() {
   on('data-ranks', showRanks);
   on('data-edit-rank', (v) => editRank(v));
   on('data-set-tasks', (v) => editRank(v, { first: true }));
-  on('data-promote', showPromote);
+  on('data-promote', (id) => showPromote(id));
 }
 
 function go(s) { if (s !== screen) SND.sfx.whoosh(); screen = s; closeModal(); render(); window.scrollTo(0, 0); }
