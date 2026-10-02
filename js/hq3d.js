@@ -384,7 +384,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
       if (r <= WELL.ring[1]) return false;
       return !(spiral.acc <= 0.05 && inGap(x, z));
     }
-    if (r < WELL.r + 0.2) return !(r > WELL.ring[0] && r <= WELL.ring[1] && inGap(x, z));
+    if (r < WELL.r + 0.2) return !(r > WELL.ring[0] && inGap(x, z));               // only through the opening in the balustrade
     if (Math.abs(x) > 10.5 || z > HL - 1.2 || z < -HL + 12) return true;          // nave walls, doors, dais
     if (Math.abs(x) < 5.6 && z > -8 && z < 0) return true;                          // war table
     for (const [bx, bz] of [[-7, -9], [7, -9], [-7, 1], [7, 1]]) if (Math.hypot(x - bx, z - bz) < 1.2) return true; // braziers

@@ -60,24 +60,6 @@ export function buildVestibule(scene) {
     const rib = new THREE.Mesh(new THREE.TorusGeometry(W - 0.2, 0.35, 8, 32, Math.PI), dark); rib.position.set(0, H, z); g.add(rib);
   }
 
-  // Fire bowls on stands along the carpet.
-  const bowlM = std(0x3a2a1c, { metalness: 0.7, roughness: 0.4 });
-  const bowls = [];
-  for (const z of [22, 10, -2, -14]) for (const sx of [-1, 1]) {
-    const x = sx * 2.4;
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.35, 1.5, 8), bowlM); leg.position.set(x, 0.75, z); g.add(leg);
-    const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), gold); bowl.position.set(x, 1.9, z); g.add(bowl);
-    const coals = new THREE.Mesh(new THREE.CircleGeometry(0.5, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(2, 0.6, 0.15), toneMapped: false })); coals.rotation.x = -Math.PI / 2; coals.position.set(x, 1.86, z); g.add(coals);
-    const fire = new THREE.Group(); fire.position.set(x, 1.9, z); g.add(fire);
-    for (let k = 0; k < 4; k++) { const fl = new THREE.Mesh(new THREE.ConeGeometry(0.22 - k * 0.03, 0.9 - k * 0.12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(k % 2 ? 0xff7a1f : 0xffc34d).multiplyScalar(1.7), toneMapped: false, transparent: true, opacity: 0.9 })); fl.position.set((Math.random() - 0.5) * 0.3, 0.4, (Math.random() - 0.5) * 0.3); fire.add(fl); }
-    bowls.push({ fire, ph: Math.random() * 6 });
-  }
-  // Embers rising from the bowls.
-  const EM = 260, ep = new Float32Array(EM * 3), eo = Array.from({ length: EM }, (_, i) => bowls[i % bowls.length]);
-  for (let i = 0; i < EM; i++) { const b = eo[i].fire.position; ep.set([b.x, 2 + Math.random() * 4, b.z], i * 3); }
-  const embers = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(ep, 3)), new THREE.PointsMaterial({ color: 0xffa040, size: 0.08, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
-  g.add(embers);
-
   // The great arch of light at the far end.
   const arch = new THREE.Group(); arch.position.z = -LEN; g.add(arch);
   for (const sx of [-1, 1]) { const p = new THREE.Mesh(new THREE.BoxGeometry(1.4, 8.5, 1.6), gold); p.position.set(sx * 3.6, 4.25, 0); arch.add(p); }
@@ -132,7 +114,6 @@ export function buildVestibule(scene) {
   const lights = new THREE.Group(); g.add(lights);
   lights.add(new THREE.HemisphereLight(0x6a6080, 0x1a120c, 0.25));
   const torchLights = [LEN - 4, LEN - 12, LEN - 20, LEN - 28].flatMap((z) => [-1, 1].map((sx) => { const l = new THREE.PointLight(0xff8a3c, 30, 18, 1.5); l.position.set(sx * (W - 1.3), 5, z); l.userData.base = 30; lights.add(l); return l; }));
-  for (const z of [22, 10, -2, -14]) { const l = new THREE.PointLight(0xff9440, 26, 12, 1.5); l.position.set(0, 3, z); l.userData.base = 26; lights.add(l); torchLights.push(l); }
   const beam = new THREE.SpotLight(0xfff0d8, 90, 60, 0.3, 0.85, 1.5); beam.position.set(0, 4.5, -LEN - 4); beam.target.position.set(0, 0, LEN); beam.castShadow = true; beam.shadow.mapSize.set(1024, 1024); beam.shadow.bias = -0.0005;
   lights.add(beam, beam.target);
   lights.visible = false;
@@ -145,9 +126,6 @@ export function buildVestibule(scene) {
     const z = pos.z - VZ, k = THREE.MathUtils.clamp((LEN - z) / (LEN * 2), 0, 1);
     for (const f of flames) { f.fl.scale.y = 0.82 + Math.sin(t * 12 + f.ph) * 0.14 + Math.sin(t * 25 + f.ph) * 0.06; f.fl.rotation.y = t + f.ph; }
     for (const l of torchLights) l.intensity = l.userData.base * (0.82 + Math.sin(t * 11 + l.position.z) * 0.1 + Math.sin(t * 23 + l.position.x) * 0.06);
-    for (const b of bowls) { const k = 0.85 + Math.sin(t * 9 + b.ph) * 0.12 + Math.sin(t * 21 + b.ph) * 0.06; b.fire.scale.set(1, k * 1.15, 1); b.fire.rotation.y = t * 0.8 + b.ph; }
-    for (let i = 0; i < EM; i++) { const b = eo[i].fire.position; let y = ep[i * 3 + 1] + dt * (0.6 + (i % 7) * 0.15); if (y > 7) { y = 2.2; ep[i * 3] = b.x; ep[i * 3 + 2] = b.z; } ep[i * 3 + 1] = y; ep[i * 3] += Math.sin(t * 2 + i) * dt * 0.15; }
-    embers.geometry.attributes.position.needsUpdate = true;
     shafts.forEach((s, i) => { s.material.opacity = (0.012 + k * 0.018) + Math.sin(t * 0.7 + i) * 0.005; });
     for (const m of mist.children) {
       const u = m.userData; m.position.z = u.z0 + Math.sin(t * 0.25 * u.v + u.ph) * 2; m.position.x += Math.sin(t * 0.3 + u.ph) * dt * 0.2;
