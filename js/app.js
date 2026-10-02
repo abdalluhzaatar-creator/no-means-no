@@ -797,7 +797,7 @@ function ceremony(p) {
       <div class="cer-rays"></div>
       <div class="cer-kicker">ترقية ${esc(p.name)}</div>
       <div class="cer-steps">${p.from ? `<span class="cer-old">${esc(p.from)}</span><b>←</b>` : ''}<span class="cer-medal">🏅<em>${esc(p.rank)}</em></span></div>
-      <p>بالمفتاح 🗝 وصلت رتبة جديدة. من بكرة بتنضاف لمهامك اليومية:</p>
+      <p>بالمفتاح 🗝 وصلت رتبة جديدة، وانضافت لمهامك اليومية من اليوم:</p>
       <ul class="cer-adds">${(p.adds || []).map((t) => `<li>+ ${esc(t)}</li>`).join('') || '<li>—</li>'}</ul>
       <p class="muted-w">كمّل 15 يوم كامل ورا بعض عشان تاخد مفتاح الرتبة الجاية.</p>
       <button class="btn primary big" data-cer-ok>يلا 💪</button>
