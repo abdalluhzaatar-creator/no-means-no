@@ -279,7 +279,7 @@ export function levelUpCharacter(s, id) {
   ch.levelDays = 0;
   const stageName = rankName(ch);
   addLog(s, `⬆ ${def.name} → ${stageName}`);
-  const events = [{ type: 'rank', name: def.name, rank: stageName }];
+  const events = [{ type: 'rank', id, name: def.name, rank: stageName, from: RANKS[totalLevel(ch) - 2]?.name, color: rankColor(ch), adds: (next.adds || []).map((t) => t.title) }];
   return done(s, events);
 }
 

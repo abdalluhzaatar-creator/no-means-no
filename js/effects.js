@@ -79,7 +79,6 @@ export function playEvents(events, origin) {
       if (ev.type === 'perfectDay') toast(`يوم كامل ✔ — ${ev.streak} متتالية`);
       if (ev.type === 'key') { banner('حصلت على مفتاح!', `${ev.from}: 15 يومًا كاملًا متتاليًا`, '🗝'); confetti(); }
       if (ev.type === 'levelReady') banner('المستوى جاهز!', `${ev.name}: أكملت أيام المستوى — استخدم مفتاحًا لرفع المستوى`, '⭐');
-      if (ev.type === 'rank') { banner('رتبة جديدة!', `${ev.name} أصبح ${ev.rank}`, '🏅'); confetti(); }
       if (ev.type === 'available') banner('محتوى جديد متاح!', `حققت شروط ${ev.name} — تجده في المتجر`, '🔓');
       if (ev.type === 'unlock') { banner('تم الفتح!', `أصبح ${ev.name} ملكك`, '🎉'); confetti(); }
     }, delay);

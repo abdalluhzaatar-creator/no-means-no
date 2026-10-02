@@ -33,6 +33,7 @@ function act(result, originEl) {
   if (typeof result === 'function') { closeDays(); result = result(); }
   if (!result.ok) { FX.toast(result.reason, 'err'); return result; }
   FX.playEvents(result.events, originEl);
+  for (const ev of result.events) if (ev.type === 'rank') setTimeout(() => ceremony({ kind: 'rank', ...ev }), 300);
   SND.playEvents(result.events);
   scheduleSave();
   render();
@@ -641,7 +642,7 @@ function showDimRanks() {
       return `<li>
         <div class="dr-head"><b>${esc(c.name)}</b><span class="rank" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))}</span></div>
         ${bar(live.keyDays, c.keyEveryDays || 15, '🗝 أيام نحو المفتاح')}
-        <div class="row wrap"><button class="btn small" data-open-path="${c.id}">✎ مهام الرتب</button><button class="btn small ${ready ? 'primary' : ''}" data-promote="${c.id}">⬆ ترقية</button></div>
+        <div class="row wrap"><button class="btn small" data-open-path="${c.id}">✎ مهام الرتب</button>${next?.max ? '<span class="rank-max">🏆 أعلى رتبة</span>' : `<button class="btn small ${ready ? 'primary' : ''}" data-promote="${c.id}">⬆ ترقية</button>`}</div>
       </li>`;
     }).join('')}</ul>`);
   modalRefresh = showDimRanks;
@@ -782,10 +783,44 @@ function showCommandRanks() {
     }).join('')}</ol>`);
 }
 
+// Promotion ceremony: a full-screen moment for a dimension's new rank (what it adds
+// to the daily tasks) or the commander's new rank (granted by keys collected).
+function ceremony(p) {
+  closeModal();
+  document.querySelector('.ceremony')?.remove();
+  const el = document.createElement('div');
+  el.className = `ceremony cer-${p.kind}`;
+  const color = p.kind === 'rank' ? p.color || '#d4a72c' : '#c9962c';
+  el.style.setProperty('--c', color);
+  el.innerHTML = p.kind === 'rank' ? `
+    <div class="cer-card">
+      <div class="cer-rays"></div>
+      <div class="cer-kicker">ترقية ${esc(p.name)}</div>
+      <div class="cer-steps">${p.from ? `<span class="cer-old">${esc(p.from)}</span><b>←</b>` : ''}<span class="cer-medal">🏅<em>${esc(p.rank)}</em></span></div>
+      <p>بالمفتاح 🗝 وصلت رتبة جديدة. من بكرة بتنضاف لمهامك اليومية:</p>
+      <ul class="cer-adds">${(p.adds || []).map((t) => `<li>+ ${esc(t)}</li>`).join('') || '<li>—</li>'}</ul>
+      <p class="muted-w">كمّل 15 يوم كامل ورا بعض عشان تاخد مفتاح الرتبة الجاية.</p>
+      <button class="btn primary big" data-cer-ok>يلا 💪</button>
+    </div>` : `
+    <div class="cer-card">
+      <div class="cer-rays"></div>
+      <div class="cer-kicker">ترقية القائد</div>
+      <div class="cer-salute">🫡</div>
+      <div class="cer-steps">${p.from ? `<span class="cer-old">${esc(p.from)}</span><b>←</b>` : ''}<span class="cer-medal">🎖<em>${esc(p.rank)}</em></span></div>
+      <p>جمعت ${KEYS_PER_RANK} مفاتيح، فالقائد ترقّى لحاله. المحاربين بقاعة الأبطال بيحيّوك.</p>
+      <p class="muted-w">${p.next ? `الرتبة الجاية: <b>${esc(p.next)}</b> بعد ${KEYS_PER_RANK} مفاتيح كمان.` : 'وصلت أعلى رتبة للقائد 🏆'}</p>
+      <button class="btn primary big" data-cer-ok>تمام 🫡</button>
+    </div>`;
+  document.body.appendChild(el);
+  SND.sfx.levelUp(); setTimeout(() => SND.sfx.fanfare(), 500); FX.confetti(); setTimeout(FX.confetti, 900);
+  if (p.kind === 'commander') hqScene?.salute();
+  el.querySelector('[data-cer-ok]').onclick = () => { el.classList.add('out'); setTimeout(() => el.remove(), 350); };
+}
+
 // Celebrate when the commander's level went up since the last look.
 function checkCommander() {
   const cm = commander(state);
-  if (lastCmdLevel != null && cm.level > lastCmdLevel) FX.banner(`ترقية القائد — ${cm.rank}`, `جمعت ${KEYS_PER_RANK} مفاتيح فترقّى القائد تلقائيًا`, '🫡');
+  if (lastCmdLevel != null && cm.level > lastCmdLevel) setTimeout(() => ceremony({ kind: 'commander', rank: cm.rank, from: COMMAND_RANKS[cm.rankIndex - 1]?.[1], next: cm.nextRank }), 1600);
   lastCmdLevel = cm.level;
 }
 // The eight dimensions with their war status.
@@ -1234,10 +1269,14 @@ $('#account').onclick = () => {
     </div>
     <h3>🧪 وضع التجربة</h3>
     <p class="muted small-text">بيعبّي اللعبة بتقدّم وهمي (كل الأبعاد مفتوحة ومطوّرة، رتب، مفاتيح، كؤوس، هزيمة على خريطة الحرب) عشان تشوف كل إشي. لما تخلص اضغط "إعادة اللعبة من البداية" وبيروح كله.</p>
-    <button class="btn" id="demo-fill">${state.demo ? '🧪 عبّي التجربة من جديد' : '🧪 افتح كل إشي (تجربة)'}</button>`);
+    <div class="row wrap"><button class="btn" id="demo-fill">${state.demo ? '🧪 عبّي التجربة من جديد' : '🧪 افتح كل إشي (تجربة)'}</button>
+      <button class="btn ghost" id="demo-rank">🎬 شوف ترقية شخصية</button><button class="btn ghost" id="demo-cmd">🎬 شوف ترقية القائد</button></div>
+    <p class="muted-w small-text">أزرار 🎬 بتعرض شو بيصير وقت الترقية بدون ما تغيّر إشي بتقدّمك.</p>`);
   $('#modal-body [data-pick-location]').onclick = pickLocation;
   const lo = $('#logout');
   if (lo) lo.onclick = () => { storage.logout(); location.reload(); };
+  $('#demo-rank').onclick = () => ceremony({ kind: 'rank', name: 'البعد الجسدي', from: 'برونز 1', rank: 'برونز 2', color: RANKS[1].color, adds: [E.findCharacter('athlete').ladder?.[0]?.title || 'مهمة جديدة'] });
+  $('#demo-cmd').onclick = () => ceremony({ kind: 'commander', from: COMMAND_RANKS[2][1], rank: COMMAND_RANKS[3][1], next: COMMAND_RANKS[4][1] });
   $('#demo-fill').onclick = () => ask('رح ينضاف تقدّم وهمي فوق تقدّمك الحالي. بتقدر تمسحه كله بعدين من "إعادة اللعبة من البداية". نكمل؟', async () => {
     const { fillDemo } = await import('./demo.js');
     fillDemo(state); C.ensure(state); await storage.save(state); go('world'); FX.banner('🧪 وضع التجربة', 'كل إشي مفتوح هلأ. لما تخلص: الحساب ← إعادة اللعبة من البداية', '🧪');
