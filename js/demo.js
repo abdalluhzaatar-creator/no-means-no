@@ -1,26 +1,19 @@
 // Trial mode: fills a save with made-up progress so every part of the game can be
-// seen (all dimensions open and upgraded, ranks, keys, streaks, cups, a defeat on
-// the war map). It is fake on purpose — "إعادة اللعبة من البداية" in Settings wipes it.
+// seen at its maximum (all dimensions open and fully upgraded, every rank, the top
+// commander rank, every cup). It is fake on purpose — "إعادة اللعبة من البداية" in Settings wipes it.
 import { CHARACTERS, REGIONS, CUPS } from './content.js';
 import * as E from './engine.js';
 import * as C from './cups.js';
 
 const DAY = 86400000;
-// Rank reached per character (1 = Bronze 1 … 12 = Platinum 3) and days into the key chain.
-const PLAN = {
-  worshipper: { rank: 6, keyDays: 11 },
-  scholar: { rank: 4, keyDays: 7 },
-  athlete: { rank: 3, keyDays: 13 },
-  empath: { rank: 2, keyDays: 4, defeat: true },
-  host: { rank: 5, keyDays: 9 },
-  builder: { rank: 3, keyDays: 2, defeat: true, recovered: true },
-  merchant: { rank: 2, keyDays: 14 },
-  keeper: { rank: 1, keyDays: 5 },
-};
-// The spiritual dimension starts empty, so trial mode writes it a ladder too.
+// Everything at its maximum: every character at Platinum 3 with no defeat.
+const TOP = 12;
+const PLAN = Object.fromEntries(CHARACTERS.map((c) => [c.id, { rank: TOP, keyDays: 14 }]));
+// The spiritual dimension starts empty, so trial mode writes all twelve of its ranks.
 const SPIRITUAL = [
   [{ title: 'الصلاة', times: 5 }], [{ title: 'قراءة صفحة من القرآن' }], [{ title: 'أذكار الصباح' }, { title: 'أذكار المساء' }],
   [{ title: 'السنن الرواتب' }], [{ title: 'قيام الليل' }], [{ title: 'صلاة الضحى' }], [{ title: 'صيام الاثنين والخميس' }],
+  [{ title: 'حفظ آية' }], [{ title: 'صدقة يومية' }], [{ title: 'الاستغفار', times: 3 }], [{ title: 'صلة رحم' }], [{ title: 'ختمة شهرية — جزء يومي' }],
 ];
 
 export function fillDemo(s, now = Date.now()) {
@@ -39,30 +32,27 @@ export function fillDemo(s, now = Date.now()) {
       stage: Math.floor(n / 5), level: (n % 5) + 1,
       perfectStreak: p.keyDays + 15 * (p.rank - 1), keyDays: p.keyDays, lastPerfectDate: yesterday, levelDays: 0, levelReady: false,
     });
-    if (p.defeat) ch.defeat = { level: p.recovered ? p.rank - 1 : p.rank, date: yesterday };
-    else delete ch.defeat;
-    // Some of today's tasks already logged, the rest still to do.
-    E.activeTasks(def, ch).forEach((t, i) => {
-      const times = E.timesOf(t), half = i % 2 === 0;
-      s.tasks[`${def.id}.${t.id}`] = half
-        ? { streak: p.keyDays + 1, lastDate: today, doneDate: today, count: times, lastResult: 'success', at: now }
-        : { streak: p.keyDays, lastDate: yesterday, doneDate: yesterday, count: times, lastResult: 'success', at: now - DAY };
+    delete ch.defeat;
+    // Every task of today already done (a full day in every dimension).
+    E.activeTasks(def, ch).forEach((t) => {
+      s.tasks[`${def.id}.${t.id}`] = { streak: ch.perfectStreak + 1, lastDate: today, doneDate: today, count: E.timesOf(t), lastResult: 'success', at: now };
     });
+    ch.perfectStreak++; ch.lastPerfectDate = today;
   }
   s.lastDay = today;
-  // Keys: 4 in hand, 19 collected over time (commander at عقيد, 2 keys from عميد).
-  s.keys = 4;
-  s.gold = 2450;
-  Object.assign(s.stats, { keysEarned: 19, goldEarned: 6200, goldLost: 310, tasksCompleted: 640, tasksFailed: 23, bestStreak: 64 });
-  // Cups: four won, one lost, one under way.
+  // Keys: plenty in hand, and enough collected for the top commander rank (فريق).
+  s.keys = 99;
+  s.gold = 99999;
+  Object.assign(s.stats, { keysEarned: 120, goldEarned: 150000, goldLost: 0, tasksCompleted: 9000, tasksFailed: 0, bestStreak: 365 });
+  // Cups: every cup won, spread over the dimensions.
   const c = C.ensure(s);
-  c.wallet = 75;
-  const won = ['stone', 'wood', 'copper', 'silver'], start = (days) => now - days * DAY;
-  c.challenges = [
-    ...won.map((id, i) => ({ id: `demo${i}`, channel: i === 3 ? 'body' : 'sanctuary', cupId: id, partner: 'صديق', pin: '0000', start: start(200 - i * 40), status: 'won', endedAt: start(150 - i * 40), keys: C.keyReward(CUPS.find((x) => x.id === id)) })),
-    { id: 'demo4', channel: 'library', cupId: 'iron', partner: 'أخي', pin: '0000', start: start(60), status: 'lost', endedAt: start(45) },
-    { id: 'demo5', channel: 'sanctuary', cupId: 'gold', partner: 'صديق', pin: '0000', start: start(20), stakeUsd: 63.45, stakeJod: 45, status: 'active' },
-  ];
+  c.wallet = 500;
+  const dims = REGIONS.filter((r) => r.characterId).map((r) => r.id);
+  let back = 0;
+  c.challenges = CUPS.map((cup, i) => {
+    const end = now - back * DAY; back += cup.days + 2;
+    return { id: `demo${i}`, channel: dims[i % dims.length], cupId: cup.id, partner: 'صديق', pin: '0000', start: end - cup.days * DAY, status: 'won', endedAt: end, keys: C.keyReward(cup) };
+  });
   s.demo = true;
   s.log.unshift({ t: now, text: '🧪 وضع التجربة: تقدّم وهمي لعرض اللعبة', delta: 0 });
   return s;
