@@ -361,8 +361,8 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   const heaven = buildHeaven(scene, { owned: new Set(owned) });
   const gallery = buildVestibule(scene);
   dungeon.setFuture(future); dungeon.setChild(child);
-  // The marionette of the eight leaders, on its stand in the middle of the vault.
-  const mario = buildMarionette(scene, { at: new THREE.Vector3(DX, 0, 4), face: 0 });
+  // The marionette of the eight leaders, on its stand by the left wall of the vault, facing the aisle.
+  const mario = buildMarionette(scene, { at: new THREE.Vector3(DX - 10, 0, 4), face: Math.PI / 2 });
   let holdK = 0, heldAt = 0;
   const inSide = (x, z) => x > 10 && x < HW + 0.8 && Math.abs(z - SIDE.z) < SIDE.w / 2 - 0.45;
   // Spiral stairs: follow how far round the commander has walked (angle unwrapped),
