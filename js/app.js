@@ -33,7 +33,11 @@ function act(result, originEl) {
   if (typeof result === 'function') { closeDays(); result = result(); }
   if (!result.ok) { FX.toast(result.reason, 'err'); return result; }
   FX.playEvents(result.events, originEl);
-  for (const ev of result.events) if (ev.type === 'rank') setTimeout(() => ceremony({ kind: 'rank', ...ev }), 300);
+  for (const ev of result.events) {
+    if (ev.type === 'rank') setTimeout(() => ceremony({ kind: 'rank', ...ev }), 300);
+    if (ev.type === 'shipDay') FX.banner(`⛵ بناء السفينة ${ev.days}/${ev.total}`, 'خلّصت مهام كل الأبعاد اليوم، فانبنى جزء جديد من السفينة.', '🔨');
+    if (ev.type === 'shipDone') setTimeout(() => ceremony({ kind: 'ship' }), 600);
+  }
   SND.playEvents(result.events);
   scheduleSave();
   render();
@@ -268,7 +272,7 @@ function renderWorld() {
 // The 3D world is mounted after the screen HTML is in place; falls back to the flat map.
 let worldSpots = [], disposeWorld = null;
 let worldKey = '';
-const worldSignature = () => REGIONS.map((r) => E.mapVisibility(state, r)).join();
+const worldSignature = () => REGIONS.map((r) => E.mapVisibility(state, r)).join() + '|' + E.shipState(state).days + E.shipState(state).unlocked;
 async function bindWorld() {
   disposeWorld?.(); disposeWorld = null;
   const v = $('#world-view');
@@ -278,7 +282,7 @@ async function bindWorld() {
     const { mountWorld } = await import('./world3d.js');
     if (!v.isConnected) return;
     v.innerHTML = '';
-    disposeWorld = mountWorld(v, worldSpots, openSpot, { sky: skyInfo, weather: currentWeather() });
+    disposeWorld = mountWorld(v, worldSpots, openSpot, { sky: skyInfo, weather: currentWeather(), ship: E.shipState(state) });
     loadWeather();
   } catch (err) {
     console.warn('3D world unavailable', err);
@@ -792,7 +796,15 @@ function ceremony(p) {
   el.className = `ceremony cer-${p.kind}`;
   const color = p.kind === 'rank' ? p.color || '#d4a72c' : '#c9962c';
   el.style.setProperty('--c', color);
-  el.innerHTML = p.kind === 'rank' ? `
+  el.innerHTML = p.kind === 'ship' ? `
+    <div class="cer-card">
+      <div class="cer-rays"></div>
+      <div class="cer-kicker">السفينة جاهزة</div>
+      <div class="cer-salute">⛵</div>
+      <p class="cer-quote">«بنينا السفينة. القادة جاهزين… الجزيرة بتستنانا.»</p>
+      <p class="muted-w">${E.SHIP_DAYS} يوم بنيتها فيهم بإيدك، يوم كامل ورا يوم. السفينة راسية جنب مقر القيادة.</p>
+      <button class="btn primary big" data-cer-ok>يلا نبحر 🌊</button>
+    </div>` : p.kind === 'rank' ? `
     <div class="cer-card">
       <div class="cer-rays"></div>
       <div class="cer-kicker">ترقية ${esc(p.name)}</div>
@@ -807,8 +819,10 @@ function ceremony(p) {
       <div class="cer-kicker">ترقية القائد</div>
       <div class="cer-salute">🫡</div>
       <div class="cer-steps">${p.from ? `<span class="cer-old">${esc(p.from)}</span><b>←</b>` : ''}<span class="cer-medal">🎖<em>${esc(p.rank)}</em></span></div>
-      <p>تقدّمك بالأبعاد رقّى القائد. المحاربين بقاعة الأبطال بيحيّوك.</p>
-      <p class="muted-w">${p.next ? `الرتبة الجاية: <b>${esc(p.next)}</b> بعد ${p.toNext} خطوات كمان (فتح بعد أو رتبة لشخصية).` : 'كل الأبعاد فل — ختمت اللعبة 🏆'}</p>
+      ${p.next ? `<p>تقدّمك بالأبعاد رقّى القائد. المحاربين بقاعة الأبطال بيحيّوك.</p>
+      <p class="muted-w">الرتبة الجاية: <b>${esc(p.next)}</b> بعد ${p.toNext} خطوات كمان (فتح بعد أو رتبة لشخصية).</p>`
+      : `<p class="cer-quote">«أعتقد الآن أنني أستطيع احتلال جزيرة، لأن القادة أصبحوا أقوياء.»</p>
+      <p class="muted-w">بس أول إشي لازم نبني سفينة ⛵: ${E.SHIP_DAYS} يوم، وكل يوم بتخلّص فيه مهام كل الأبعاد بتنبني شوي.</p>`}
       <button class="btn primary big" data-cer-ok>تمام 🫡</button>
     </div>`;
   document.body.appendChild(el);
@@ -905,6 +919,11 @@ function hqHUD() {
   <button class="hud-chip view-toggle" data-view-mode title="إخفاء اللوحات لمشاهدة القاعة">👁 مشاهدة</button>
   <aside class="cup-side">
     <button class="hud-chip warmap-btn" data-war-map>🗺 خريطة الحرب</button>
+    ${(() => { const sh = E.shipState(state); return sh.unlocked ? `<div class="challenge-card ship-card">
+      <b>⛵ بناء السفينة</b>
+      <div class="meter"><span class="meter-label">${sh.done ? 'السفينة جاهزة ✔' : 'أيام البناء'}</span><b><bdi>${sh.days}/${sh.total}</bdi></b><div class="xp"><span style="width:${Math.round((sh.days / sh.total) * 100)}%"></span></div></div>
+      <small class="muted-w">${sh.done ? 'السفينة راسية جنب المقر — الجزيرة بتستنى.' : sh.today === E.today() ? 'انبنى جزء اليوم ✔ — ارجع بكرة.' : 'خلّص مهام كل الأبعاد اليوم عشان ينبني جزء جديد.'}</small>
+    </div>` : ''; })()}
     <div class="challenge-card report ${reportOpen ? 'open' : ''}">
       <button class="report-title" data-toggle-report>📋 تقرير القائد <span>${reportOpen ? '▴' : '▾'}</span></button>
       <small class="muted-w">يترقّى مع تقدّمك: كل بعد بتفتحه وكل رتبة لشخصية = خطوة (${cm.steps}/${cm.total}).</small>

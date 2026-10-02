@@ -336,6 +336,7 @@ export function reportTask(s, charId, taskId, success, { applyPenalty = true, da
   p.at = Date.now(); // when it was reported (used to reject reports made outside a prayer's time)
   s.tasks[taskKey(charId, taskId)] = p;
   if (p.lastResult === 'success') checkPerfectDay(s, def, ch, date, events);
+  if (p.lastResult === 'success') checkShipDay(s, date, events);
   return done(s, events);
 }
 
@@ -384,6 +385,25 @@ export function closeDays(s, now = today()) {
     }
   }
   return missed;
+}
+
+// ---------- The ship (after the whole journey) ----------
+// When every dimension is open and every character is at the last rank, the commander
+// wants to take an island: a ship must be built over SHIP_DAYS days. Each day on which
+// every dimension's tasks are all done adds one day of building.
+export const SHIP_DAYS = 30;
+const dimChars = () => CHARACTERS.filter((c) => c.stages && REGIONS.some((r) => r.characterId === c.id));
+export const allAtTop = (s) => REGIONS.filter((r) => r.characterId).every((r) => s.regions?.[r.id])
+  && dimChars().every((c) => s.characters?.[c.id] && totalLevel(s.characters[c.id]) >= RANKS.length);
+export const shipState = (s) => ({ unlocked: allAtTop(s), days: Math.min(SHIP_DAYS, s.ship?.days || 0), total: SHIP_DAYS, done: (s.ship?.days || 0) >= SHIP_DAYS, today: s.ship?.lastDate });
+function checkShipDay(s, date, events) {
+  if (!allAtTop(s)) return;
+  s.ship ||= { days: 0, lastDate: null };
+  if (s.ship.lastDate === date || s.ship.days >= SHIP_DAYS) return;
+  if (!dimChars().every((c) => s.characters[c.id].lastPerfectDate === date)) return;
+  s.ship.days++; s.ship.lastDate = date;
+  addLog(s, `⛵ بناء السفينة ${s.ship.days}/${SHIP_DAYS}`);
+  events.push({ type: s.ship.days >= SHIP_DAYS ? 'shipDone' : 'shipDay', days: s.ship.days, total: SHIP_DAYS });
 }
 
 // ---------- Regions ----------

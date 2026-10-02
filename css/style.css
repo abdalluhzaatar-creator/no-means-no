@@ -592,3 +592,5 @@ body.is-demo::before { content: '🧪 وضع التجربة — تقدّم وه�
 @keyframes cer-in { from { opacity: 0; } } @keyframes cer-out { to { opacity: 0; transform: scale(.96); } }
 @keyframes cer-pop { from { transform: scale(.2) rotate(-20deg); opacity: 0; } }
 @keyframes cer-spin { to { transform: rotate(360deg); } }
+.cer-quote { font-size: 1.1rem; font-weight: 800; color: #3a2412; line-height: 1.7; margin: 10px 0; }
+.ship-card b { display: block; margin-bottom: 6px; color: #ffe7a8; }

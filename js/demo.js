@@ -53,6 +53,8 @@ export function fillDemo(s, now = Date.now()) {
     const end = now - back * DAY; back += cup.days + 2;
     return { id: `demo${i}`, channel: dims[i % dims.length], cupId: cup.id, partner: 'صديق', pin: '0000', start: end - cup.days * DAY, status: 'won', endedAt: end, keys: C.keyReward(cup) };
   });
+  // The ship after the journey: two thirds built, so its building can be seen.
+  s.ship = { days: 20, lastDate: yesterday };
   s.demo = true;
   s.log.unshift({ t: now, text: '🧪 وضع التجربة: تقدّم وهمي لعرض اللعبة', delta: 0 });
   return s;

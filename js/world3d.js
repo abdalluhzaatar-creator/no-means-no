@@ -34,7 +34,7 @@ function makeNoise(seed = 3) {
   return (x, y, oct = 5) => { let a = 1, fr = 1, t = 0, m = 0; for (let i = 0; i < oct; i++) { t += n2(x * fr, y * fr) * a; m += a; a *= 0.5; fr *= 2.03; } return t / m; };
 }
 
-export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ elev: 45, pm: false }), weather = 'clear' } = {}) {
+export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ elev: 45, pm: false }), weather = 'clear', ship = null } = {}) {
   const noise = makeNoise(11);
   const shown = spots.filter((s) => s.vis !== 'hidden').map((s) => {
     let [x, z] = toWorld(s.def.map);
@@ -291,6 +291,56 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
       }
     }
     g.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+  }
+
+  // ---------- the ship being built beside the headquarters islet ----------
+  // Appears once everything is at its maximum; grows with the building days:
+  // keel and ribs → planked hull → deck and mast → sails → flag (ready, afloat).
+  let shipObj = null;
+  if (ship?.unlocked && hqSpot && bridge) {
+    const k = ship.days / ship.total;
+    const side = new THREE.Vector2(-bridge.dir.y, bridge.dir.x);
+    const sx = hqSpot.x + side.x * (ISLET.edge + 6), sz = hqSpot.z + side.y * (ISLET.edge + 6);
+    const g = new THREE.Group(); g.position.set(sx, SEA - 0.4, sz); g.rotation.y = Math.atan2(bridge.dir.x, bridge.dir.y); scene.add(g);
+    const wood = new THREE.MeshStandardMaterial({ color: 0x7a4e2a, roughness: 0.8 }), dark = new THREE.MeshStandardMaterial({ color: 0x4a2e18, roughness: 0.8 });
+    const L = 26, B = 8;
+    // keel
+    const keel = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, L), dark); keel.position.y = 0.4; g.add(keel);
+    // ribs (always while building; hidden under the planks later)
+    const ribs = new THREE.Group(); g.add(ribs);
+    for (let i = 0; i < 11; i++) { const z = -L / 2 + 2 + i * ((L - 4) / 10), w = B * (1 - Math.pow(Math.abs(z) / (L / 2), 2) * 0.7); const rib = new THREE.Mesh(new THREE.TorusGeometry(w / 2, 0.22, 6, 16, Math.PI), wood); rib.rotation.z = Math.PI; rib.rotation.y = 0; rib.position.set(0, w / 2 + 0.4, z); ribs.add(rib); }
+    // hull: a lathe-like shape built from a scaled cylinder
+    // Hull: the lower half of a cylinder (a bowl open to the sky), ends closed by half discs.
+    const hull = new THREE.Group(); hull.position.y = B * 0.38; g.add(hull);
+    const shell = new THREE.Mesh(new THREE.CylinderGeometry(B / 2, B / 2, L, 24, 1, true, -Math.PI / 2, Math.PI), new THREE.MeshStandardMaterial({ color: 0x7a4e2a, roughness: 0.8, side: THREE.DoubleSide }));
+    shell.rotation.x = Math.PI / 2; shell.scale.set(1, 1, 0.75); hull.add(shell);
+    for (const e of [-1, 1]) { const cap = new THREE.Mesh(new THREE.CircleGeometry(B / 2, 24, Math.PI, Math.PI), new THREE.MeshStandardMaterial({ color: 0x6a4224, roughness: 0.8, side: THREE.DoubleSide })); cap.scale.y = 0.75; cap.position.z = (e * L) / 2; hull.add(cap); }
+    for (let i = 1; i < 4; i++) { const strake = new THREE.Mesh(new THREE.TorusGeometry(B / 2 + 0.02, 0.08, 4, 24, Math.PI), dark); strake.rotation.set(0, 0, Math.PI); strake.scale.y = 0.75; strake.position.z = -L / 2 + (i * L) / 4; hull.add(strake); }
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(B * 0.95, 0.3, L * 0.96), new THREE.MeshStandardMaterial({ color: 0xa0764a, roughness: 0.8 })); deck.position.y = B * 0.38 + 0.1; g.add(deck);
+    // Bulwarks along both sides, a pointed bow and a raised stern deck: it reads as a ship from afar.
+    const top = B * 0.38;
+    for (const sx of [-1, 1]) { const side = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.8, L), wood); side.position.set(sx * (B / 2 - 0.2), top + 0.8, 0); hull.add(side); side.position.y = 0.8; }
+    const bowShape = new THREE.Shape(); bowShape.moveTo(-B / 2, 0); bowShape.lineTo(0, 6); bowShape.lineTo(B / 2, 0); bowShape.lineTo(-B / 2, 0);
+    const bow = new THREE.Mesh(new THREE.ExtrudeGeometry(bowShape, { depth: 3.4, bevelEnabled: false }), wood); bow.rotation.x = -Math.PI / 2; bow.position.set(0, -2.6, L / 2); hull.add(bow);
+    const stern = new THREE.Mesh(new THREE.BoxGeometry(B, 2.2, 6), dark); stern.position.set(0, 1.1, -L / 2 + 3); hull.add(stern);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.45, 20, 10), dark); mast.position.y = B * 0.38 + 10; g.add(mast);
+    const mast2 = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.35, 15, 10), dark); mast2.position.set(0, B * 0.38 + 7.5, -7); g.add(mast2);
+    const sailM = new THREE.MeshStandardMaterial({ color: 0xf3ead8, side: THREE.DoubleSide, roughness: 0.9 });
+    const sails = new THREE.Group(); g.add(sails);
+    for (const [z, y, w, h] of [[0, 9, 9, 7], [0, 16, 7, 5], [-7, 8, 7, 6]]) { const sail = new THREE.Mesh(new THREE.PlaneGeometry(w, h, 6, 4), sailM); const pos = sail.geometry.attributes.position; for (let i = 0; i < pos.count; i++) pos.setZ(i, Math.cos((pos.getX(i) / w) * Math.PI) * 0.8); sail.geometry.computeVertexNormals(); sail.position.set(0, B * 0.38 + y, z + 0.5); sail.rotation.y = Math.PI / 2; sails.add(sail); }
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.6), new THREE.MeshStandardMaterial({ color: 0x9b2c1f, side: THREE.DoubleSide })); flag.position.set(0, B * 0.38 + 21, 1.3); flag.rotation.y = Math.PI / 2; g.add(flag);
+    // Scaffolding round it while it is being built.
+    const slip = new THREE.Group(); g.add(slip);
+    for (const sx of [-1, 1]) for (let i = 0; i < 5; i++) { const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 9, 6), wood); pole.position.set(sx * (B / 2 + 1.2), 4, -L / 2 + 1 + i * ((L - 2) / 4)); slip.add(pole); }
+    for (const sx of [-1, 1]) for (const y of [3, 7]) { const beam = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, L), wood); beam.position.set(sx * (B / 2 + 1.2), y, 0); slip.add(beam); }
+    hull.visible = k >= 0.3; hull.scale.z = THREE.MathUtils.clamp((k - 0.3) / 0.25 + 0.25, 0.25, 1);
+    ribs.visible = k < 0.55; deck.visible = k >= 0.55; mast.visible = mast2.visible = k >= 0.7;
+    sails.visible = k >= 0.85; flag.visible = k >= 1; slip.visible = k < 1;
+    g.position.y = k >= 1 ? SEA - 1.6 : SEA + 2.2;   // up on its scaffold while building, afloat when ready
+    g.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+    shipObj = { g, sails, flag, k };
+    const tag = document.createElement('div'); tag.className = 'w3-label ship-tag'; tag.textContent = k >= 1 ? '⛵ السفينة جاهزة' : `⛵ بناء السفينة ${ship.days}/${ship.total}`;
+    shipObj.tag = tag;
   }
 
   // ---------- places ----------
@@ -562,6 +612,9 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
       }
     }
   }
+
+  if (window.__nmnDebug && shipObj) window.__lookShip = () => { controls.target.copy(shipObj.g.position); camera.position.copy(shipObj.g.position).add(new THREE.Vector3(45, 30, 45)); controls.update(); };
+  if (shipObj) { labelLayer.appendChild(shipObj.tag); labels.push({ el: shipObj.tag, v: shipObj.g.position.clone().add(new THREE.Vector3(0, 26, 0)) }); }
 
   // ---------- camera & controls ----------
   const focus = owned.length

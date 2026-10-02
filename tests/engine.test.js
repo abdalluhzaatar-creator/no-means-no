@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import * as E from '../js/engine.js';
 import * as P from '../js/prayer.js';
+import { CHARACTERS, REGIONS } from '../js/content.js';
 
 let passed = 0;
 const t = (name, fn) => { fn(); passed++; console.log('✓', name); };
@@ -255,6 +256,23 @@ t('a written line naming a prayer is tied to that prayer time', () => {
   assert.deepEqual(E.activeTasks(def(), s.characters[W]).map((x) => x.prayer), ['maghrib', 'fajr']);
   assert.ok(E.setRankPlan(s, W, 0, 'صلاة الفجر × 2').ok);
   assert.equal(E.activeTasks(def(), s.characters[W])[0].prayer, undefined, 'a task done several times a day is not tied to one prayer time');
+});
+
+t('the ship: one building day for each day every dimension is fully done, only after everything is at its maximum', () => {
+  const s = E.newState();
+  for (const r of REGIONS) if (r.characterId) { s.regions[r.id] = { level: 1 }; s.characters[r.characterId] ||= { stage: 0, level: 1 }; }
+  const all = () => CHARACTERS.filter((c) => s.characters[c.id]);
+  const fullDay = (n) => { for (const c of all()) for (const x of E.activeTasks(c, s.characters[c.id])) for (let k = 0; k < E.timesOf(x); k++) E.reportTask(s, c.id, x.id, true, { date: day(n) }); };
+  E.setRankPlan(s, W, 0, 'ذكر');
+  fullDay(1);
+  assert.equal(E.shipState(s).days, 0, 'not before everything is at the top');
+  for (const c of all()) Object.assign(s.characters[c.id], { stage: 2, level: 2 });
+  for (let i = 1; i < 12; i++) if (!E.planOf(def(), s.characters[W])[i].length) E.setRankPlan(s, W, i, 'مهمة ' + i);
+  assert.equal(E.shipState(s).unlocked, true);
+  fullDay(2); fullDay(2);
+  assert.equal(E.shipState(s).days, 1, 'once per day');
+  fullDay(4);
+  assert.equal(E.shipState(s).days, 2, 'a missed day does not undo the building');
 });
 
 console.log(`\n${passed} tests passed`);
