@@ -4,6 +4,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { Sky } from './vendor/Sky.js';
 import { sfx } from './audio.js';
+import { buildRankStand } from './rankstand3d.js';
 
 // ---------- helpers ----------
 function makeNoise(seed = 5) {
@@ -365,7 +366,7 @@ const WEATHER = {
 
 // ---------- mount ----------
 // opts.sky() → { elev } sun elevation in degrees, recomputed every minute.
-export function mountOasis(container, { palette, features, level, onCharacter, sky: skyInfo, weather = 'clear' }) {
+export function mountOasis(container, { palette, features, level, rank, onCharacter, onRanks, sky: skyInfo, weather = 'clear' }) {
   let seed = 7; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -474,6 +475,11 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
   [[-14, 6], [14, 6], [-14, -6], [14, -6], [-6, 20], [6, 20], [-14, 18], [14, 18]].forEach(([x, z]) => { const t = orangeTree(rng); t.position.set(x, 0.4, z); grove.add(t); });
   const fnt = fountain(); fnt.position.set(0, 0.4, 5); fnt.scale.setScalar(1.2); scene.add(fnt);
   const arch = mihrabArch(); arch.position.set(0, 0.4, -4.2); scene.add(arch);
+
+  // The rank tree, beside the prayer rug.
+  const STAND = { x: -7, z: 2.5 };
+  const stand = rank ? buildRankStand(rank) : null;
+  if (stand) { stand.root.position.set(STAND.x, 0.4, STAND.z); stand.root.rotation.y = Math.atan2(-STAND.x, -STAND.z); stand.root.scale.setScalar(1.25); scene.add(stand.root); }
 
   const setFeatures = (f, lvl) => {
     lanterns.visible = f.has('lanterns');
@@ -617,7 +623,8 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
     const r = renderer.domElement.getBoundingClientRect();
     ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ptr, camera);
-    if (ray.intersectObject(hero.root, true).length) { if (!hero.busy()) hero.wave(); onCharacter?.(); }
+    if (ray.intersectObject(hero.root, true).length) { if (!hero.busy()) hero.wave(); onCharacter?.(); return; }
+    if (stand && ray.intersectObject(stand.root, true).length) onRanks?.();
   });
 
   const resize = () => { const w = container.clientWidth, h = container.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); };
@@ -640,6 +647,7 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
   window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey);
   const jump = () => { if (grounded && !hero.busy()) { vy = 7.5; grounded = false; sfx.jump(); } };
   const blocked = (x, z) => {
+    if (stand && Math.hypot(x - STAND.x, z - STAND.z) < 2.6) return true;               // rank tree
     if (Math.abs(x) > 20.3 || Math.abs(z) > 20.3) return true;
     if (Math.abs(x) < 2.6 && z > 6 && z < 21) return true;                           // reflecting pool
     if (fnt.visible && Math.hypot(x, z - 5) < 2.6) return true;                        // fountain
@@ -704,6 +712,7 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
     stepPlayer(dt);
     updateCamera(dt, walkAmt > 0.2);
     hero.update(t, dt, walkAmt, !grounded);
+    stand?.tick(t);
     fnt.userData.tick(t);
     const lvl = aura.userData.level || 0;
     aura.material.opacity = 0.12 + lvl * 0.03 + Math.sin(t * 2) * 0.05;
@@ -754,7 +763,7 @@ export function mountOasis(container, { palette, features, level, onCharacter, s
       cam.tYaw = Math.PI * 0.75; cam.tPitch = 0.3; cam.tDist = 7;   // side-front view to watch the prayer
       hero.pray(); burstUntil = clock.elapsedTime + 9;
     },
-    update({ features: f, level: l }) { setFeatures(f, l); },
+    update({ features: f, level: l, rank: r }) { setFeatures(f, l); if (r) stand?.update(r); },
     setWeather(k) { kind = k in WEATHER ? k : 'clear'; W = WEATHER[kind]; applySky(); },
     refreshSky() { applySky(); },
     dispose() {

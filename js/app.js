@@ -418,8 +418,13 @@ let oasis = null;
 let questsCollapsed = true;
 const placeState = () => {
   const c = E.findCharacter(currentChar), ch = state.characters[c.id];
-  return { features: E.regionFeatures(state, c.regionId), level: artLevel(ch) };
+  return { features: E.regionFeatures(state, c.regionId), level: artLevel(ch), rank: rankState(c, ch) };
 };
+// What the rank tree shows: every rank, the current one, and the 15-day counter.
+const rankState = (c, ch) => c.stages ? {
+  ranks: RANKS, current: E.totalLevel(ch) - 1,
+  keyDays: E.liveProgress(ch, dayFor(c.id)).keyDays, keyEvery: c.keyEveryDays || 15,
+} : null;
 
 async function bindPlace() {
   const v = $('#place-view');
@@ -430,14 +435,14 @@ async function bindPlace() {
       const { mountPlace } = await import('./place3d.js');
       if (!v.isConnected) return;
       v.querySelector('.w3-loading')?.remove();
-      const scene = mountPlace(v, { regionId: c.regionId, palette: c.palette, sky: skyInfo, onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${['يلا نكمل!', 'خطوة كل يوم', 'أنا جاهز', 'الاستمرار سر النجاح'][Math.random() * 4 | 0]}`); } });
+      const scene = mountPlace(v, { regionId: c.regionId, palette: c.palette, rank: placeState().rank, onRanks: () => showRanks(c.id), sky: skyInfo, onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${['يلا نكمل!', 'خطوة كل يوم', 'أنا جاهز', 'الاستمرار سر النجاح'][Math.random() * 4 | 0]}`); } });
       oasis = { char: c.id, scene };
       return;
     }
     const { mountOasis } = await import('./oasis3d.js');
     if (!v.isConnected) return;
     v.querySelector('.w3-loading')?.remove();
-    const scene = mountOasis(v, { palette: c.palette, ...placeState(), sky: skyInfo, weather: currentWeather(),
+    const scene = mountOasis(v, { palette: c.palette, ...placeState(), onRanks: () => showRanks(c.id), sky: skyInfo, weather: currentWeather(),
       onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${randomLine()}`); } });
     oasis = { char: c.id, scene };
     loadWeather();
@@ -565,22 +570,6 @@ function prayerNowLine() {
   return next ? `<div class="hud-chip">⏳ ${PRAYER_NAMES[next[0]]} ${fmtTime(next[1].start)}</div>` : '';
 }
 
-// Current rank → (arrow: 15 days) → next rank. Ranks are granted by the commander at HQ.
-function rankStep(c, ch, live) {
-  const nextRank = RANKS[E.totalLevel(ch)];
-  const max = c.keyEveryDays || 15, pct = Math.round((live.keyDays / max) * 100);
-  return `
-  <div class="rank-step">
-    <span class="rank" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))}</span>
-    ${nextRank ? `<span class="step-arrow" title="${max} يوم كامل ورا بعض = مفتاح للرتبة الأعلى">
-      <small><bdi>${max}</bdi> يوم · <bdi>${live.keyDays}/${max}</bdi></small>
-      <i class="arrow-line"><b style="width:${pct}%"></b></i>
-    </span>
-    <span class="rank next" style="--rank:${nextRank.color}">${esc(nextRank.name)}</span>` : '<span class="muted-w">أعلى رتبة 🏆</span>'}
-    <button class="ranks-peek" data-ranks="${c.id}" title="اعرض ترتيب الرتب" aria-label="اعرض ترتيب الرتب">▾</button>
-  </div>`;
-}
-
 function placeHUD() {
   const c = E.findCharacter(currentChar);
   const ch = state.characters[c.id];
@@ -599,7 +588,7 @@ function placeHUD() {
       <div class="plate-body">
         <div class="plate-name">${c.name === r.name ? r.name : `${c.name} <span class="plate-place">· ${r.name}</span>`}</div>
         <div class="plate-row"><span class="plate-streak" title="أطول سلسلة">🔥 ${best}</span></div>
-        ${stage && live ? rankStep(c, ch, live) : ''}
+
       </div>
     </div>
     ${hasPrayers(c) ? prayerNowLine() : ''}

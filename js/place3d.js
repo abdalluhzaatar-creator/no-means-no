@@ -6,6 +6,7 @@ import { Sky } from './vendor/Sky.js';
 import { buildWorshipper } from './oasis3d.js';
 import { createWalker } from './walker.js';
 import { DIM_BUILD } from './landmarks.js';
+import { buildRankStand } from './rankstand3d.js';
 
 // Ground colour and scatter props per dimension.
 const THEME = {
@@ -18,7 +19,7 @@ const THEME = {
   nature:  { ground: 0x4f9a3f, fog: 0xd8f0d0, prop: 'tree' },
 };
 
-export function mountPlace(container, { regionId, palette, sky: skyInfo, onCharacter }) {
+export function mountPlace(container, { regionId, palette, rank, sky: skyInfo, onCharacter, onRanks }) {
   const theme = THEME[regionId] || THEME.body;
   let seed = 17; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -86,12 +87,18 @@ export function mountPlace(container, { regionId, palette, sky: skyInfo, onChara
   const landmark = build ? build() : new THREE.Group();
   landmark.scale.setScalar(1.4); landmark.position.set(0, 0, -16); scene.add(landmark);
 
+  // The rank tree, to the side of the plaza.
+  const STAND = { x: -8, z: 4 };
+  const stand = rank ? buildRankStand(rank) : null;
+  if (stand) { stand.root.position.set(STAND.x, 0, STAND.z); stand.root.rotation.y = Math.atan2(-STAND.x, 10 - STAND.z); stand.root.scale.setScalar(1.25); scene.add(stand.root); }
+
   // Character
   const hero = buildWorshipper(palette);
   scene.add(hero.root);
   const blocked = (x, z) => {
     if (Math.hypot(x, z) > 48) return true;
     if (Math.hypot(x, z + 16) < 13) return true;       // the landmark
+    if (stand && Math.hypot(x - STAND.x, z - STAND.z) < 2.6) return true;
     for (const p of props) if (Math.hypot(x - p.x, z - p.z) < p.r) return true;
     return false;
   };
@@ -107,7 +114,8 @@ export function mountPlace(container, { regionId, palette, sky: skyInfo, onChara
     const r = renderer.domElement.getBoundingClientRect();
     ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ptr, camera);
-    if (ray.intersectObject(hero.root, true).length) { if (!hero.busy()) hero.wave(); onCharacter?.(); }
+    if (ray.intersectObject(hero.root, true).length) { if (!hero.busy()) hero.wave(); onCharacter?.(); return; }
+    if (stand && ray.intersectObject(stand.root, true).length) onRanks?.();
   });
 
   const resize = () => { const w = container.clientWidth, h = container.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); };
@@ -119,6 +127,7 @@ export function mountPlace(container, { regionId, palette, sky: skyInfo, onChara
     if (t - lastSky > 30) { applySky(); lastSky = t; }
     const mv = walker.update(dt);
     hero.update(t, dt, mv.walk, mv.air);
+    stand?.tick(t);
     stars.material.opacity = night;
     renderer.render(scene, camera);
     raf = requestAnimationFrame(tick);
@@ -126,7 +135,7 @@ export function mountPlace(container, { regionId, palette, sky: skyInfo, onChara
   tick();
 
   return {
-    update() {},
+    update({ rank: r } = {}) { if (r) stand?.update(r); },
     pray() { if (!hero.busy()) hero.wave(); },
     setWeather() {},
     refreshSky() { applySky(); },
