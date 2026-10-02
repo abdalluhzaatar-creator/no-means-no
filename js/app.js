@@ -1,7 +1,7 @@
 // UI layer: renders screens from state, calls engine actions, saves, plays effects.
 import { CHARACTERS, REGIONS, CUPS, JOD_TO_USD, RANKS, COMMAND_RANKS } from './content.js';
 import * as C from './cups.js';
-import { commander, KEYS_PER_RANK } from './hq.js';
+import { commander, stepsFor } from './hq.js';
 import { warMapSVG, WAR } from './warmap.js';
 import * as E from './engine.js';
 import { createStorage } from './storage.js';
@@ -770,15 +770,15 @@ async function bindHQ() {
     loadWeather();
   } catch (err) { console.warn('3D HQ unavailable', err); v.innerHTML = ''; }
 }
-// All commander ranks: each one takes KEYS_PER_RANK keys.
+// All commander ranks, by steps of the whole journey (dimensions opened + ranks gained).
 function showCommandRanks() {
   const cm = commander(state);
   modal(`
     <h2>🫡 رتب القائد</h2>
-    <p class="muted">كل ${KEYS_PER_RANK} مفاتيح تجمعها يترقّى القائد تلقائيًا. جمعت ${cm.keysEarned} 🗝.</p>
+    <p class="muted">القائد بيترقّى مع تقدّمك كله: كل بعد بتفتحه وكل رتبة بتاخدها بأي شخصية = خطوة. أعلى رتبة (فريق) بس لما تكون كل الأبعاد مفتوحة وكل الشخصيات على آخر رتبة. وصلت <b>${cm.steps}</b> من ${cm.total} خطوة.</p>
     <ol class="path">${COMMAND_RANKS.map(([, name], i) => {
       const cls = i < cm.rankIndex ? 'done' : i === cm.rankIndex ? 'current' : '';
-      const need = i === 0 ? 'البداية' : `🗝 ${i * KEYS_PER_RANK} مفاتيح`;
+      const need = i === 0 ? 'البداية' : i === COMMAND_RANKS.length - 1 ? `كل إشي فل · ${stepsFor(i)} خطوة` : `${stepsFor(i)} خطوة`;
       return `<li class="${cls}" style="--rank:#7a5a1f"><b class="rk">${name}</b><span>${need}</span></li>`;
     }).join('')}</ol>`);
 }
@@ -807,8 +807,8 @@ function ceremony(p) {
       <div class="cer-kicker">ترقية القائد</div>
       <div class="cer-salute">🫡</div>
       <div class="cer-steps">${p.from ? `<span class="cer-old">${esc(p.from)}</span><b>←</b>` : ''}<span class="cer-medal">🎖<em>${esc(p.rank)}</em></span></div>
-      <p>جمعت ${KEYS_PER_RANK} مفاتيح، فالقائد ترقّى لحاله. المحاربين بقاعة الأبطال بيحيّوك.</p>
-      <p class="muted-w">${p.next ? `الرتبة الجاية: <b>${esc(p.next)}</b> بعد ${KEYS_PER_RANK} مفاتيح كمان.` : 'وصلت أعلى رتبة للقائد 🏆'}</p>
+      <p>تقدّمك بالأبعاد رقّى القائد. المحاربين بقاعة الأبطال بيحيّوك.</p>
+      <p class="muted-w">${p.next ? `الرتبة الجاية: <b>${esc(p.next)}</b> بعد ${p.toNext} خطوات كمان (فتح بعد أو رتبة لشخصية).` : 'كل الأبعاد فل — ختمت اللعبة 🏆'}</p>
       <button class="btn primary big" data-cer-ok>تمام 🫡</button>
     </div>`;
   document.body.appendChild(el);
@@ -820,7 +820,7 @@ function ceremony(p) {
 // Celebrate when the commander's level went up since the last look.
 function checkCommander() {
   const cm = commander(state);
-  if (lastCmdLevel != null && cm.level > lastCmdLevel) setTimeout(() => ceremony({ kind: 'commander', rank: cm.rank, from: COMMAND_RANKS[cm.rankIndex - 1]?.[1], next: cm.nextRank }), 1600);
+  if (lastCmdLevel != null && cm.level > lastCmdLevel) setTimeout(() => ceremony({ kind: 'commander', rank: cm.rank, from: COMMAND_RANKS[cm.rankIndex - 1]?.[1], next: cm.nextRank, toNext: cm.toNext }), 1600);
   lastCmdLevel = cm.level;
 }
 // The eight dimensions with their war status.
@@ -898,7 +898,7 @@ function hqHUD() {
       <div class="plate-body">
         <div class="plate-name">القائد <span class="plate-place">· مقر القيادة</span></div>
         <div class="plate-row"><button class="rank" data-cmd-ranks style="--rank:#7a5a1f" title="اعرض كل الرتب">${cm.rank} ▾</button></div>
-        <div class="meter" data-cmd-ranks><span class="meter-label">${cm.nextRank ? `🗝 نحو ${cm.nextRank}` : '🎖 أعلى رتبة'}</span><b><bdi>${cm.nextRank ? `${cm.keysInRank}/${KEYS_PER_RANK}` : '✔'}</bdi></b><div class="xp"><span style="width:${Math.round(cm.rankProgress * 100)}%"></span></div></div>
+        <div class="meter" data-cmd-ranks><span class="meter-label">${cm.nextRank ? `⬆ نحو ${cm.nextRank}` : '🎖 أعلى رتبة'}</span><b><bdi>${cm.nextRank ? `${cm.stepsInRank}/${cm.stepsPerRank}` : '✔'}</bdi></b><div class="xp"><span style="width:${Math.round(cm.rankProgress * 100)}%"></span></div></div>
       </div>
     </div>
   </div>
@@ -907,10 +907,10 @@ function hqHUD() {
     <button class="hud-chip warmap-btn" data-war-map>🗺 خريطة الحرب</button>
     <div class="challenge-card report ${reportOpen ? 'open' : ''}">
       <button class="report-title" data-toggle-report>📋 تقرير القائد <span>${reportOpen ? '▴' : '▾'}</span></button>
-      <small class="muted-w">يترقّى لحاله: كل ${KEYS_PER_RANK} مفاتيح تجمعها = رتبة جديدة.</small>
+      <small class="muted-w">يترقّى مع تقدّمك: كل بعد بتفتحه وكل رتبة لشخصية = خطوة (${cm.steps}/${cm.total}).</small>
       <div class="report-row"><span>🗺 الأماكن المفتوحة</span><b>${cm.opened.length} / ${cm.places.length}</b></div>
       <ul class="report-list">${cm.places.map((r) => `<li class="${state.regions[r.id] ? 'on' : ''}">${state.regions[r.id] ? '✔' : '🔒'} ${r.name}</li>`).join('')}</ul>
-      <div class="report-row"><span>🗝 مفاتيح جمعتها</span><b>${cm.keysEarned}</b></div>
+      <div class="report-row"><span>⬆ خطوات التقدّم</span><b>${cm.steps} / ${cm.total}</b></div>
       <div class="report-row"><span>⬆ الشخصيات</span></div>
       <ul class="report-list">${cm.chars.map((c) => `<li class="on">${c.def.name} — ${E.rankName(c.ch)}</li>`).join('')}</ul>
       <div class="report-row"><span>🏆 كؤوس</span><b>${won}</b></div>
@@ -1276,7 +1276,7 @@ $('#account').onclick = () => {
   const lo = $('#logout');
   if (lo) lo.onclick = () => { storage.logout(); location.reload(); };
   $('#demo-rank').onclick = () => ceremony({ kind: 'rank', name: 'البعد الجسدي', from: 'برونز 1', rank: 'برونز 2', color: RANKS[1].color, adds: [E.findCharacter('athlete').ladder?.[0]?.title || 'مهمة جديدة'] });
-  $('#demo-cmd').onclick = () => ceremony({ kind: 'commander', from: COMMAND_RANKS[2][1], rank: COMMAND_RANKS[3][1], next: COMMAND_RANKS[4][1] });
+  $('#demo-cmd').onclick = () => ceremony({ kind: 'commander', from: COMMAND_RANKS[2][1], rank: COMMAND_RANKS[3][1], next: COMMAND_RANKS[4][1], toNext: 11 });
   $('#demo-fill').onclick = () => ask('رح ينضاف تقدّم وهمي فوق تقدّمك الحالي. بتقدر تمسحه كله بعدين من "إعادة اللعبة من البداية". نكمل؟', async () => {
     const { fillDemo } = await import('./demo.js');
     fillDemo(state); C.ensure(state); await storage.save(state); go('world'); FX.banner('🧪 وضع التجربة', 'كل إشي مفتوح هلأ. لما تخلص: الحساب ← إعادة اللعبة من البداية', '🧪');
@@ -1296,6 +1296,6 @@ document.getElementById('keys-box')?.addEventListener('click', () => {
     <h2>🗝 المفاتيح</h2>
     <p>معك <b>${state.keys}</b> ${state.keys === 1 ? 'مفتاح' : 'مفاتيح'}.</p>
     <p>بالمفتاح <b>تفتح منطقة جديدة</b> على الخريطة، أو <b>ترفع رتبة</b> شخصية (مثل برونز 1 → برونز 2 فتنضاف مهام الرتبة اللي كتبتها).</p>
-    <p>وكل ${KEYS_PER_RANK} مفاتيح تجمعها يترقّى القائد تلقائيًا 🫡.</p>
+    <p>وكل ما فتحت بعد أو رفعت رتبة، القائد بيقرب من رتبته الجاية 🫡.</p>
     <p class="muted">تكسب مفتاحًا كل 15 يومًا كاملًا متتاليًا.</p>`);
 });

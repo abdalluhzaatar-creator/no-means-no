@@ -40,7 +40,7 @@ export function fillDemo(s, now = Date.now()) {
     ch.perfectStreak++; ch.lastPerfectDate = today;
   }
   s.lastDay = today;
-  // Keys: plenty in hand, and enough collected for the top commander rank (فريق).
+  // Keys and gold to spare (the commander is at فريق because everything above is at its maximum).
   s.keys = 99;
   s.gold = 99999;
   Object.assign(s.stats, { keysEarned: 120, goldEarned: 150000, goldLost: 0, tasksCompleted: 9000, tasksFailed: 0, bestStreak: 365 });
