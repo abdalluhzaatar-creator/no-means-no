@@ -165,7 +165,7 @@ export const REGIONS = [
     requires: [],
     // Position on the world map (1000×700). Places are hidden in fog until
     // the place named in `revealedBy` is owned.
-    map: { x: 470, y: 400 },
+    map: { x: 500, y: 380 },
     theme: { sky: ['#1d3b4f', '#e8c89a'], ground: '#d9c7a3' },
     upgrades: [
       { level: 2, cost: 60, adds: 'lanterns', label: 'فوانيس مضيئة' },
@@ -183,7 +183,7 @@ export const REGIONS = [
     characterId: 'scholar',
     cost: { keys: 1 },
     requires: [],
-    map: { x: 680, y: 250, revealedBy: 'sanctuary' },
+    map: { x: 36, y: 195, revealedBy: 'sanctuary' },
     theme: { sky: ['#243048', '#8fa7c4'], ground: '#6b5540' },
     upgrades: [
       { level: 2, cost: 80, adds: 'shelves', label: 'رفوف الكتب' },
@@ -200,7 +200,7 @@ export const REGIONS = [
     characterId: 'athlete',
     cost: { keys: 1 },
     requires: [],
-    map: { x: 300, y: 300, revealedBy: 'sanctuary' },
+    map: { x: -41, y: 465, revealedBy: 'sanctuary' },
     upgrades: [],
   },
   {
@@ -211,7 +211,7 @@ export const REGIONS = [
     characterId: 'empath',
     cost: { keys: 1 },
     requires: [],
-    map: { x: 320, y: 495, revealedBy: 'sanctuary' },
+    map: { x: 412, y: 706, revealedBy: 'sanctuary' },
     upgrades: [],
   },
   {
@@ -222,7 +222,7 @@ export const REGIONS = [
     characterId: 'host',
     cost: { keys: 1 },
     requires: [],
-    map: { x: 640, y: 610, revealedBy: 'sanctuary' },
+    map: { x: 860, y: 633, revealedBy: 'sanctuary' },
     upgrades: [],
   },
   {
@@ -233,7 +233,7 @@ export const REGIONS = [
     characterId: 'builder',
     cost: { keys: 1 },
     requires: [],
-    map: { x: 820, y: 420, revealedBy: 'sanctuary' },
+    map: { x: 1060, y: 386, revealedBy: 'sanctuary' },
     upgrades: [],
   },
   {
@@ -244,7 +244,7 @@ export const REGIONS = [
     characterId: 'merchant',
     cost: { keys: 1 },
     requires: [],
-    map: { x: 840, y: 190, revealedBy: 'sanctuary' },
+    map: { x: 875, y: 135, revealedBy: 'sanctuary' },
     upgrades: [],
   },
   {
@@ -255,7 +255,7 @@ export const REGIONS = [
     characterId: 'keeper',
     cost: { keys: 1 },
     requires: [],
-    map: { x: 560, y: 120, revealedBy: 'sanctuary' },
+    map: { x: 432, y: 52, revealedBy: 'sanctuary' },
     upgrades: [],
   },
   {
@@ -267,7 +267,7 @@ export const REGIONS = [
     cost: {},
     starter: true,
     requires: [],
-    map: { x: 175, y: 640 },   // on a plateau south of the emotional dimension
+    map: { x: 175, y: 640 },   // direction only: the world and war map set it off the coast on its own islet
     upgrades: [],
   },
   {

@@ -35,8 +35,11 @@ function coast(rand, cx, cy, rx, ry, n = 40) {
 export function warMapSVG(places, hq) {
   const rand = rng(42);
   const W = 1000, H = 700;
-  const P = (m) => [80 + (m.x / 1000) * 840, 70 + (m.y / 700) * 560];
-  const hqP = hq ? P(hq) : [500, 350];
+  // Places sit inside the coastline; headquarters sits off the coast on its own islet.
+  const P = (m) => [500 + ((m.x - 500) / 620) * 330, 360 + ((m.y - 380) / 340) * 215];
+  const hqDir = hq ? (() => { const [x, y] = P(hq), v = [(x - 500) / 390, (y - 360) / 260], l = Math.hypot(...v) || 1; return [v[0] / l, v[1] / l]; })() : [0, 0];
+  const onRing = (k) => [500 + hqDir[0] * 390 * k, 360 + hqDir[1] * 260 * k];
+  const hqP = hq ? onRing(1.24) : [500, 350];
   const burn = Array.from({ length: 70 }, (_, i) => {
     const t = i / 70, side = Math.floor(t * 4), f = (t * 4) % 1, j = 8 + rand() * 22;
     return side === 0 ? [f * W, j] : side === 1 ? [W - j, f * H] : side === 2 ? [W - f * W, H - j] : [j, H - f * H];
@@ -69,11 +72,15 @@ export function warMapSVG(places, hq) {
     <text y="-60" text-anchor="middle" font-size="18" font-weight="700" stroke="none">ش</text>
   </g>
   <!-- sea monster & ship -->
-  <g transform="translate(120 600)" fill="none" stroke="#6b4a24" stroke-width="2.4" opacity=".75"><path d="M0 0 q14 -26 28 0 q14 -26 28 0 q14 -26 28 0"/><circle cx="92" cy="-8" r="2" fill="#6b4a24"/></g>
+  <g transform="translate(330 668) scale(.8)" fill="none" stroke="#6b4a24" stroke-width="2.4" opacity=".75"><path d="M0 0 q14 -26 28 0 q14 -26 28 0 q14 -26 28 0"/><circle cx="92" cy="-8" r="2" fill="#6b4a24"/></g>
   <g transform="translate(860 110)" stroke="#6b4a24" stroke-width="2" fill="none" opacity=".8"><path d="M-30 10 Q0 24 30 10 Z" fill="#c9a36a"/><path d="M0 10 V-30"/><path d="M0 -28 Q18 -16 0 -2" fill="#f6e7c4"/><path d="M0 -28 Q-16 -16 0 -2" fill="#f6e7c4"/></g>
   <text x="500" y="52" text-anchor="middle" font-size="34" font-weight="800" fill="#4a2f14" style="letter-spacing:2px">خريطة الحرب</text>
   <!-- routes from headquarters -->
   ${places.filter((p) => p.status !== 'coming').map((p) => { const [x, y] = P(p.map); return `<path d="M${hqP[0]} ${hqP[1]} Q${(hqP[0] + x) / 2 + 40} ${(hqP[1] + y) / 2 - 40} ${x} ${y}" fill="none" stroke="#9b2c1f" stroke-width="3" stroke-dasharray="2 10" stroke-linecap="round"/>`; }).join('')}
+  ${hq ? (() => { const a = onRing(1.13), b = onRing(0.97); return `
+  <path d="${coast(rng(7), hqP[0], hqP[1], 46, 38, 18)}" fill="#ead3a0" stroke="#6b4a24" stroke-width="3"/>
+  <path d="M${a[0].toFixed(0)} ${a[1].toFixed(0)} L${b[0].toFixed(0)} ${b[1].toFixed(0)}" stroke="#6b4a24" stroke-width="9" stroke-linecap="round"/>
+  <path d="M${a[0].toFixed(0)} ${a[1].toFixed(0)} L${b[0].toFixed(0)} ${b[1].toFixed(0)}" stroke="#c9a36a" stroke-width="5" stroke-dasharray="2 3"/>`; })() : ''}
   ${hq ? `<g transform="translate(${hqP[0]} ${hqP[1]})" fill="none" stroke="#3a2412" stroke-width="2.5"><circle r="26" fill="#f6e7c4" stroke="#6b4a24"/>${GLYPH.hq}<text y="46" text-anchor="middle" font-size="17" font-weight="800" fill="#3a2412" stroke="none">مقر القيادة</text></g>` : ''}
   ${places.map((p) => {
     const [x, y] = P(p.map), w = WAR[p.status];

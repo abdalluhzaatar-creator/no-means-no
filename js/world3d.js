@@ -9,8 +9,8 @@ import { DIM_BUILD } from './landmarks.js';
 const SIZE = 420;             // world width in units (x); depth is 0.75 of it
 const DEPTH = SIZE * 0.75;
 const SEA = 0;                // sea level
-const HQ_SEA_D = 0.68;        // how far out (island falloff units) the headquarters islet sits
-const ISLET = { top: 9, flat: 22, edge: 42 };   // islet plateau height and radii
+const HQ_SEA_D = 0.8;         // how far out (island falloff units) the headquarters islet sits
+const ISLET = { top: 9, flat: 36, edge: 56 };   // islet plateau height and radii
 
 // Region coords (0..1000 × 0..700) → world (x, z).
 const toWorld = ({ x, y }) => [(x / 1000 - 0.5) * SIZE * 0.55, (y / 700 - 0.5) * DEPTH * 0.55];
@@ -76,10 +76,10 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   if (hqSpot) {
     const dir = new THREE.Vector2(-hqSpot.x, -hqSpot.z).normalize();
     const at = (t) => [hqSpot.x + dir.x * t, hqSpot.z + dir.y * t];
-    let land = ISLET.edge + 4;
+    let land = ISLET.edge + 2;
     while (land < 220 && height(...at(land)) < 3) land += 1;
     land += 6;   // reach a little onto the shore
-    const a = at(ISLET.flat - 6), b = at(land);
+    const a = at(ISLET.flat - 4), b = at(land);
     bridge = { dir, a: new THREE.Vector3(a[0], height(...a), a[1]), b: new THREE.Vector3(b[0], height(...b), b[1]) };
   }
   // Distance from a point to the bridge line (keeps trees off the deck).
@@ -199,36 +199,49 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   });
   for (const m of [trunks, crowns]) { m.castShadow = true; m.receiveShadow = true; scene.add(m); }
 
-  // ---------- stone bridge ----------
+  // ---------- wooden rope bridge ----------
   if (bridge) {
     const { a, b } = bridge;
     const len = Math.hypot(b.x - a.x, b.z - a.z), yaw = Math.atan2(b.x - a.x, b.z - a.z);
     const g = new THREE.Group(); g.position.copy(a); g.rotation.y = yaw; scene.add(g);
-    const stoneM = new THREE.MeshStandardMaterial({ color: 0xb9a98e, roughness: 0.9 });
-    const deckM = new THREE.MeshStandardMaterial({ color: 0x8a6a48, roughness: 0.85 });
-    const W = 5, N = Math.max(8, Math.round(len / 3));
-    // Deck rises in a gentle arch over the water.
-    const yAt = (u) => THREE.MathUtils.lerp(0, b.y - a.y, u) + Math.sin(u * Math.PI) * 5 + 0.6;
-    for (let i = 0; i < N; i++) {
-      const u0 = i / N, u1 = (i + 1) / N, y0 = yAt(u0), y1 = yAt(u1), seg = len / N;
-      const slab = new THREE.Mesh(new THREE.BoxGeometry(W, 0.6, Math.hypot(seg, y1 - y0) + 0.08), deckM);
-      slab.position.set(0, (y0 + y1) / 2, (u0 + u1) / 2 * len); slab.rotation.x = -Math.atan2(y1 - y0, seg);
-      g.add(slab);
-      for (const sx of [-1, 1]) {
-        const wall = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.1, Math.hypot(seg, y1 - y0) + 0.08), stoneM);
-        wall.position.set(sx * (W / 2 + 0.1), (y0 + y1) / 2 + 0.7, (u0 + u1) / 2 * len); wall.rotation.x = slab.rotation.x; g.add(wall);
+    const wood = [0x8a5a32, 0x7a4e2b, 0x936238].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.95 }));
+    const postM = new THREE.MeshStandardMaterial({ color: 0x5b3b22, roughness: 1 });
+    const ropeM = new THREE.MeshStandardMaterial({ color: 0xc8ad7f, roughness: 1 });
+    const W = 3.2;
+    // The deck sags between the two ends like a forest rope bridge.
+    const sag = Math.min(6, len * 0.06);
+    const yAt = (u) => THREE.MathUtils.lerp(0.4, b.y - a.y + 0.4, u) - Math.sin(u * Math.PI) * sag;
+    const pt = (u, x = 0, dy = 0) => new THREE.Vector3(x, yAt(u) + dy, u * len);
+    // Planks, slightly uneven, with small gaps.
+    const plankGeo = new THREE.BoxGeometry(W, 0.16, 0.5);
+    const N = Math.round(len / 0.62);
+    for (let i = 0; i <= N; i++) {
+      const u = i / N, p0 = pt(Math.max(0, u - 0.002)), p1 = pt(Math.min(1, u + 0.002));
+      const plank = new THREE.Mesh(plankGeo, wood[i % 3]);
+      plank.position.copy(pt(u)); plank.rotation.x = -Math.atan2(p1.y - p0.y, p1.z - p0.z); plank.rotation.z = Math.sin(i * 7.1) * 0.03;
+      plank.scale.x = 1 + Math.sin(i * 3.7) * 0.05;
+      g.add(plank);
+    }
+    // Two stringers under the planks.
+    for (const sx of [-1, 1]) g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(Array.from({ length: 21 }, (_, k) => pt(k / 20, sx * (W / 2 - 0.3), -0.15))), 60, 0.09, 6), postM));
+    // Hand ropes: they sag less than the deck, so the side ropes form a V with it.
+    const handY = (u) => yAt(u) + 1.4 + Math.sin(u * Math.PI) * sag * 0.35;
+    const hand = (sx) => Array.from({ length: 31 }, (_, k) => new THREE.Vector3(sx * (W / 2 + 0.15), handY(k / 30), (k / 30) * len));
+    for (const sx of [-1, 1]) {
+      g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hand(sx)), 90, 0.06, 6), ropeM));
+      // Vertical ropes tying the hand rope to the deck.
+      for (let k = 1; k < 24; k++) {
+        const u = k / 24, top = new THREE.Vector3(sx * (W / 2 + 0.15), handY(u), u * len), bot = pt(u, sx * (W / 2 - 0.1), 0.05);
+        const r = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, top.distanceTo(bot), 4), ropeM);
+        r.position.copy(top).add(bot).multiplyScalar(0.5); r.lookAt(top); r.rotateX(Math.PI / 2); g.add(r);
       }
     }
-    // Piers down into the sea, and lamp posts along the way.
-    for (let u = 0.15; u < 0.9; u += 0.7 / 3) {
-      const y = yAt(u), hgt = y + 14;
-      const pier = new THREE.Mesh(new THREE.BoxGeometry(W + 1, hgt, 2.2), stoneM); pier.position.set(0, y - hgt / 2 - 0.2, u * len); g.add(pier);
-      for (const sx of [-1, 1]) {
-        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 3, 8), new THREE.MeshStandardMaterial({ color: 0x3a3128, metalness: 0.6, roughness: 0.4 }));
-        post.position.set(sx * (W / 2 + 0.1), y + 2.6, u * len); g.add(post);
-        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 8), new THREE.MeshStandardMaterial({ color: 0xffe7a8, emissive: 0xffb84d, emissiveIntensity: 1.2 }));
-        lamp.position.set(sx * (W / 2 + 0.1), y + 4.2, u * len); g.add(lamp);
-      }
+    // Thick log posts at both ends, with the hand ropes tied over them.
+    for (const u of [0, 1]) for (const sx of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 3.6, 8), postM);
+      post.position.set(sx * (W / 2 + 0.35), yAt(u) + 1.2, u * len); g.add(post);
+      const knot = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.08, 6, 12), ropeM); knot.rotation.x = Math.PI / 2;
+      knot.position.set(sx * (W / 2 + 0.35), yAt(u) + 1.45, u * len); g.add(knot);
     }
     g.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
   }
