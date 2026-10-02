@@ -79,7 +79,7 @@ export const CHARACTERS = [
     keyEveryDays: 15,
     daysPerLevel: 15,
     stages: plainStages(),
-    palette: {'robe': '#e8a0b8', 'accent': '#8e3b5e', 'skin': '#f3d3b6', 'glow': '#ffb3cc'},
+    palette: {'robe': '#3d5a80', 'accent': '#e0c36a', 'skin': '#f3d3b6', 'glow': '#9ad1d4'},
   },
   {
     id: 'host',
@@ -206,8 +206,8 @@ export const REGIONS = [
   {
     id: 'heart',
     dimension: 'heart',
-    name: 'البعد العاطفي',
-    desc: 'حديقة القلب: بحيرة هادئة وأشجار زهر، تزهر كلما اعتنيت بمشاعرك.',
+    name: 'البعد الوجداني',
+    desc: 'بيت الوجدان: جناح هادئ على جزيرة وسط بحيرة، يصفى كلما اعتنيت بمشاعرك.',
     characterId: 'empath',
     cost: { keys: 1 },
     requires: [],
@@ -333,7 +333,7 @@ for (const c of CHARACTERS) {
 // (generic decorations drawn by place3d.js: lanterns, garden, fountain, banners).
 const UPGRADES = {
   body: ['مشاعل الملعب', 'حديقة الأبطال', 'نافورة الماء', 'رايات النصر'],
-  heart: ['فوانيس هادئة', 'بستان الزهر', 'نافورة السكينة', 'أعلام المحبة'],
+  heart: ['فوانيس هادئة', 'حديقة التأمل', 'نافورة السكون', 'رايات الوجدان'],
   social: ['فوانيس الساحة', 'حديقة الحي', 'نافورة اللقاء', 'رايات الحي'],
   career: ['أضواء الورشة', 'حديقة المكتب', 'نافورة الإنجاز', 'رايات المشاريع'],
   wealth: ['مصابيح السوق', 'بستان الخير', 'نافورة البركة', 'رايات التجارة'],

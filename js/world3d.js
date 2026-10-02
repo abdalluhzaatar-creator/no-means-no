@@ -61,7 +61,8 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
         h = Math.max(h, THREE.MathUtils.lerp(ISLET.top, -14, THREE.MathUtils.smoothstep(d2, ISLET.flat, ISLET.edge)));
         continue;
       }
-      const k = Math.exp(-((x - s.x) ** 2 + (z - s.z) ** 2) / 260);
+      // A flat plateau under every building (wide enough for the palace), easing into the hills.
+      const k = 1 - THREE.MathUtils.smoothstep(Math.hypot(x - s.x, z - s.z), 20, 34);
       h = h * (1 - k) + 6 * k;
     }
     // Below the waterline, drop the seabed steeply so it never sits at the same depth

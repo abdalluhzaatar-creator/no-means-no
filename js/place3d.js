@@ -11,7 +11,7 @@ import { buildRankStand } from './rankstand3d.js';
 // Ground colour and scatter props per dimension.
 const THEME = {
   body:    { ground: 0x5f9e4a, fog: 0xcfe3f0, prop: 'cone' },
-  heart:   { ground: 0x8cc47a, fog: 0xf6d9e4, prop: 'blossom' },
+  heart:   { ground: 0x7fae86, fog: 0xd6e6ee, prop: 'cone' },
   social:  { ground: 0xcdb98f, fog: 0xe8e0cf, prop: 'lamp' },
   library: { ground: 0x6f8a5a, fog: 0xd9dde8, prop: 'cone' },
   career:  { ground: 0x8a8f96, fog: 0xd6d9de, prop: 'crate' },
@@ -134,7 +134,7 @@ export function mountPlace(container, { regionId, palette, rank, upgrade = 1, sk
   scene.add(hero.root);
   const blocked = (x, z) => {
     if (Math.hypot(x, z) > 48) return true;
-    if (Math.hypot(x, z + 16) < 13) return true;       // the landmark
+    if (Math.hypot(x, z + 16) < 15) return true;       // the landmark
     if (stand && Math.hypot(x - STAND.x, z - STAND.z) < 1) return true;
     if (decoBlocked(x, z)) return true;
     for (const p of props) if (Math.hypot(x - p.x, z - p.z) < p.r) return true;
@@ -167,6 +167,7 @@ export function mountPlace(container, { regionId, palette, rank, upgrade = 1, sk
     hero.update(t, dt, mv.walk, mv.air);
     stand?.tick(t);
     jet.scale.y = 1 + Math.sin(t * 6) * 0.08;
+    if (landmark.userData.rotor) landmark.userData.rotor.rotation.z = t * 1.2;   // wind turbine
     for (const f of deco.banners.children) if (f.userData.ph !== undefined) f.rotation.y = Math.sin(t * 2 + f.userData.ph) * 0.25;
     stars.material.opacity = night;
     renderer.render(scene, camera);
