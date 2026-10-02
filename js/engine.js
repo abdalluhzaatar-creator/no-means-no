@@ -163,6 +163,8 @@ export function defaultPlan(def) {
   (def.stages || []).forEach((st) => (st.levels || []).forEach((lv, li) => {
     if (!(st === def.stages[0] && li === 0)) { if (i < RANK_COUNT) plan[i] = lv.adds.map((t) => ({ ...t })); i++; }
   }));
+  // A suggested ladder (one task per rank from Bronze 2 up), when the content has one.
+  (def.ladder || []).forEach((t, k) => { if (k + 1 < RANK_COUNT && !plan[k + 1].length) plan[k + 1] = [{ ...t }]; });
   return plan;
 }
 export function planOf(def, ch) { return ch?.plan || defaultPlan(def); }

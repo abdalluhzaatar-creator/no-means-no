@@ -570,3 +570,5 @@ body.in-heaven .hud .cup-side, body.in-heaven .hud .dock, body.in-heaven .hud .v
 .puppet-bar button { padding: 9px 14px; border-radius: 12px; border: 1px solid #ffc83d88; background: rgba(30,20,10,.82); color: #ffe7a8; font: inherit; font-weight: 700; cursor: pointer; }
 .puppet-bar button:active { transform: scale(.96); }
 .puppet-bar kbd { display: inline-block; min-width: 20px; margin-inline-end: 6px; border-radius: 5px; background: #ffe7a8; color: #2a1c10; font: 800 .8rem system-ui; padding: 1px 5px; }
+/* Trial mode marker: a thin striped band at the very top while fake progress is loaded */
+body.is-demo::before { content: '🧪 وضع التجربة — تقدّم وهمي'; position: fixed; top: 0; left: 50%; transform: translateX(-50%); z-index: 50; padding: 2px 12px; border-radius: 0 0 10px 10px; background: repeating-linear-gradient(45deg, #ffc83d, #ffc83d 8px, #f0a92a 8px, #f0a92a 16px); color: #2a1c10; font: 800 .72rem Tajawal, system-ui, sans-serif; pointer-events: none; }

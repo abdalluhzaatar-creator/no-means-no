@@ -19,7 +19,7 @@ const THEME = {
   nature:  { ground: 0x4f9a3f, fog: 0xd8f0d0, prop: 'tree' },
 };
 
-export function mountPlace(container, { regionId, palette, rank, sky: skyInfo, onCharacter, onRanks }) {
+export function mountPlace(container, { regionId, palette, rank, upgrade = 1, sky: skyInfo, onCharacter, onRanks }) {
   const theme = THEME[regionId] || THEME.body;
   let seed = 17; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -87,6 +87,43 @@ export function mountPlace(container, { regionId, palette, rank, sky: skyInfo, o
   const landmark = build ? build() : new THREE.Group();
   landmark.scale.setScalar(1.4); landmark.position.set(0, 0, -16); scene.add(landmark);
 
+  // Gold upgrades, shown by the place's upgrade level: 2 lanterns round the plaza,
+  // 3 flower beds, 4 a fountain on the plaza, 5 banners along the path.
+  const decoProps = [];
+  const deco = { lanterns: new THREE.Group(), garden: new THREE.Group(), fountain: new THREE.Group(), banners: new THREE.Group() };
+  for (const g of Object.values(deco)) scene.add(g);
+  const glowC = new THREE.Color(palette.glow || '#ffd98a');
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 + Math.PI / 8, x = Math.cos(a) * 10.5, z = 10 + Math.sin(a) * 10.5;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 2.6, 8), new THREE.MeshStandardMaterial({ color: 0x2d2a26, metalness: 0.6 })); pole.position.set(x, 1.3, z);
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 8), new THREE.MeshStandardMaterial({ color: 0xfff1c8, emissive: glowC, emissiveIntensity: 1.4 })); lamp.position.set(x, 2.75, z);
+    deco.lanterns.add(pole, lamp);
+    decoProps.push({ x, z, r: 0.5, need: 2 });
+  }
+  const flowerCols = [0xff6b8a, 0xffd166, 0xf4f1de, 0xc77dff, 0xff8c42];
+  for (const sx of [-1, 1]) for (let k = 0; k < 2; k++) {
+    const bx = sx * 6.3, bz = -1 + k * 4.2;
+    const bed = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.35, 3.2), new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 1 })); bed.position.set(bx, 0.17, bz); deco.garden.add(bed);
+    for (let f = 0; f < 10; f++) { const fl = new THREE.Mesh(new THREE.SphereGeometry(0.17, 8, 6), new THREE.MeshStandardMaterial({ color: flowerCols[(f + k) % 5] })); fl.position.set(bx + (rand() - 0.5) * 1.8, 0.5, bz + (rand() - 0.5) * 2.8); deco.garden.add(fl); }
+    decoProps.push({ x: bx, z: bz, r: 1.7, need: 3 });
+  }
+  const basin = new THREE.Mesh(new THREE.CylinderGeometry(2.3, 2.5, 0.6, 32), new THREE.MeshStandardMaterial({ color: 0xece4d2, roughness: 0.6 })); basin.position.set(0, 0.3, 10);
+  const water = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.05, 0.05, 32), new THREE.MeshStandardMaterial({ color: 0x4fa3c7, roughness: 0.15, metalness: 0.3 })); water.position.set(0, 0.58, 10);
+  const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, 1.6, 12), new THREE.MeshStandardMaterial({ color: 0xece4d2 })); spout.position.set(0, 1.2, 10);
+  const jet = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.2, 12, 1, true), new THREE.MeshStandardMaterial({ color: 0xbfe6ff, transparent: true, opacity: 0.55 })); jet.position.set(0, 2.4, 10); jet.rotation.x = Math.PI;
+  deco.fountain.add(basin, water, spout, jet);
+  for (const sx of [-1, 1]) for (let k = 0; k < 3; k++) {
+    const z = 4 - k * 4, x = sx * 3;
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 5, 8), new THREE.MeshStandardMaterial({ color: 0xd4a53a, metalness: 0.7, roughness: 0.3 })); mast.position.set(x, 2.5, z);
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.7), new THREE.MeshStandardMaterial({ color: palette.robe, emissive: glowC, emissiveIntensity: 0.15, side: THREE.DoubleSide })); flag.position.set(x + sx * 0.58, 4.0, z);
+    flag.userData.ph = k + (sx > 0 ? 1.5 : 0); deco.banners.add(mast, flag);
+  }
+  for (const g of Object.values(deco)) g.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+  let upLevel = upgrade;
+  const showDeco = (lvl) => { upLevel = lvl; deco.lanterns.visible = lvl >= 2; deco.garden.visible = lvl >= 3; deco.fountain.visible = lvl >= 4; deco.banners.visible = lvl >= 5; };
+  showDeco(upgrade);
+  const decoBlocked = (x, z) => (upLevel >= 4 && Math.hypot(x, z - 10) < 2.8) || decoProps.some((p) => upLevel >= p.need && Math.hypot(x - p.x, z - p.z) < p.r);
+
   // The rank stand, small, beside the landmark.
   const STAND = { x: -7, z: -3 };
   const stand = rank ? buildRankStand(rank) : null;
@@ -99,11 +136,12 @@ export function mountPlace(container, { regionId, palette, rank, sky: skyInfo, o
     if (Math.hypot(x, z) > 48) return true;
     if (Math.hypot(x, z + 16) < 13) return true;       // the landmark
     if (stand && Math.hypot(x - STAND.x, z - STAND.z) < 1) return true;
+    if (decoBlocked(x, z)) return true;
     for (const p of props) if (Math.hypot(x - p.x, z - p.z) < p.r) return true;
     return false;
   };
   const walker = createWalker({ hero, camera, dom: renderer.domElement, container, blocked, dist: 14, height: 3.2 });
-  walker.teleport(0, 10, Math.PI);
+  walker.teleport(0, 15.5, Math.PI);   // edge of the plaza, facing the landmark (the fountain sits in the middle)
   walker.setCameraClamp((p) => { p.y = Math.max(0.8, p.y); });
 
   // Tap the character to greet.
@@ -128,6 +166,8 @@ export function mountPlace(container, { regionId, palette, rank, sky: skyInfo, o
     const mv = walker.update(dt);
     hero.update(t, dt, mv.walk, mv.air);
     stand?.tick(t);
+    jet.scale.y = 1 + Math.sin(t * 6) * 0.08;
+    for (const f of deco.banners.children) if (f.userData.ph !== undefined) f.rotation.y = Math.sin(t * 2 + f.userData.ph) * 0.25;
     stars.material.opacity = night;
     renderer.render(scene, camera);
     raf = requestAnimationFrame(tick);
@@ -135,7 +175,7 @@ export function mountPlace(container, { regionId, palette, rank, sky: skyInfo, o
   tick();
 
   return {
-    update({ rank: r } = {}) { if (r) stand?.update(r); },
+    update({ rank: r, upgrade: u } = {}) { if (r) stand?.update(r); if (u) showDeco(u); },
     pray() { if (!hero.busy()) hero.wave(); },
     setWeather() {},
     refreshSky() { applySky(); },

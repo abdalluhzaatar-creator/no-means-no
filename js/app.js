@@ -108,6 +108,7 @@ function ask(text, onYes) {
 let currentChar = null;
 
 function render() {
+  document.body.classList.toggle('is-demo', !!state.demo);
   checkCommander();
   syncSound();
   $('#gold').textContent = state.gold;
@@ -418,7 +419,7 @@ let oasis = null;
 let questsCollapsed = true;
 const placeState = () => {
   const c = E.findCharacter(currentChar), ch = state.characters[c.id];
-  return { features: E.regionFeatures(state, c.regionId), level: artLevel(ch), rank: rankState(c, ch) };
+  return { features: E.regionFeatures(state, c.regionId), level: artLevel(ch), rank: rankState(c, ch), upgrade: state.regions[c.regionId]?.level || 1 };
 };
 // What the rank tree shows: every rank, the current one, and the 15-day counter.
 const rankState = (c, ch) => c.stages ? {
@@ -435,7 +436,7 @@ async function bindPlace() {
       const { mountPlace } = await import('./place3d.js');
       if (!v.isConnected) return;
       v.querySelector('.w3-loading')?.remove();
-      const scene = mountPlace(v, { regionId: c.regionId, palette: c.palette, rank: placeState().rank, onRanks: () => showRanks(c.id), sky: skyInfo, onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${['يلا نكمل!', 'خطوة كل يوم', 'أنا جاهز', 'الاستمرار سر النجاح'][Math.random() * 4 | 0]}`); } });
+      const scene = mountPlace(v, { regionId: c.regionId, palette: c.palette, rank: placeState().rank, upgrade: placeState().upgrade, onRanks: () => showRanks(c.id), sky: skyInfo, onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${['يلا نكمل!', 'خطوة كل يوم', 'أنا جاهز', 'الاستمرار سر النجاح'][Math.random() * 4 | 0]}`); } });
       oasis = { char: c.id, scene };
       return;
     }
@@ -1230,10 +1231,17 @@ $('#account').onclick = () => {
       <button class="btn" data-pick-location>📍 أوقات الصلاة: ${state.location ? esc(state.location.name) : 'غير محددة'}</button>
       ${storage.mode === 'local' ? '<button class="btn" id="logout">تبديل الحساب</button>' : ''}
       <button class="btn bad" id="reset">إعادة اللعبة من البداية</button>
-    </div>`);
+    </div>
+    <h3>🧪 وضع التجربة</h3>
+    <p class="muted small-text">بيعبّي اللعبة بتقدّم وهمي (كل الأبعاد مفتوحة ومطوّرة، رتب، مفاتيح، كؤوس، هزيمة على خريطة الحرب) عشان تشوف كل إشي. لما تخلص اضغط "إعادة اللعبة من البداية" وبيروح كله.</p>
+    <button class="btn" id="demo-fill">${state.demo ? '🧪 عبّي التجربة من جديد' : '🧪 افتح كل إشي (تجربة)'}</button>`);
   $('#modal-body [data-pick-location]').onclick = pickLocation;
   const lo = $('#logout');
   if (lo) lo.onclick = () => { storage.logout(); location.reload(); };
+  $('#demo-fill').onclick = () => ask('رح ينضاف تقدّم وهمي فوق تقدّمك الحالي. بتقدر تمسحه كله بعدين من "إعادة اللعبة من البداية". نكمل؟', async () => {
+    const { fillDemo } = await import('./demo.js');
+    fillDemo(state); C.ensure(state); await storage.save(state); go('world'); FX.banner('🧪 وضع التجربة', 'كل إشي مفتوح هلأ. لما تخلص: الحساب ← إعادة اللعبة من البداية', '🧪');
+  });
   $('#reset').onclick = () => ask('سيُحذف كل التقدّم. متأكد؟', async () => {
     state = E.demoState(); await storage.save(state); go('world'); FX.toast('بدأت من جديد');
   });
