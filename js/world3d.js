@@ -9,6 +9,8 @@ import { DIM_BUILD } from './landmarks.js';
 const SIZE = 420;             // world width in units (x); depth is 0.75 of it
 const DEPTH = SIZE * 0.75;
 const SEA = 0;                // sea level
+const HQ_SEA_D = 0.68;        // how far out (island falloff units) the headquarters islet sits
+const ISLET = { top: 9, flat: 22, edge: 42 };   // islet plateau height and radii
 
 // Region coords (0..1000 × 0..700) → world (x, z).
 const toWorld = ({ x, y }) => [(x / 1000 - 0.5) * SIZE * 0.55, (y / 700 - 0.5) * DEPTH * 0.55];
@@ -35,7 +37,9 @@ function makeNoise(seed = 3) {
 export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ elev: 45, pm: false }), weather = 'clear' } = {}) {
   const noise = makeNoise(11);
   const shown = spots.filter((s) => s.vis !== 'hidden').map((s) => {
-    const [x, z] = toWorld(s.def.map);
+    let [x, z] = toWorld(s.def.map);
+    // Headquarters stands off the coast on its own islet (as on the war map), joined by a bridge.
+    if (s.def.kind === 'hq') { const f = HQ_SEA_D / Math.hypot((x / SIZE) * 1.1, (z / DEPTH) * 1.25); x *= f; z *= f; }
     return { ...s, x, z };
   });
   const owned = shown.filter((s) => s.vis === 'owned');
@@ -52,10 +56,9 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     for (const s of shown) {
       if (s.def.floating) continue;   // the trophy island floats over open sea
       if (s.def.kind === 'hq') {
-        // The fortress sits on top of a high plateau (hill with a flat crown).
+        // The fortress sits on a rocky islet out at sea: a flat top with steep sides.
         const d2 = Math.hypot(x - s.x, z - s.z);
-        const hill = 22 * (1 - THREE.MathUtils.smoothstep(d2, 14, 46));
-        h = Math.max(h, hill);
+        h = Math.max(h, THREE.MathUtils.lerp(ISLET.top, -14, THREE.MathUtils.smoothstep(d2, ISLET.flat, ISLET.edge)));
         continue;
       }
       const k = Math.exp(-((x - s.x) ** 2 + (z - s.z) ** 2) / 260);
@@ -65,6 +68,26 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     // as the water surface (that z-fighting made the sea blink).
     if (h < 1.5) h = h - (1.5 - h) * 2 - 1.5;
     return h;
+  };
+
+  // ---------- bridge from the headquarters islet to the main island ----------
+  const hqSpot = shown.find((s) => s.def.kind === 'hq');
+  let bridge = null;
+  if (hqSpot) {
+    const dir = new THREE.Vector2(-hqSpot.x, -hqSpot.z).normalize();
+    const at = (t) => [hqSpot.x + dir.x * t, hqSpot.z + dir.y * t];
+    let land = ISLET.edge + 4;
+    while (land < 220 && height(...at(land)) < 3) land += 1;
+    land += 6;   // reach a little onto the shore
+    const a = at(ISLET.flat - 6), b = at(land);
+    bridge = { dir, a: new THREE.Vector3(a[0], height(...a), a[1]), b: new THREE.Vector3(b[0], height(...b), b[1]) };
+  }
+  // Distance from a point to the bridge line (keeps trees off the deck).
+  const nearBridge = (x, z, r) => {
+    if (!bridge) return false;
+    const ab = new THREE.Vector2(bridge.b.x - bridge.a.x, bridge.b.z - bridge.a.z), ap = new THREE.Vector2(x - bridge.a.x, z - bridge.a.z);
+    const t = THREE.MathUtils.clamp(ap.dot(ab) / ab.lengthSq(), 0, 1);
+    return ap.distanceTo(ab.multiplyScalar(t)) < r;
   };
 
   // ---------- renderer / scene ----------
@@ -160,7 +183,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   const treePts = [];
   for (let i = 0; i < 9000 && treePts.length < 1700; i++) {
     const x = (rand() - 0.5) * SIZE * 1.3, z = (rand() - 0.5) * DEPTH * 1.3, h = height(x, z);
-    if (h < 3 || h > 26 || nearSpot(x, z, 16)) continue;
+    if (h < 3 || h > 26 || nearSpot(x, z, 16) || nearBridge(x, z, 7)) continue;
     if (noise(x * 0.04 + 50, z * 0.04, 3) < -0.05) continue;       // clearings
     treePts.push([x, h, z, 0.7 + rand() * 0.8]);
   }
@@ -175,6 +198,40 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     crowns.setColorAt(i, tc.setHSL(0.27 + rand() * 0.06, 0.55, 0.1 + rand() * 0.08));
   });
   for (const m of [trunks, crowns]) { m.castShadow = true; m.receiveShadow = true; scene.add(m); }
+
+  // ---------- stone bridge ----------
+  if (bridge) {
+    const { a, b } = bridge;
+    const len = Math.hypot(b.x - a.x, b.z - a.z), yaw = Math.atan2(b.x - a.x, b.z - a.z);
+    const g = new THREE.Group(); g.position.copy(a); g.rotation.y = yaw; scene.add(g);
+    const stoneM = new THREE.MeshStandardMaterial({ color: 0xb9a98e, roughness: 0.9 });
+    const deckM = new THREE.MeshStandardMaterial({ color: 0x8a6a48, roughness: 0.85 });
+    const W = 5, N = Math.max(8, Math.round(len / 3));
+    // Deck rises in a gentle arch over the water.
+    const yAt = (u) => THREE.MathUtils.lerp(0, b.y - a.y, u) + Math.sin(u * Math.PI) * 5 + 0.6;
+    for (let i = 0; i < N; i++) {
+      const u0 = i / N, u1 = (i + 1) / N, y0 = yAt(u0), y1 = yAt(u1), seg = len / N;
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(W, 0.6, Math.hypot(seg, y1 - y0) + 0.08), deckM);
+      slab.position.set(0, (y0 + y1) / 2, (u0 + u1) / 2 * len); slab.rotation.x = -Math.atan2(y1 - y0, seg);
+      g.add(slab);
+      for (const sx of [-1, 1]) {
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.1, Math.hypot(seg, y1 - y0) + 0.08), stoneM);
+        wall.position.set(sx * (W / 2 + 0.1), (y0 + y1) / 2 + 0.7, (u0 + u1) / 2 * len); wall.rotation.x = slab.rotation.x; g.add(wall);
+      }
+    }
+    // Piers down into the sea, and lamp posts along the way.
+    for (let u = 0.15; u < 0.9; u += 0.7 / 3) {
+      const y = yAt(u), hgt = y + 14;
+      const pier = new THREE.Mesh(new THREE.BoxGeometry(W + 1, hgt, 2.2), stoneM); pier.position.set(0, y - hgt / 2 - 0.2, u * len); g.add(pier);
+      for (const sx of [-1, 1]) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 3, 8), new THREE.MeshStandardMaterial({ color: 0x3a3128, metalness: 0.6, roughness: 0.4 }));
+        post.position.set(sx * (W / 2 + 0.1), y + 2.6, u * len); g.add(post);
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 8), new THREE.MeshStandardMaterial({ color: 0xffe7a8, emissive: 0xffb84d, emissiveIntensity: 1.2 }));
+        lamp.position.set(sx * (W / 2 + 0.1), y + 4.2, u * len); g.add(lamp);
+      }
+    }
+    g.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
+  }
 
   // ---------- places ----------
   const pickables = [];
@@ -386,6 +443,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     const obj = floating ? skyIsland() : s.def.kind === 'hq' ? fortress() : s.def.id === 'sanctuary' ? palace() : (DIM_BUILD[s.def.id] || ruin)();
     obj.scale.setScalar(floating ? 1.1 : s.def.kind === 'hq' ? 1.9 : 1.5);
     obj.position.set(s.x, y - 0.2, s.z);
+    if (s.def.kind === 'hq' && bridge) obj.rotation.y = Math.atan2(bridge.dir.x, bridge.dir.y);
     if (floating) obj.userData.float = y;
     obj.userData.spot = s.def.id;
     obj.traverse((m) => { m.userData.spot = s.def.id; });
