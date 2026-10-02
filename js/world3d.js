@@ -566,13 +566,14 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   const focus = owned.length
     ? new THREE.Vector3(owned.reduce((a, s) => a + s.x, 0) / owned.length, 6, owned.reduce((a, s) => a + s.z, 0) / owned.length)
     : new THREE.Vector3(0, 6, 0);
-  camera.position.set(focus.x + 40, 80, focus.z + 75);
+  // Open low over the island, looking toward the horizon so the sky fills the top of the view.
+  camera.position.set(focus.x + 135, 40, focus.z + 35);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.copy(focus);
   controls.enableDamping = true; controls.dampingFactor = 0.08;
   controls.screenSpacePanning = false;
   controls.minDistance = 25; controls.maxDistance = 330;
-  controls.maxPolarAngle = THREE.MathUtils.degToRad(78);
+  controls.maxPolarAngle = THREE.MathUtils.degToRad(87);   // tilt up almost to the horizon to see the sky
   controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
   controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
   const bounds = { x: SIZE * 0.62, z: DEPTH * 0.62 };
@@ -706,6 +707,8 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   const tick = () => {
     const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
     controls.update();
+    // Never let the camera dip into the hills or the sea when tilted low.
+    { const floor = Math.max(SEA, height(camera.position.x, camera.position.z)) + 5; if (camera.position.y < floor) camera.position.y = floor; }
     waveTex.offset.set(t * 0.004, t * 0.006);
     for (const sp of cloudGroup.children) { sp.position.x += dt * sp.userData.drift; if (sp.position.x > SIZE * 0.85) sp.position.x -= SIZE * 1.7; }
     if (glow) glow.material.opacity = 0.35 + Math.sin(t * 2) * 0.2;
