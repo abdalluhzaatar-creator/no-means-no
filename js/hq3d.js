@@ -10,6 +10,7 @@ import { buildWorshipper } from './oasis3d.js';
 import { warMapCanvas } from './warmap.js';
 import { buildHeaven, HX } from './heaven3d.js';
 import { buildVestibule } from './vestibule3d.js';
+import { buildMarionette } from './marionette3d.js';
 import { EffectComposer } from './vendor/postprocessing/EffectComposer.js';
 import { RenderPass } from './vendor/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from './vendor/postprocessing/UnrealBloomPass.js';
@@ -360,6 +361,9 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   const heaven = buildHeaven(scene, { owned: new Set(owned) });
   const gallery = buildVestibule(scene);
   dungeon.setFuture(future); dungeon.setChild(child);
+  // The marionette of the eight leaders, on its stand in the middle of the vault.
+  const mario = buildMarionette(scene, { at: new THREE.Vector3(DX, 0, 4), face: 0 });
+  let holdK = 0, heldAt = 0;
   const inSide = (x, z) => x > 10 && x < HW + 0.8 && Math.abs(z - SIDE.z) < SIDE.w / 2 - 0.45;
   // Spiral stairs: follow how far round the commander has walked (angle unwrapped),
   // so each point of the ring knows which turn of the spiral it is on.
@@ -391,6 +395,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
     return false;
   };
   const inDungeon = (x, z) => {
+    if (mario.blocked(x, z)) return true;
     x -= DX;
     if (Math.abs(x) > D.hw - 1.2 || z > D.hl - 1.5 || z < -D.hl + 10.8) return true;   // walls and cell bars
     for (const sx of [-1, 1]) for (const pz of [-12, 0, 12]) if (Math.abs(x - sx * 15) < 1.6 && Math.abs(z - pz) < 1.6) return true;
@@ -416,13 +421,18 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
     stairCam.lerp(stairTarget, 0.12);
     p.lerp(stairCam, stairBlend);
   };
-  const clampDungeon = (p) => { p.x = Math.max(DX - D.hw + 1, Math.min(DX + D.hw - 1, p.x)); p.z = Math.max(-D.hl + 10, Math.min(D.hl - 1, p.z)); p.y = Math.max(0.8, Math.min(14, p.y)); };
+  const clampDungeon = (p) => { p.x = Math.max(DX - D.hw + 1, Math.min(DX + D.hw - 1, p.x)); p.z = Math.max(-D.hl + 10, Math.min(D.hl - 1, p.z)); p.y = Math.max(mario.holding ? 7.5 : 0.8, Math.min(14, p.y)); };
   walker.setCameraClamp(clampHall);
 
   // Door prompt: near the great doors (hall) or the iron door (dungeon).
   const prompt = document.createElement('button'); prompt.className = 'door-btn'; prompt.hidden = true; container.appendChild(prompt);
   const fade = document.createElement('div'); fade.className = 'room-fade'; container.appendChild(fade);
   const caption = document.createElement('div'); caption.className = 'cell-caption'; caption.hidden = true; container.appendChild(caption);
+  // Playing the marionette: four moves (buttons, or keys 1–4).
+  const bar = document.createElement('div'); bar.className = 'puppet-bar'; bar.hidden = true; container.appendChild(bar);
+  const MOVES = [['dance', '💃', 'رقّصهم'], ['spin', '🔄', 'لفّهم'], ['lift', '⬆️', 'ارفعهم'], ['bow', '🙇', 'ينحنوا لك']];
+  MOVES.forEach(([k, ic, txt], i) => { const b = document.createElement('button'); b.innerHTML = `<kbd>${i + 1}</kbd>${ic} ${txt}`; b.onclick = (e) => { e.stopPropagation(); playMove(k); }; bar.appendChild(b); });
+  const playMove = (k) => { if (room === 'dungeon' && mario.holding && !mario.busy) { mario.play(k); sfx.pluck(); if (k === 'spin') sfx.whoosh(); } };
   const setRoomLights = (r) => { heaven.lights.visible = r === 'heaven'; gallery.lights.visible = r === 'gallery'; hallHemi.visible = sun.visible = fill.visible = r === 'hall' || r === 'dungeon'; };
   let weatherKind = weather;
   const heavenSky = () => { const e = heaven.setWeather(weatherKind, skyInfo()); const f = heaven.fogFor(); scene.fog.color.set(f.color); scene.fog.density = f.density; renderer.toneMappingExposure = e; };
@@ -431,6 +441,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
     if (white) sfx.prayer(); else creak();
     setTimeout(() => {
       const from = room;
+      if (from === 'dungeon') { mario.reset(); bar.hidden = true; }
       room = to;
       setRoomLights(to);
       if (to === 'dungeon') { walker.setGround(null); walker.teleport(DX, D.hl - 4, Math.PI, 0); walker.setBlocked(inDungeon); walker.setCameraClamp(clampDungeon); scene.fog.color.set(0x0a0806); scene.fog.density = 0.03; chains(); }
@@ -451,6 +462,8 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   // One interaction prompt: press E (or tap it on touch screens).
   let action = null;
   prompt.onclick = () => action?.();
+  const onDigit = (e) => { const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code); if (i >= 0 && document.getElementById('modal')?.hidden !== false) playMove(MOVES[i][0]); };
+  window.addEventListener('keydown', onDigit);
   const onE = (e) => { if (e.code === 'KeyE' || e.key.toLowerCase() === 'e') { if (action && !prompt.hidden && document.getElementById('modal')?.hidden === true) { e.preventDefault(); action(); } } };
   window.addEventListener('keydown', onE);
   const showPrompt = (text, fn) => { action = fn; prompt.hidden = false; prompt.innerHTML = `<kbd>E</kbd> ${text}`; };
@@ -479,11 +492,17 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
       else caption.hidden = true;
     } else {
       const near = p.z > D.hl - 6 && Math.abs(p.x - DX) < 4;
-      if (near) showPrompt('🚪 ارجع إلى القاعة', () => go('hall')); else { prompt.hidden = true; action = null; }
+      if (near) showPrompt('🚪 ارجع إلى القاعة', () => go('hall'));
+      else if (mario.holding) showPrompt('✋ رجّع الدمى', () => { mario.drop(); sfx.wood(); });
+      else if (mario.near(p)) showPrompt('🎎 أمسك الدمى', () => { mario.grab(); heldAt = performance.now() / 1000; sfx.wood(); sfx.pluck(); });
+      else { prompt.hidden = true; action = null; }
+      bar.hidden = !mario.holding;
+      const t0 = performance.now() / 1000;
       const dF = p.distanceTo(dungeon.futureAt), dC = p.distanceTo(dungeon.childAt);
       // Crying grows louder as you approach the child (only while it is sad).
       setCry(childLevel < 0.4 ? Math.max(0, 1 - dC / 22) * (1 - childLevel * 2) : 0);
-      if (dF < 8 && dF <= dC) { caption.hidden = false; caption.innerHTML = futureText(futureLevel); }
+      if ((mario.holding && t0 - heldAt < 6) || (!mario.holding && mario.near(p))) { caption.hidden = false; caption.innerHTML = mario.holding ? '<b>🎎 القادة الثمانية بين إيديك</b><span>هم صراعاتك الداخلية… وإنت اللي ماسك الخيوط. حرّكهم زي ما بدك.</span>' : '<b>🎎 خيوط القائد</b><span>ثمان دمى لقادة الأبعاد الثمانية، معلّقة بخيوط بين إيديك.</span>'; }
+      else if (dF < 8 && dF <= dC) { caption.hidden = false; caption.innerHTML = futureText(futureLevel); }
       else if (dC < 8) { caption.hidden = false; caption.innerHTML = childText(childLevel); }
       else caption.hidden = true;
     }
@@ -528,6 +547,16 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
     if (t - lastSky > 30) { if (room === 'heaven') heavenSky(); else if (room !== 'gallery') applySky(); lastSky = t; }
     const mv = walker.update(dt);
     cmd.update(t, dt, mv.walk, mv.air);
+    if (room === 'dungeon') {
+      mario.tick(t, dt, cmd.root);
+      // His arms reach forward to hold the controller (higher when he lifts them).
+      holdK += ((mario.holding ? 1 : 0) - holdK) * Math.min(1, dt * 8);
+      if (holdK > 0.01) cmd.arms.forEach((a) => {
+        a.sh.rotation.x = THREE.MathUtils.lerp(a.sh.rotation.x, -1.45 + Math.sin(t * 2) * 0.03, holdK);
+        a.sh.rotation.z = THREE.MathUtils.lerp(a.sh.rotation.z, 0, holdK);
+        a.el.rotation.x = THREE.MathUtils.lerp(a.el.rotation.x, -0.25, holdK);
+      });
+    }
     dungeon.tick(t, dt);
     for (const w of wellFlames) { const k = 0.85 + Math.sin(t * 11 + w.l.position.y) * 0.12; w.fl.scale.y = k; w.l.intensity = 14 * k; }
     if (room === 'heaven') { heaven.tick(t, dt, cmd.root.position); heaven.weatherTick(t, dt); }
@@ -554,7 +583,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
     setWeather(k) { weatherKind = k; if (room === 'heaven') heavenSky(); },
     refreshSky() { if (room === 'heaven') heavenSky(); else if (room !== 'gallery') applySky(); },
     dispose() {
-      cancelAnimationFrame(raf); ro.disconnect(); walker.dispose(); setCry(0); window.removeEventListener('keydown', onE);
+      cancelAnimationFrame(raf); ro.disconnect(); walker.dispose(); setCry(0); window.removeEventListener('keydown', onE); window.removeEventListener('keydown', onDigit);
       scene.traverse((o) => { o.geometry?.dispose(); });
       composer.dispose(); renderer.dispose(); renderer.forceContextLoss?.();
       container.innerHTML = '';

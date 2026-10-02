@@ -564,3 +564,9 @@ body.in-heaven .hud .cup-side, body.in-heaven .hud .dock, body.in-heaven .hud .v
 .dim-ranks { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 10px; }
 .dim-ranks li { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
 .dr-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+/* Marionette moves in the vault */
+.puppet-bar { position: absolute; right: 16px; bottom: 140px; z-index: 6; display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+.puppet-bar[hidden] { display: none; }
+.puppet-bar button { padding: 9px 14px; border-radius: 12px; border: 1px solid #ffc83d88; background: rgba(30,20,10,.82); color: #ffe7a8; font: inherit; font-weight: 700; cursor: pointer; }
+.puppet-bar button:active { transform: scale(.96); }
+.puppet-bar kbd { display: inline-block; min-width: 20px; margin-inline-end: 6px; border-radius: 5px; background: #ffe7a8; color: #2a1c10; font: 800 .8rem system-ui; padding: 1px 5px; }

@@ -94,6 +94,8 @@ export const sfx = {
   paper: () => { noise({ dur: 0.35, vol: 0.15, freq: 3500, q: 0.8 }); noise({ dur: 0.2, vol: 0.1, freq: 2000, q: 1, at: 0.15 }); },
   thunder: () => { if (!S.thunder) return; noise({ dur: 3.5, vol: 0.55, freq: 120, q: 0.7, filter: 'lowpass', attack: 0.05, b: 'ambience', cat: 'thunder' }); noise({ dur: 0.4, vol: 0.3, freq: 900, q: 0.5, b: 'ambience', cat: 'thunder' }); },
   meteor: () => tone({ f: 2400, f2: 600, dur: 0.9, vol: 0.03, type: 'sine', b: 'ambience' }),
+  wood: () => { noise({ dur: 0.07, vol: 0.18, freq: 1100, q: 4 }); tone({ f: 240, f2: 180, dur: 0.09, vol: 0.08, type: 'triangle' }); },
+  pluck: () => { tone({ f: 196, dur: 0.6, vol: 0.06, type: 'triangle' }); tone({ f: 294, dur: 0.5, vol: 0.04, at: 0.03, type: 'triangle' }); },
   whoosh: () => noise({ dur: 0.6, vol: 0.14, freq: 700, q: 0.8, attack: 0.2, b: 'ui' }),
 };
 

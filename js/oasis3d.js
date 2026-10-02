@@ -177,7 +177,7 @@ export function buildWorshipper(pal) {
     { pose: 'dua', move: 0.6, hold: 1.2 }, { pose: 'stand', move: 1.2 },
   ];
   return {
-    root, update, busy, head,
+    root, update, busy, head, arms: [armL, armR],
     pray: () => play(rakah),
     wave: () => play([{ pose: 'dua', move: 0.5, hold: 0.8 }, { pose: 'stand', move: 0.6 }]),
     // Warriors: a raised-hands salute, and kneeling before their commander.
