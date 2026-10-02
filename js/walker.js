@@ -8,6 +8,7 @@ export function createWalker({ hero, camera, dom, container, ground = 0, blocked
   const keys = new Set(), joy = new THREE.Vector2();
   let vy = 0, grounded = true, walkAmt = 0, facing = hero.root.rotation.y, stepT = 0, enabled = true;
   let floor = ground;
+  let groundAt = null;   // optional (x, z) => floor height, e.g. for stairs
   const cam = { yaw: facing + Math.PI, pitch: 0.3, dist, tYaw: facing + Math.PI, tPitch: 0.3, tDist: dist };
   const focus = new THREE.Vector3().copy(hero.root.position).setY(hero.root.position.y + height);
 
@@ -74,7 +75,9 @@ export function createWalker({ hero, camera, dom, container, ground = 0, blocked
     }
     walkAmt = THREE.MathUtils.lerp(walkAmt, mag, Math.min(1, dt * 10));
     if (grounded && walkAmt > 0.3) { stepT -= dt * (1 + walkAmt); if (stepT <= 0) { sfx.step(); stepT = 0.42; } }
-    if (!grounded) { vy -= 22 * dt; p.y += vy * dt; if (p.y <= floor) { p.y = floor; vy = 0; grounded = true; sfx.land(); } }
+    const gy = groundAt ? groundAt(p.x, p.z) : floor;
+    if (grounded) p.y += (gy - p.y) * Math.min(1, dt * 14);
+    else { vy -= 22 * dt; p.y += vy * dt; if (p.y <= gy) { p.y = gy; vy = 0; grounded = true; sfx.land(); } }
     hero.root.rotation.y = facing;
     // camera swings behind while walking
     if (walkAmt > 0.2 && drags.size === 0) { let d = facing + Math.PI - cam.tYaw; d = Math.atan2(Math.sin(d), Math.cos(d)); cam.tYaw += d * Math.min(1, dt * 1.8); }
@@ -89,7 +92,8 @@ export function createWalker({ hero, camera, dom, container, ground = 0, blocked
   }
   return {
     update,
-    teleport(x, z, face, y = floor) { floor = y; hero.root.position.set(x, y, z); facing = face; cam.yaw = cam.tYaw = face + Math.PI; focus.set(x, y + height, z); },
+    setGround(fn) { groundAt = fn; },
+    teleport(x, z, face, y = groundAt ? groundAt(x, z) : floor) { floor = y; hero.root.position.set(x, y, z); facing = face; cam.yaw = cam.tYaw = face + Math.PI; focus.set(x, y + height, z); },
     setBlocked(fn) { blocked = fn; },
     setCameraClamp(fn) { clampCam = fn; },
     setEnabled(v) { enabled = v; pad.style.display = v ? '' : 'none'; },

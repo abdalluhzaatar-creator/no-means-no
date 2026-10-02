@@ -74,23 +74,30 @@ const puffTexture = () => canvasTex(128, 128, (g) => {
 function skyDome() {
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
-    uniforms: { t: { value: 0 } },
+    uniforms: { t: { value: 0 }, night: { value: 0 }, gold: { value: 0.5 }, dim: { value: 0 }, sun: { value: new THREE.Vector3(0, 0.3, -1) } },
     vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
     fragmentShader: `
-      varying vec3 vP; uniform float t;
+      varying vec3 vP; uniform float t, night, gold, dim; uniform vec3 sun;
       float hash(vec3 p){ p = fract(p*0.3183099+.1); p *= 17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+      vec3 grad(vec3 hz, vec3 md, vec3 tp, float h){ vec3 c = mix(hz, md, smoothstep(-0.05,0.25,h)); return mix(c, tp, smoothstep(0.25,0.85,h)); }
       void main(){
         float h = vP.y;
-        vec3 horizon = vec3(1.0,0.78,0.52), mid = vec3(0.42,0.33,0.72), top = vec3(0.04,0.06,0.22);
-        vec3 col = mix(horizon, mid, smoothstep(-0.05,0.25,h));
-        col = mix(col, top, smoothstep(0.25,0.85,h));
-        col = mix(col, vec3(1.0,0.88,0.7), smoothstep(0.05,-0.25,h));
-        // nebula band
+        vec3 day = grad(vec3(0.86,0.92,1.0), vec3(0.5,0.7,0.98), vec3(0.2,0.45,0.9), h);
+        vec3 dusk = grad(vec3(1.0,0.72,0.45), vec3(0.62,0.4,0.66), vec3(0.16,0.14,0.38), h);
+        vec3 nite = grad(vec3(0.16,0.13,0.3), vec3(0.07,0.07,0.2), vec3(0.01,0.02,0.08), h);
+        vec3 col = mix(mix(day, dusk, gold), nite, night);
+        // the sea of clouds below glows with the light of the hour
+        col = mix(col, mix(mix(vec3(1.0,0.97,0.92), vec3(1.0,0.86,0.7), gold), vec3(0.2,0.2,0.32), night), smoothstep(0.05,-0.25,h));
+        // sun (or moon) glow
+        float sd = max(dot(vP, normalize(sun)), 0.0);
+        col += mix(vec3(1.0,0.85,0.6), vec3(0.6,0.7,1.0), night) * (pow(sd, 400.0) * 2.5 + pow(sd, 12.0) * 0.25) * (1.0 - dim * 0.8);
+        // weather: overcast grey
+        col = mix(col, vec3(0.6,0.62,0.66) * (1.0 - night * 0.8), dim);
+        // nebula band and stars at night
         float band = exp(-pow((vP.y - 0.45 + 0.25*vP.x)*5.0, 2.0));
-        col += vec3(0.55,0.35,0.85) * band * 0.25 * (0.6 + 0.4*sin(vP.x*9.0 + vP.z*7.0));
-        // stars
+        col += vec3(0.55,0.35,0.85) * band * 0.25 * night * (1.0 - dim) * (0.6 + 0.4*sin(vP.x*9.0 + vP.z*7.0));
         vec3 q = floor(vP*420.0);
-        float s = step(0.9965, hash(q)) * smoothstep(0.1,0.5,h);
+        float s = step(0.9965, hash(q)) * smoothstep(0.1,0.5,h) * night * (1.0 - dim);
         col += vec3(1.0,0.95,0.85) * s * (0.6 + 0.4*sin(t*2.0 + hash(q+3.0)*30.0));
         gl_FragColor = vec4(col,1.0);
       }`,
@@ -98,8 +105,14 @@ function skyDome() {
   return new THREE.Mesh(new THREE.SphereGeometry(300, 64, 32), mat);
 }
 
+// Weather the hall follows (same kinds as the spiritual dimension).
+const WEATHER = {
+  clear: { dim: 0, rain: 0, snow: 0, fog: 0 }, cloudy: { dim: 0.2, rain: 0, snow: 0, fog: 0.1 }, overcast: { dim: 0.5, rain: 0, snow: 0, fog: 0.25 },
+  fog: { dim: 0.45, rain: 0, snow: 0, fog: 1 }, rain: { dim: 0.6, rain: 1, snow: 0, fog: 0.35 }, storm: { dim: 0.75, rain: 1.4, snow: 0, fog: 0.45 }, snow: { dim: 0.4, rain: 0, snow: 1, fog: 0.4 },
+};
+
 // Armour, weapon and cape for a warrior (in the model's local units).
-function arm(hero, pal, ghost) {
+export function arm(hero, pal, ghost) {
   const metal = std(ghost ? 0xcfe6ff : 0xd8c27a, { metalness: 0.9, roughness: 0.25 });
   const accent = std(pal.accent, { metalness: 0.4, roughness: 0.4 });
   const glow = new THREE.Color(pal.glow);
@@ -250,7 +263,7 @@ export function buildHeaven(scene, { owned = new Set() } = {}) {
 
   // Lights: only switched on while the commander is in this hall.
   const lights = new THREE.Group(); g.add(lights);
-  lights.add(new THREE.HemisphereLight(0xc9d2ff, 0x8a6a3a, 0.6));
+  const hemi = new THREE.HemisphereLight(0xc9d2ff, 0x8a6a3a, 0.6); lights.add(hemi);
   const key = new THREE.DirectionalLight(0xfff0d8, 1.7); key.position.set(-18, 40, 22); key.target.position.set(0, 0, 0);
   key.castShadow = true; key.shadow.mapSize.set(2048, 2048); Object.assign(key.shadow.camera, { left: -28, right: 28, top: 28, bottom: -28, near: 1, far: 120 }); key.shadow.bias = -0.0004;
   lights.add(key, key.target);
@@ -303,5 +316,44 @@ export function buildHeaven(scene, { owned = new Set() } = {}) {
   }
 
   const ownedCount = warriors.filter((w) => !w.ghost).length;
-  return { group: g, lights, tick, blocked, clamp, entrance: new THREE.Vector3(HX, 0, 19.5), door: HEAVEN.door, seal: HEAVEN.seal, ownedCount, total: warriors.length };
+  // Rain and snow falling across the hall.
+  const PR = 1800, pr = new Float32Array(PR * 6);
+  for (let i = 0; i < PR; i++) { const x = (rnd() - 0.5) * 56, y = rnd() * 30, z = (rnd() - 0.5) * 56; pr.set([x, y, z, x, y - 0.8, z], i * 6); }
+  const rain = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(pr, 3)), new THREE.LineBasicMaterial({ color: 0xb8c8d8, transparent: true, opacity: 0.45 }));
+  rain.frustumCulled = false; rain.visible = false; g.add(rain);
+  const SN = 1500, sn = new Float32Array(SN * 3);
+  for (let i = 0; i < SN; i++) sn.set([(rnd() - 0.5) * 56, rnd() * 30, (rnd() - 0.5) * 56], i * 3);
+  const snow = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(sn, 3)), new THREE.PointsMaterial({ map: puff, color: 0xffffff, size: 0.3, transparent: true, depthWrite: false }));
+  snow.frustumCulled = false; snow.visible = false; g.add(snow);
+  const flash = new THREE.AmbientLight(0xdfe8ff, 0); lights.add(flash);
+
+  // Time of day (sun elevation from the city's prayer times) and weather.
+  let W = WEATHER.clear, kind = 'clear', night = 0, nextBolt = 5;
+  const tint = new THREE.Color();
+  const applySky = ({ elev = 30, pm = false } = {}) => {
+    night = THREE.MathUtils.clamp((3 - elev) / 13, 0, 1);
+    const goldK = THREE.MathUtils.clamp(1 - Math.abs(elev - 4) / 14, 0, 1) * (1 - night);
+    const u = sky.material.uniforms; u.night.value = night; u.gold.value = goldK; u.dim.value = W.dim;
+    const sunDir = new THREE.Vector3().setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - Math.max(elev, -10)), pm ? -2.4 : 0.8);
+    u.sun.value.copy(night > 0.5 ? new THREE.Vector3(-0.4, 0.55, -0.7) : sunDir);
+    key.position.copy(night > 0.5 ? new THREE.Vector3(-0.4, 0.55, -0.7) : sunDir).setLength(50).add(new THREE.Vector3(0, 10, 0));
+    key.color.set(night > 0.5 ? 0x9fb4e6 : 0xfff0d8).lerp(tint.set(0xffa860), goldK * 0.7);
+    key.intensity = THREE.MathUtils.lerp(1.8, 0.45, night) * (1 - W.dim * 0.6);
+    hemi.intensity = THREE.MathUtils.lerp(0.75, 0.3, night) * (1 - W.dim * 0.25);
+    hemi.color.set(night > 0.5 ? 0x5a68b0 : 0xc9d2ff);
+    for (const m of cloudMats) m.color.set(0xffffff).lerp(tint.set(0xffc49a), goldK * 0.6).lerp(tint.set(0x8a90a0), W.dim * 0.7).lerp(tint.set(0x2a3150), night * 0.85);
+    rain.visible = W.rain > 0; snow.visible = W.snow > 0;
+    return 0.85 + night * 0.15;   // exposure for this hour
+  };
+  const setWeather = (k, info) => { kind = k in WEATHER ? k : 'clear'; W = WEATHER[kind]; return applySky(info); };
+  const fogFor = () => ({ color: tint.set(0x8f86c8).lerp(new THREE.Color(0xb8bcc4), W.dim).lerp(new THREE.Color(0x141830), night * 0.8).getHex(), density: 0.0035 + W.fog * 0.02 });
+  const weatherTick = (t, dt) => {
+    if (rain.visible) { const sp = 40 * dt; for (let i = 0; i < PR; i++) { const o = i * 6; let y = pr[o + 1] - sp; if (y < 0) y = 30; pr[o + 1] = y; pr[o + 4] = y - 0.8; } rain.geometry.attributes.position.needsUpdate = true; }
+    if (snow.visible) { for (let i = 0; i < SN; i++) { const o = i * 3; let y = sn[o + 1] - dt * 1.6; if (y < 0) y = 30; sn[o + 1] = y; sn[o] += Math.sin(t + i) * dt * 0.4; } snow.geometry.attributes.position.needsUpdate = true; }
+    if (kind === 'storm' && t > nextBolt) { flash.intensity = 4; nextBolt = t + 4 + Math.random() * 8; return true; }
+    flash.intensity *= 0.86;
+    return false;
+  };
+
+  return { group: g, lights, tick, blocked, clamp, applySky, setWeather, fogFor, weatherTick, entrance: new THREE.Vector3(HX, 0, 19.5), door: HEAVEN.door, seal: HEAVEN.seal, ownedCount, total: warriors.length };
 }

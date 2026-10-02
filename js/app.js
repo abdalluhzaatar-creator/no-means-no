@@ -131,7 +131,7 @@ function render() {
     bind(); refreshModal();
     return;
   }
-  if (hqScene) { hqScene.dispose(); hqScene = null; document.body.classList.remove('in-dungeon', 'in-heaven'); }
+  if (hqScene) { hqScene.dispose(); hqScene = null; document.body.classList.remove('in-dungeon', 'in-heaven', 'in-gallery'); }
   if (screen === 'trophies' && isle && $('#trophy-view')) {
     $('#hud').innerHTML = trophyHUD();
     isle.update(cupList());
@@ -543,6 +543,7 @@ async function loadWeather(force = false) {
   } catch (e) { console.warn('weather unavailable', e); liveWeather = liveWeather || { kind: 'clear', offline: true }; }
   oasis?.scene.setWeather(currentWeather());
   disposeWorld?.setWeather?.(currentWeather());
+  hqScene?.setWeather?.(currentWeather());
   if ($('#hud')) $('#hud').innerHTML = placeHUD(), bind();
 }
 
@@ -763,7 +764,8 @@ async function bindHQ() {
     const { mountHQ } = await import('./hq3d.js');
     if (!v.isConnected) return;
     v.querySelector('.w3-loading')?.remove();
-    hqScene = mountHQ(v, { places: warPlaces(), owned: CHARACTERS.filter((c) => state.characters[c.id]).map((c) => c.id), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, ...innerState(), onRoom: (r) => { document.body.classList.toggle('in-dungeon', r === 'dungeon'); document.body.classList.toggle('in-heaven', r === 'heaven'); }, sky: skyInfo, onTable: showWarMap, onCommander: showCommandRanks });
+    hqScene = mountHQ(v, { weather: currentWeather(), places: warPlaces(), owned: CHARACTERS.filter((c) => state.characters[c.id]).map((c) => c.id), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, ...innerState(), onRoom: (r) => { document.body.classList.toggle('in-dungeon', r === 'dungeon'); document.body.classList.toggle('in-heaven', r === 'heaven'); document.body.classList.toggle('in-gallery', r === 'gallery'); }, sky: skyInfo, onTable: showWarMap, onCommander: showCommandRanks });
+    loadWeather();
   } catch (err) { console.warn('3D HQ unavailable', err); v.innerHTML = ''; }
 }
 // All commander ranks: each one takes KEYS_PER_RANK keys.
@@ -1188,8 +1190,8 @@ function bind() {
   on('data-judge', judgeFlow);
   on('data-wallet', showWallet);
   on('data-channel', (c) => { cupChannel = c; render(); });
-  on('data-set-weather', (k) => { weatherOverride = k; oasis?.scene.setWeather(currentWeather()); disposeWorld?.setWeather?.(currentWeather()); render(); });
-  on('data-set-time', (k) => { timeOverride = k; oasis?.scene.refreshSky(); disposeWorld?.refreshSky?.(); render(); });
+  on('data-set-weather', (k) => { weatherOverride = k; oasis?.scene.setWeather(currentWeather()); disposeWorld?.setWeather?.(currentWeather()); hqScene?.setWeather?.(currentWeather()); render(); });
+  on('data-set-time', (k) => { timeOverride = k; oasis?.scene.refreshSky(); disposeWorld?.refreshSky?.(); hqScene?.refreshSky?.(); render(); });
   on('data-toggle-quests', () => { questsCollapsed = !questsCollapsed; $('#quests')?.classList.toggle('collapsed', questsCollapsed); });
   on('data-pick-location', pickLocation);
   on('data-task-fail', (v) => {
