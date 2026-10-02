@@ -131,7 +131,7 @@ function render() {
     bind(); refreshModal();
     return;
   }
-  hqScene?.dispose(); hqScene = null;
+  if (hqScene) { hqScene.dispose(); hqScene = null; document.body.classList.remove('in-dungeon', 'in-heaven'); }
   if (screen === 'trophies' && isle && $('#trophy-view')) {
     $('#hud').innerHTML = trophyHUD();
     isle.update(cupList());
@@ -763,7 +763,7 @@ async function bindHQ() {
     const { mountHQ } = await import('./hq3d.js');
     if (!v.isConnected) return;
     v.querySelector('.w3-loading')?.remove();
-    hqScene = mountHQ(v, { places: warPlaces(), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, ...innerState(), onRoom: (r) => document.body.classList.toggle('in-dungeon', r === 'dungeon'), sky: skyInfo, onTable: showWarMap, onCommander: showCommandRanks });
+    hqScene = mountHQ(v, { places: warPlaces(), owned: CHARACTERS.filter((c) => state.characters[c.id]).map((c) => c.id), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, ...innerState(), onRoom: (r) => { document.body.classList.toggle('in-dungeon', r === 'dungeon'); document.body.classList.toggle('in-heaven', r === 'heaven'); }, sky: skyInfo, onTable: showWarMap, onCommander: showCommandRanks });
   } catch (err) { console.warn('3D HQ unavailable', err); v.innerHTML = ''; }
 }
 // All commander ranks: each one takes KEYS_PER_RANK keys.

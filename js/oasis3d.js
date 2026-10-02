@@ -176,7 +176,14 @@ export function buildWorshipper(pal) {
     { pose: 'sujud', move: 0.8, hold: 1.1 }, { pose: 'jalsa', move: 0.8, hold: 0.8 },
     { pose: 'dua', move: 0.6, hold: 1.2 }, { pose: 'stand', move: 1.2 },
   ];
-  return { root, update, busy, pray: () => play(rakah), wave: () => play([{ pose: 'dua', move: 0.5, hold: 0.8 }, { pose: 'stand', move: 0.6 }]), head };
+  return {
+    root, update, busy, head,
+    pray: () => play(rakah),
+    wave: () => play([{ pose: 'dua', move: 0.5, hold: 0.8 }, { pose: 'stand', move: 0.6 }]),
+    // Warriors: a raised-hands salute, and kneeling before their commander.
+    salute: () => play([{ pose: 'takbir', move: 0.35, hold: 0.9 }, { pose: 'stand', move: 0.5 }]),
+    kneel: (hold = 2.4) => play([{ pose: 'jalsa', move: 0.9, hold }, { pose: 'stand', move: 1 }]),
+  };
 }
 
 // ---------- scene pieces ----------

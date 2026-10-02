@@ -8,6 +8,12 @@ import { buildDungeon, DX, D } from './dungeon3d.js';
 import { setCry, creak, chains } from './audio.js';
 import { buildWorshipper } from './oasis3d.js';
 import { warMapCanvas } from './warmap.js';
+import { buildHeaven, HX } from './heaven3d.js';
+import { EffectComposer } from './vendor/postprocessing/EffectComposer.js';
+import { RenderPass } from './vendor/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from './vendor/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from './vendor/postprocessing/OutputPass.js';
+import { sfx } from './audio.js';
 
 const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...o });
 const box3 = (g, w, h, d, m, x, y, z) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y + h / 2, z); g.add(o); return o; };
@@ -17,6 +23,8 @@ const shadowAll = (o) => o.traverse((m) => { if (m.isMesh) { m.castShadow = true
 const HW = 20;          // half width  (x)
 const HL = 34;          // half length (z)
 const WALL_H = 18;      // wall height before the vault
+// Two inner doors in the front wall: left to the dungeon, right to the Hall of Warriors.
+const DOOR_X = [-3.6, 3.6], DOOR_W = 3, DOOR_H = 6;
 
 function canvasTex(w, h, draw, repeat) {
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
@@ -26,7 +34,7 @@ function canvasTex(w, h, draw, repeat) {
   return t;
 }
 
-export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 0, sky: skyInfo, onCommander, onTable, onRoom }) {
+export function mountHQ(container, { places, owned = [], hq, rankIndex, future = 0, child = 0, sky: skyInfo, onCommander, onTable, onRoom }) {
   let seed = 9; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -101,7 +109,7 @@ export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 
   const endWall = (z, face) => {
     const shape = new THREE.Shape(); shape.moveTo(-HW - 1.5, 0); shape.lineTo(HW + 1.5, 0); shape.lineTo(HW + 1.5, WALL_H + HW); shape.lineTo(-HW - 1.5, WALL_H + HW); shape.lineTo(-HW - 1.5, 0);
     const rose = new THREE.Path(); rose.absarc(0, WALL_H + 5, 4.5, 0, Math.PI * 2, true); shape.holes.push(rose);
-    if (face > 0) { const d = new THREE.Path(); d.moveTo(-4.5, 0); d.lineTo(-4.5, 9); d.absarc(0, 9, 4.5, Math.PI, 0, true); d.lineTo(4.5, 0); d.lineTo(-4.5, 0); shape.holes.push(d); }
+    if (face > 0) for (const dx of DOOR_X) { const d = new THREE.Path(); d.moveTo(dx - DOOR_W / 2, 0); d.lineTo(dx - DOOR_W / 2, DOOR_H - DOOR_W / 2); d.absarc(dx, DOOR_H - DOOR_W / 2, DOOR_W / 2, Math.PI, 0, true); d.lineTo(dx + DOOR_W / 2, 0); d.lineTo(dx - DOOR_W / 2, 0); shape.holes.push(d); }
     const m = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: 1.5, bevelEnabled: false, curveSegments: 24 }), wallM); m.position.z = z - (face > 0 ? 0 : 1.5); m.receiveShadow = true; scene.add(m);
     const roseGlass = new THREE.Mesh(new THREE.CircleGeometry(4.5, 48), new THREE.MeshBasicMaterial({ map: canvasTex(256, 256, (g) => {
       for (let i = 0; i < 16; i++) { g.fillStyle = ['#b3202c', '#1f4fa8', '#e0a93b', '#2f8a5e'][i % 4]; g.beginPath(); g.moveTo(128, 128); g.arc(128, 128, 128, (i / 16) * Math.PI * 2, ((i + 1) / 16) * Math.PI * 2); g.fill(); }
@@ -112,12 +120,33 @@ export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 
     const roseRim = new THREE.Mesh(new THREE.TorusGeometry(4.6, 0.35, 10, 64), goldM); roseRim.position.copy(roseGlass.position); scene.add(roseRim);
   };
   endWall(HL, 1); endWall(-HL, -1);
-  // Great doors
-  for (const sx of [-1, 1]) {
-    const leaf = new THREE.Mesh(new THREE.BoxGeometry(4.4, 12.5, 0.4), woodM); leaf.position.set(sx * 2.25, 6.25, HL + 0.4); scene.add(leaf);
-    for (let y = 1.5; y < 12; y += 2.2) { const band = new THREE.Mesh(new THREE.BoxGeometry(4.4, 0.25, 0.1), goldM); band.position.set(sx * 2.25, y, HL + 0.15); scene.add(band); }
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.08, 8, 24), brightGold); ring.position.set(sx * 0.7, 5.5, HL + 0.1); scene.add(ring);
-  }
+  // Inner doors: arched oak leaves with iron straps, a stone frame, a torch each side
+  // and a plaque over each saying where it leads.
+  const ironM = std(0x2b2b30, { metalness: 0.85, roughness: 0.45 });
+  const plaque = (text, color) => canvasTex(512, 128, (g, w, h) => {
+    g.fillStyle = '#2a1c10'; g.fillRect(0, 0, w, h); g.strokeStyle = color; g.lineWidth = 8; g.strokeRect(6, 6, w - 12, h - 12);
+    g.direction = 'rtl'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '800 58px Tajawal, system-ui, sans-serif'; g.fillStyle = color; g.fillText(text, w / 2, h / 2 + 4);
+  });
+  const doorGlow = [];
+  DOOR_X.forEach((dx, i) => {
+    const heaven = i === 1;
+    const arch = new THREE.Shape(); arch.moveTo(-DOOR_W / 2, 0); arch.lineTo(-DOOR_W / 2, DOOR_H - DOOR_W / 2); arch.absarc(0, DOOR_H - DOOR_W / 2, DOOR_W / 2, Math.PI, 0, true); arch.lineTo(DOOR_W / 2, 0); arch.lineTo(-DOOR_W / 2, 0);
+    if (heaven) { // light of the celestial hall leaking around the door
+      const glow = new THREE.Mesh(new THREE.ShapeGeometry(arch, 24), new THREE.MeshBasicMaterial({ color: 0xffe2a0, transparent: true, opacity: 0.9, toneMapped: false }));
+      glow.scale.set(1.08, 1.04, 1); glow.position.set(dx, 0, HL + 0.9); scene.add(glow); doorGlow.push(glow);
+    }
+    const leaf = new THREE.Mesh(new THREE.ExtrudeGeometry(arch, { depth: 0.22, bevelEnabled: false, curveSegments: 24 }), heaven ? std(0x4a2c18, { roughness: 0.6 }) : woodM);
+    leaf.position.set(dx, 0, HL + 0.55); scene.add(leaf);
+    for (let y = 0.8; y < DOOR_H - 1.4; y += 1.25) { const band = new THREE.Mesh(new THREE.BoxGeometry(DOOR_W, 0.16, 0.08), heaven ? goldM : ironM); band.position.set(dx, y, HL + 0.5); scene.add(band); }
+    for (let y = 0.8; y < DOOR_H - 1.4; y += 1.25) for (const sx of [-1, 1]) { const stud = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), heaven ? brightGold : ironM); stud.position.set(dx + sx * (DOOR_W / 2 - 0.25), y, HL + 0.45); scene.add(stud); }
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.05, 8, 24), heaven ? brightGold : ironM); ring.position.set(dx + (i ? -0.8 : 0.8), 2.6, HL + 0.42); scene.add(ring);
+    // stone frame
+    const frame = new THREE.Mesh(new THREE.TorusGeometry(DOOR_W / 2 + 0.25, 0.3, 10, 32, Math.PI), darkStone); frame.position.set(dx, DOOR_H - DOOR_W / 2, HL - 0.05); scene.add(frame);
+    for (const sx of [-1, 1]) { const jamb = new THREE.Mesh(new THREE.BoxGeometry(0.6, DOOR_H - DOOR_W / 2, 0.6), darkStone); jamb.position.set(dx + sx * (DOOR_W / 2 + 0.25), (DOOR_H - DOOR_W / 2) / 2, HL - 0.05); scene.add(jamb); }
+    const key = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.4), heaven ? brightGold : darkStone); key.position.set(dx, DOOR_H + 0.25, HL - 0.05); scene.add(key);
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.65), new THREE.MeshBasicMaterial({ map: plaque(heaven ? 'قاعة المحاربين ✦' : 'السجن ⬇', heaven ? '#ffd98a' : '#c9a36a'), toneMapped: false }));
+    sign.position.set(dx, DOOR_H + 1.1, HL - 0.1); sign.rotation.y = Math.PI; scene.add(sign);
+  });
   // Ribbed barrel vault
   const vault = new THREE.Mesh(new THREE.CylinderGeometry(HW + 1.5, HW + 1.5, HL * 2 + 3, 48, 1, true, -Math.PI / 2, Math.PI), new THREE.MeshStandardMaterial({ map: stoneTex, side: THREE.BackSide, roughness: 0.95, color: 0x9a8a7a }));
   vault.rotation.x = Math.PI / 2; vault.rotation.y = Math.PI; vault.position.y = WALL_H; vault.rotation.z = 0; scene.add(vault);
@@ -220,7 +249,7 @@ export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 
   holo.position.set(0, 3.5, -4); scene.add(holo);
 
   // ---------- light: chandeliers, braziers, window light ----------
-  scene.add(new THREE.HemisphereLight(0xffe2b8, 0x20140c, 0.5));
+  const hallHemi = new THREE.HemisphereLight(0xffe2b8, 0x20140c, 0.5); scene.add(hallHemi);
   const sun = new THREE.DirectionalLight(0xffe6c0, 2.2); sun.position.set(-30, 30, 8); sun.target.position.set(0, 0, 0); sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, near: 1, far: 120 }); sun.shadow.bias = -0.0005;
   scene.add(sun, sun.target);
@@ -275,6 +304,7 @@ export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 
 
   // ---------- walking: the commander moves around the hall ----------
   const dungeon = buildDungeon(scene);
+  const heaven = buildHeaven(scene, { owned: new Set(owned) });
   dungeon.setFuture(future); dungeon.setChild(child);
   const inHall = (x, z) => {
     if (Math.abs(x) > 10.5 || z > HL - 1.2 || z < -HL + 12) return true;          // nave walls, doors, dais
@@ -300,12 +330,16 @@ export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 
   const prompt = document.createElement('button'); prompt.className = 'door-btn'; prompt.hidden = true; container.appendChild(prompt);
   const fade = document.createElement('div'); fade.className = 'room-fade'; container.appendChild(fade);
   const caption = document.createElement('div'); caption.className = 'cell-caption'; caption.hidden = true; container.appendChild(caption);
+  const setHeavenLights = (on) => { heaven.lights.visible = on; hallHemi.visible = sun.visible = fill.visible = !on; };
   const go = (to) => {
     fade.classList.add('on'); creak();
     setTimeout(() => {
+      const from = room;
       room = to;
+      setHeavenLights(to === 'heaven');
       if (to === 'dungeon') { walker.teleport(DX, D.hl - 4, Math.PI); walker.setBlocked(inDungeon); walker.setCameraClamp(clampDungeon); scene.fog.color.set(0x0a0806); scene.fog.density = 0.03; chains(); }
-      else { walker.teleport(0, HL - 5, Math.PI); walker.setBlocked(inHall); walker.setCameraClamp(clampHall); scene.fog.color.set(0x1a120c); scene.fog.density = 0.012; setCry(0); }
+      else if (to === 'heaven') { walker.teleport(heaven.entrance.x, heaven.entrance.z, Math.PI); walker.setBlocked(heaven.blocked); walker.setCameraClamp(heaven.clamp); scene.fog.color.set(0x8f86c8); scene.fog.density = 0.0035; renderer.toneMappingExposure = 0.85; sfx.prayer(); }
+      else { walker.teleport(from === 'heaven' ? DOOR_X[1] : DOOR_X[0], HL - 5, Math.PI); walker.setBlocked(inHall); walker.setCameraClamp(clampHall); scene.fog.color.set(0x1a120c); scene.fog.density = 0.012; setCry(0); applySky(); }
       onRoom?.(to);
       setTimeout(() => fade.classList.remove('on'), 150);
     }, 700);
@@ -320,12 +354,19 @@ export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 
   const updatePrompts = () => {
     const p = cmd.root.position; if (window.__nmnDebug) window.__hqPos = [p.x, p.z, room];
     if (room === 'hall') {
-      const nearDoor = p.z > HL - 6 && Math.abs(p.x) < 5;
+      const atDoor = p.z > HL - 6 ? DOOR_X.findIndex((dx) => Math.abs(p.x - dx) < 2.6) : -1;
       const nearMap = Math.abs(p.x) < 7.5 && p.z > -10 && p.z < 2.2;
-      if (nearDoor) showPrompt('🚪 افتح الباب', () => go('dungeon'));
+      if (atDoor === 0) showPrompt('🚪 انزل إلى السجن', () => go('dungeon'));
+      else if (atDoor === 1) showPrompt('✦ ادخل قاعة المحاربين', () => go('heaven'));
       else if (nearMap) showPrompt('🗺 افتح الخريطة', () => onTable?.());
       else { prompt.hidden = true; action = null; }
       caption.hidden = true;
+    } else if (room === 'heaven') {
+      const nearDoor = p.distanceTo(heaven.door) < 4.5;
+      const onSeal = Math.hypot(p.x - heaven.seal.x, p.z - heaven.seal.z) < 2.8;
+      if (nearDoor) showPrompt('🚪 ارجع إلى القاعة', () => go('hall')); else { prompt.hidden = true; action = null; }
+      if (onSeal) { caption.hidden = false; caption.innerHTML = `<b>🫡 محاربوك</b><span>${heaven.ownedCount} من ${heaven.total} أبعاد انضمّت لجيشك. كل بُعد تفتحه بيصحى محاربه وبيوقف معك.</span><i style="--v:${Math.round((heaven.ownedCount / heaven.total) * 100)}%"></i>`; }
+      else caption.hidden = true;
     } else {
       const near = p.z > D.hl - 6 && Math.abs(p.x - DX) < 4;
       if (near) showPrompt('🚪 ارجع إلى القاعة', () => go('hall')); else { prompt.hidden = true; action = null; }
@@ -362,17 +403,24 @@ export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 
   };
   applySky();
 
-  const resize = () => { const w = container.clientWidth, h = container.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); };
+  // Bloom for the Hall of Warriors.
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.55, 0.9);
+  composer.addPass(bloom); composer.addPass(new OutputPass());
+  const resize = () => { const w = container.clientWidth, h = container.clientHeight; renderer.setSize(w, h); composer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); };
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
   if (camera.aspect < 0.8) { camera.fov = 58; camera.updateProjectionMatrix(); }
 
   const clock = new THREE.Clock(); let raf, lastSky = 0;
   const tick = () => {
     const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
-    if (t - lastSky > 30) { applySky(); lastSky = t; }
+    if (t - lastSky > 30) { if (room !== 'heaven') applySky(); lastSky = t; }
     const mv = walker.update(dt);
     cmd.update(t, dt, mv.walk, mv.air);
     dungeon.tick(t, dt);
+    if (room === 'heaven') heaven.tick(t, dt, cmd.root.position);
+    for (const gl of doorGlow) gl.material.opacity = 0.65 + Math.sin(t * 2.2) * 0.25;
     updatePrompts();
     for (const f of flames) {
       const k = 0.82 + Math.sin(t * 11 + f.ph) * 0.1 + Math.sin(t * 27 + f.ph) * 0.08;
@@ -383,7 +431,7 @@ export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 
     holo.material.opacity = 0.025 + Math.sin(t * 2) * 0.015;
     cf.scale.y = 0.85 + Math.sin(t * 13) * 0.15;
     markers.forEach((m, i) => { if (m.owned) m.flag.rotation.y = Math.sin(t * 3 + i) * 0.3; });
-    renderer.render(scene, camera);
+    if (room === 'heaven') composer.render(); else renderer.render(scene, camera);
     raf = requestAnimationFrame(tick);
   };
   tick();
@@ -394,7 +442,7 @@ export function mountHQ(container, { places, hq, rankIndex, future = 0, child = 
     dispose() {
       cancelAnimationFrame(raf); ro.disconnect(); walker.dispose(); setCry(0); window.removeEventListener('keydown', onE);
       scene.traverse((o) => { o.geometry?.dispose(); });
-      renderer.dispose(); renderer.forceContextLoss?.();
+      composer.dispose(); renderer.dispose(); renderer.forceContextLoss?.();
       container.innerHTML = '';
     },
   };
