@@ -183,7 +183,7 @@ export const REGIONS = [
     characterId: 'scholar',
     cost: { keys: 1 },
     requires: [],
-    map: { x: 36, y: 195, revealedBy: 'sanctuary' },
+    map: { x: 168, y: 246, revealedBy: 'sanctuary' },
     theme: { sky: ['#243048', '#8fa7c4'], ground: '#6b5540' },
     upgrades: [
       { level: 2, cost: 80, adds: 'shelves', label: 'رفوف الكتب' },
@@ -200,7 +200,7 @@ export const REGIONS = [
     characterId: 'athlete',
     cost: { keys: 1 },
     requires: [],
-    map: { x: -41, y: 465, revealedBy: 'sanctuary' },
+    map: { x: 114, y: 442, revealedBy: 'sanctuary' },
     upgrades: [],
   },
   {
@@ -211,7 +211,7 @@ export const REGIONS = [
     characterId: 'empath',
     cost: { keys: 1 },
     requires: [],
-    map: { x: 412, y: 706, revealedBy: 'sanctuary' },
+    map: { x: 437, y: 617, revealedBy: 'sanctuary' },
     upgrades: [],
   },
   {
@@ -222,7 +222,7 @@ export const REGIONS = [
     characterId: 'host',
     cost: { keys: 1 },
     requires: [],
-    map: { x: 860, y: 633, revealedBy: 'sanctuary' },
+    map: { x: 757, y: 564, revealedBy: 'sanctuary' },
     upgrades: [],
   },
   {
@@ -233,7 +233,7 @@ export const REGIONS = [
     characterId: 'builder',
     cost: { keys: 1 },
     requires: [],
-    map: { x: 1060, y: 386, revealedBy: 'sanctuary' },
+    map: { x: 900, y: 384, revealedBy: 'sanctuary' },
     upgrades: [],
   },
   {
@@ -244,7 +244,7 @@ export const REGIONS = [
     characterId: 'merchant',
     cost: { keys: 1 },
     requires: [],
-    map: { x: 875, y: 135, revealedBy: 'sanctuary' },
+    map: { x: 768, y: 202, revealedBy: 'sanctuary' },
     upgrades: [],
   },
   {
@@ -255,7 +255,7 @@ export const REGIONS = [
     characterId: 'keeper',
     cost: { keys: 1 },
     requires: [],
-    map: { x: 432, y: 52, revealedBy: 'sanctuary' },
+    map: { x: 451, y: 142, revealedBy: 'sanctuary' },
     upgrades: [],
   },
   {

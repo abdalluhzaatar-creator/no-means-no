@@ -78,8 +78,8 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     const at = (t) => [hqSpot.x + dir.x * t, hqSpot.z + dir.y * t];
     let land = ISLET.edge + 2;
     while (land < 220 && height(...at(land)) < 3) land += 1;
-    land += 6;   // reach a little onto the shore
-    const a = at(ISLET.flat - 4), b = at(land);
+    land += 10;  // reach onto the shore so the far gate stands on land
+    const a = at(ISLET.flat - 10), b = at(land);
     bridge = { dir, a: new THREE.Vector3(a[0], height(...a), a[1]), b: new THREE.Vector3(b[0], height(...b), b[1]) };
   }
   // Distance from a point to the bridge line (keeps trees off the deck).
@@ -183,7 +183,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   const treePts = [];
   for (let i = 0; i < 9000 && treePts.length < 1700; i++) {
     const x = (rand() - 0.5) * SIZE * 1.3, z = (rand() - 0.5) * DEPTH * 1.3, h = height(x, z);
-    if (h < 3 || h > 26 || nearSpot(x, z, 16) || nearBridge(x, z, 7)) continue;
+    if (h < 3 || h > 26 || nearSpot(x, z, 16) || nearBridge(x, z, 10)) continue;
     if (noise(x * 0.04 + 50, z * 0.04, 3) < -0.05) continue;       // clearings
     treePts.push([x, h, z, 0.7 + rand() * 0.8]);
   }
@@ -199,49 +199,95 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   });
   for (const m of [trunks, crowns]) { m.castShadow = true; m.receiveShadow = true; scene.add(m); }
 
-  // ---------- wooden rope bridge ----------
+  // ---------- grand timber bridge ----------
+  // A wide, heavy wooden bridge: thick deck on timber trestles with stone footings,
+  // a carved balustrade with lanterns, gate towers at both ends, and great ropes
+  // hung from the towers like a suspension bridge.
   if (bridge) {
     const { a, b } = bridge;
     const len = Math.hypot(b.x - a.x, b.z - a.z), yaw = Math.atan2(b.x - a.x, b.z - a.z);
     const g = new THREE.Group(); g.position.copy(a); g.rotation.y = yaw; scene.add(g);
-    const wood = [0x8a5a32, 0x7a4e2b, 0x936238].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.95 }));
-    const postM = new THREE.MeshStandardMaterial({ color: 0x5b3b22, roughness: 1 });
-    const ropeM = new THREE.MeshStandardMaterial({ color: 0xc8ad7f, roughness: 1 });
-    const W = 3.2;
-    // The deck sags between the two ends like a forest rope bridge.
-    const sag = Math.min(6, len * 0.06);
-    const yAt = (u) => THREE.MathUtils.lerp(0.4, b.y - a.y + 0.4, u) - Math.sin(u * Math.PI) * sag;
-    const pt = (u, x = 0, dy = 0) => new THREE.Vector3(x, yAt(u) + dy, u * len);
-    // Planks, slightly uneven, with small gaps.
-    const plankGeo = new THREE.BoxGeometry(W, 0.16, 0.5);
-    const N = Math.round(len / 0.62);
-    for (let i = 0; i <= N; i++) {
-      const u = i / N, p0 = pt(Math.max(0, u - 0.002)), p1 = pt(Math.min(1, u + 0.002));
-      const plank = new THREE.Mesh(plankGeo, wood[i % 3]);
-      plank.position.copy(pt(u)); plank.rotation.x = -Math.atan2(p1.y - p0.y, p1.z - p0.z); plank.rotation.z = Math.sin(i * 7.1) * 0.03;
-      plank.scale.x = 1 + Math.sin(i * 3.7) * 0.05;
-      g.add(plank);
-    }
-    // Two stringers under the planks.
-    for (const sx of [-1, 1]) g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(Array.from({ length: 21 }, (_, k) => pt(k / 20, sx * (W / 2 - 0.3), -0.15))), 60, 0.09, 6), postM));
-    // Hand ropes: they sag less than the deck, so the side ropes form a V with it.
-    const handY = (u) => yAt(u) + 1.4 + Math.sin(u * Math.PI) * sag * 0.35;
-    const hand = (sx) => Array.from({ length: 31 }, (_, k) => new THREE.Vector3(sx * (W / 2 + 0.15), handY(k / 30), (k / 30) * len));
-    for (const sx of [-1, 1]) {
-      g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hand(sx)), 90, 0.06, 6), ropeM));
-      // Vertical ropes tying the hand rope to the deck.
-      for (let k = 1; k < 24; k++) {
-        const u = k / 24, top = new THREE.Vector3(sx * (W / 2 + 0.15), handY(u), u * len), bot = pt(u, sx * (W / 2 - 0.1), 0.05);
-        const r = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, top.distanceTo(bot), 4), ropeM);
-        r.position.copy(top).add(bot).multiplyScalar(0.5); r.lookAt(top); r.rotateX(Math.PI / 2); g.add(r);
+    const M = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...o });
+    const plankM = [M(0x8a5a32), M(0x7d5030), M(0x94643a)], beamM = M(0x5b3b22), darkM = M(0x3f2817);
+    const stoneM = M(0x9c927f, { roughness: 1 }), roofM = M(0x7a1f24, { roughness: 0.7 }), ropeM = M(0xc9b083, { roughness: 1 });
+    const goldM = M(0xd4a53a, { metalness: 0.7, roughness: 0.3 }), lampM = new THREE.MeshStandardMaterial({ color: 0xffe7a8, emissive: 0xffb84d, emissiveIntensity: 1.4 });
+    const W = 7;
+    const yAt = (u) => THREE.MathUtils.lerp(1, b.y - a.y + 1, u) + Math.sin(u * Math.PI) * 3.5;   // a gentle rising arch
+    const slopeAt = (u) => { const e = 0.002; return Math.atan2(yAt(Math.min(1, u + e)) - yAt(Math.max(0, u - e)), len * (Math.min(1, u + e) - Math.max(0, u - e))); };
+    const add = (geo, mat, x, y, z, rx = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.rotation.x = rx; g.add(m); return m; };
+
+    // Deck: thick planks across, two heavy edge beams.
+    const N = Math.round(len / 0.95), plankGeo = new THREE.BoxGeometry(W, 0.35, 0.88);
+    for (let i = 0; i <= N; i++) { const u = i / N; add(plankGeo, plankM[i % 3], 0, yAt(u), u * len, -slopeAt(u)); }
+    const segs = Math.round(len / 3);
+    for (let i = 0; i < segs; i++) {
+      const u0 = i / segs, u1 = (i + 1) / segs, um = (u0 + u1) / 2, l = Math.hypot(len / segs, yAt(u1) - yAt(u0)) + 0.05;
+      for (const sx of [-1, 1]) {
+        add(new THREE.BoxGeometry(0.7, 1, l), beamM, sx * (W / 2 + 0.2), yAt(um) - 0.25, um * len, -slopeAt(um));
+        // Balustrade rails.
+        add(new THREE.BoxGeometry(0.28, 0.28, l), darkM, sx * (W / 2 + 0.2), yAt(um) + 1.55, um * len, -slopeAt(um));
+        add(new THREE.BoxGeometry(0.16, 0.16, l), darkM, sx * (W / 2 + 0.2), yAt(um) + 0.85, um * len, -slopeAt(um));
       }
     }
-    // Thick log posts at both ends, with the hand ropes tied over them.
-    for (const u of [0, 1]) for (const sx of [-1, 1]) {
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 3.6, 8), postM);
-      post.position.set(sx * (W / 2 + 0.35), yAt(u) + 1.2, u * len); g.add(post);
-      const knot = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.08, 6, 12), ropeM); knot.rotation.x = Math.PI / 2;
-      knot.position.set(sx * (W / 2 + 0.35), yAt(u) + 1.45, u * len); g.add(knot);
+    // Balustrade posts with gold caps, lanterns every few posts.
+    const postGeo = new THREE.BoxGeometry(0.4, 1.7, 0.4), capGeo = new THREE.SphereGeometry(0.22, 12, 8);
+    const P = Math.round(len / 2.2);
+    for (let i = 0; i <= P; i++) {
+      const u = i / P;
+      for (const sx of [-1, 1]) {
+        add(postGeo, darkM, sx * (W / 2 + 0.2), yAt(u) + 0.75, u * len);
+        add(capGeo, goldM, sx * (W / 2 + 0.2), yAt(u) + 1.75, u * len);
+        if (i % 4 === 2) {
+          add(new THREE.CylinderGeometry(0.07, 0.09, 1.6, 8), darkM, sx * (W / 2 + 0.2), yAt(u) + 2.5, u * len);
+          add(new THREE.BoxGeometry(0.45, 0.6, 0.45), lampM, sx * (W / 2 + 0.2), yAt(u) + 3.5, u * len);
+          add(new THREE.ConeGeometry(0.4, 0.35, 4), darkM, sx * (W / 2 + 0.2), yAt(u) + 3.95, u * len).rotation.y = Math.PI / 4;
+        }
+      }
+    }
+    // Timber trestles on stone footings in the sea.
+    const T = Math.max(2, Math.round(len / 13));
+    for (let i = 1; i < T; i++) {
+      const u = i / T, z = u * len, top = yAt(u) - 0.6, bottom = -8, h = top - bottom;
+      add(new THREE.CylinderGeometry(3.2, 3.8, 3, 10), stoneM, 0, -0.6, z);
+      for (const sx of [-1, 1]) for (const dz of [-0.9, 0.9]) add(new THREE.CylinderGeometry(0.42, 0.5, h, 10), beamM, sx * 2.4, bottom + h / 2, z + dz);
+      for (const dz of [-0.9, 0.9]) {
+        const brace = Math.hypot(4.8, h * 0.6);
+        for (const k of [-1, 1]) { const m = add(new THREE.BoxGeometry(0.3, brace, 0.3), darkM, 0, top - h * 0.3, z + dz); m.rotation.z = k * Math.atan2(4.8, h * 0.6); }
+        add(new THREE.BoxGeometry(5.6, 0.45, 0.45), darkM, 0, top - 0.2, z + dz);
+      }
+    }
+    // Gate towers at both ends, joined by a crossbeam with a gold emblem and red banners.
+    const towers = [];
+    for (const u of [0, 1]) {
+      const z = u * len, y0 = yAt(u) - 0.3;
+      for (const sx of [-1, 1]) {
+        const x = sx * (W / 2 + 1.3);
+        add(new THREE.BoxGeometry(2.4, 1.2, 2.4), stoneM, x, y0 + 0.3, z);
+        add(new THREE.BoxGeometry(1.8, 11, 1.8), beamM, x, y0 + 6, z);
+        for (const yy of [3, 7, 11]) add(new THREE.BoxGeometry(2, 0.35, 2), darkM, x, y0 + yy, z);
+        add(new THREE.ConeGeometry(1.8, 2.6, 4), roofM, x, y0 + 12.8, z).rotation.y = Math.PI / 4;
+        add(new THREE.SphereGeometry(0.25, 10, 8), goldM, x, y0 + 14.3, z);
+        const banner = add(new THREE.PlaneGeometry(1.3, 4.2), M(0x8e1b24, { side: THREE.DoubleSide }), x - sx * 0.95, y0 + 7.6, z);
+        banner.rotation.y = Math.PI / 2;
+        towers.push(new THREE.Vector3(x, y0 + 11.2, z));
+      }
+      add(new THREE.BoxGeometry(W + 4.4, 0.9, 0.9), beamM, 0, y0 + 10.4, z);
+      add(new THREE.BoxGeometry(W + 4.8, 0.3, 1.1), darkM, 0, y0 + 10.95, z);
+      add(new THREE.CircleGeometry(0.9, 6), goldM, 0, y0 + 9.3, z + (u ? -0.46 : 0.46)).rotation.y = u ? Math.PI : 0;
+    }
+    // Great ropes hanging from tower to tower, with hangers down to the balustrade.
+    for (const sx of [-1, 1]) {
+      const from = towers.find((t) => t.z === 0 && Math.sign(t.x) === sx), to = towers.find((t) => t.z !== 0 && Math.sign(t.x) === sx);
+      // The rope dips to just above the handrail at mid-span.
+      const dip = Math.max(0, THREE.MathUtils.lerp(from.y, to.y, 0.5) - (yAt(0.5) + 2.6));
+      const mainY = (u) => THREE.MathUtils.lerp(from.y, to.y, u) - Math.sin(u * Math.PI) * dip;
+      const rx = sx * (W / 2 + 0.3);
+      const pts = Array.from({ length: 41 }, (_, k) => new THREE.Vector3(rx, mainY(k / 40), (k / 40) * len));
+      add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 120, 0.2, 8), ropeM, 0, 0, 0);
+      for (let k = 1; k < 20; k++) {
+        const u = k / 20, top = mainY(u), bot = yAt(u) + 1.6, h = top - bot;
+        if (h > 0.3) add(new THREE.CylinderGeometry(0.06, 0.06, h, 6), ropeM, rx, bot + h / 2, u * len);
+      }
     }
     g.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
   }
