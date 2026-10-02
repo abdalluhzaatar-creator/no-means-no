@@ -1,7 +1,7 @@
 // Pure game logic. No DOM, no storage. Every action takes the state and
 // returns { ok, events } after mutating state in place; the UI turns events
 // into effects (gold burst, level-up, unlock).
-import { CHARACTERS, REGIONS } from './content.js';
+import { CHARACTERS, REGIONS, RANKS } from './content.js';
 
 export const SAVE_VERSION = 3;
 
@@ -90,6 +90,7 @@ export function newState() {
 }
 
 // Fill in anything missing from older saves so content additions never break a save.
+const OLD_PRAYER_IDS = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
 export function migrate(raw) {
   const base = newState();
   if (!raw || typeof raw !== 'object') return base;
@@ -103,6 +104,9 @@ export function migrate(raw) {
   s.keys = +raw.keys || 0;
   delete s.habits; delete s.projects; delete s.activeCharacter;
   s.log = Array.isArray(raw.log) ? raw.log : [];
+  // The spiritual dimension no longer comes with the five prayers: the player sets its tasks.
+  const w = s.characters.worshipper;
+  if (w?.plan) w.plan = w.plan.map((r) => (r || []).filter((t) => !OLD_PRAYER_IDS.includes(t.id)));
   s.version = SAVE_VERSION;
   return s;
 }
@@ -148,25 +152,76 @@ const fail = (reason) => ({ ok: false, reason, events: [] });
 
 // ---------- Progression (stages × 5 levels) ----------
 // Tasks active for this character now: base tasks + every level's additions so far.
-export function activeTasks(def, ch) {
-  const list = [...def.tasks];
-  if (!def.stages || !ch) return list;
-  def.stages.forEach((st, si) => {
-    if (!st.levels || si > ch.stage) return;
-    st.levels.forEach((lv, li) => { if (si < ch.stage || li < ch.level) list.push(...lv.adds); });
+// ---------- The player's own rank plan ----------
+// Each character has one list of tasks per rank (Bronze 1 … Platinum 3), written by
+// the player. Reaching a rank adds its tasks on top of every earlier rank's.
+export const RANK_COUNT = RANKS.length;
+export function defaultPlan(def) {
+  const plan = Array.from({ length: RANK_COUNT }, () => []);
+  plan[0] = def.tasks.map((t) => ({ ...t }));
+  let i = 1;
+  (def.stages || []).forEach((st) => (st.levels || []).forEach((lv, li) => {
+    if (!(st === def.stages[0] && li === 0)) { if (i < RANK_COUNT) plan[i] = lv.adds.map((t) => ({ ...t })); i++; }
+  }));
+  return plan;
+}
+export function planOf(def, ch) { return ch?.plan || defaultPlan(def); }
+
+// Replace one rank's tasks with the player's written lines. A line matching an
+// existing task keeps it (and its streak / prayer time); new lines become new tasks.
+const PRAYER_WORDS = { fajr: 'فجر', dhuhr: 'ظهر', asr: 'عصر', maghrib: 'مغرب', isha: 'عشاء' };
+export const prayerIn = (title) => (/صلا[ةه]|صلي|أصلي/.test(title) ? Object.keys(PRAYER_WORDS).find((k) => title.includes(PRAYER_WORDS[k])) : undefined);
+
+// Lines like "صلاة × 5" or "مشي x2" carry a times-per-day count.
+const parseLine = (l) => {
+  const m = String(l).replace(/^[\s\-•*+\d.)]+(?=\D)/, '').trim().match(/^(.*?)\s*(?:[×xX*]\s*(\d{1,2}))?$/);
+  return { title: (m?.[1] || '').trim(), times: +m?.[2] || 1 };
+};
+export const MAX_TIMES = 20;
+
+export function setRankPlan(s, id, rankIndex, input) {
+  const def = findCharacter(id), ch = s.characters[id];
+  if (!def || !ch) return fail('غير مملوكة');
+  if (rankIndex < 0 || rankIndex >= RANK_COUNT) return fail('رتبة غير موجودة');
+  const items = (Array.isArray(input) ? input : String(input).split('\n').map(parseLine))
+    .map((x) => ({ title: String(x.title || '').trim().slice(0, 80), times: Math.max(1, Math.min(MAX_TIMES, Math.round(+x.times) || 1)) }))
+    .filter((x) => x.title);
+  const seen = new Set();
+  const uniq = items.filter((x) => !seen.has(x.title) && seen.add(x.title)).slice(0, 12);
+  const plan = planOf(def, ch).map((r) => r.map((t) => ({ ...t })));
+  const known = plan.flat();
+  // Prayers already tied to a task in another rank (or earlier in this list).
+  const taken = new Set(plan.filter((_, i) => i !== rankIndex).flat().map((t) => t.prayer).filter(Boolean));
+  plan[rankIndex] = uniq.map(({ title, times }) => {
+    const old = known.find((t) => t.title === title);
+    if (old) {
+      plan.forEach((r, i) => { if (i !== rankIndex) plan[i] = r.filter((t) => t.id !== old.id); });
+      const t = { ...old, times };
+      if (times > 1) delete t.prayer; else if (old.prayer) taken.add(old.prayer);
+      return t;
+    }
+    const t = { id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title, times, reward: 20, penalty: 10 };
+    // A once-a-day line naming one of the five prayers is tied to that prayer's time (once per plan).
+    const pr = times === 1 ? prayerIn(title) : undefined;
+    if (pr && !taken.has(pr)) { t.prayer = pr; taken.add(pr); }
+    return t;
   });
-  return list;
+  ch.plan = plan;
+  addLog(s, `✎ ${def.name}: ${RANKS[rankIndex].name}`);
+  return done(s, []);
 }
 
-// What the next level-up would unlock, or why it can't happen yet.
+export function activeTasks(def, ch) {
+  if (!def.stages || !ch) return [...def.tasks];
+  return planOf(def, ch).slice(0, totalLevel(ch)).flat();
+}
+
+// What the next rank would unlock, or why it can't happen yet.
 export function nextLevel(def, ch) {
   if (!def.stages) return null;
-  const stage = def.stages[ch.stage];
-  if (!stage.levels) return { undesigned: stage.name };
-  if (ch.level < 5) return { stage: ch.stage, level: ch.level + 1, adds: stage.levels?.[ch.level]?.adds ?? [] };
-  const next = def.stages[ch.stage + 1];
-  if (!next) return { max: true };
-  return { stage: ch.stage + 1, level: 1, promotion: next.name };
+  const n = totalLevel(ch); // index of the next rank
+  if (n >= RANK_COUNT) return { max: true };
+  return { stage: Math.floor(n / 5), level: (n % 5) + 1, adds: planOf(def, ch)[n] };
 }
 
 // Streak values shown to the player: they reset silently after a skipped day.
@@ -186,11 +241,8 @@ function breakChain(ch) {
 // Called after every task report: if all of today's tasks are done, count a perfect day.
 function checkPerfectDay(s, def, ch, date, events) {
   if (ch.lastPerfectDate === date) return;
-  const all = activeTasks(def, ch).every((t) => {
-    const p = s.tasks[`${def.id}.${t.id}`];
-    return p?.lastDate === date && p.lastResult === 'success';
-  });
-  if (!all) return;
+  const list = activeTasks(def, ch);
+  if (!list.length || !list.every((t) => taskComplete(s.tasks[`${def.id}.${t.id}`], date))) return;
   if (!ch.lastPerfectDate || dayDiff(ch.lastPerfectDate, date) > 1) breakChain(ch);
   ch.lastPerfectDate = date;
   ch.perfectStreak++;
@@ -206,16 +258,9 @@ function checkPerfectDay(s, def, ch, date, events) {
       events.push({ type: 'key', from: def.name });
     }
   }
-  if (def.daysPerLevel && !ch.levelReady) {
-    ch.levelDays++;
-    if (ch.levelDays >= def.daysPerLevel) {
-      ch.levelReady = true;
-      events.push({ type: 'levelReady', name: def.name });
-    }
-  }
 }
 
-// Raise a level: needs the level's consecutive days done, and costs one key.
+// Raise to the next rank: costs one key.
 export function levelUpCharacter(s, id) {
   const def = findCharacter(id);
   const ch = s.characters[id];
@@ -223,18 +268,16 @@ export function levelUpCharacter(s, id) {
   const next = nextLevel(def, ch);
   if (!next) return fail('لا مستويات لهذه الشخصية');
   if (next.max) return fail('أعلى مستوى');
-  if (next.undesigned) return fail(`مستويات ${next.undesigned} لم تُصمَّم بعد`);
-  if (!ch.levelReady) return fail(`أكمل ${def.daysPerLevel} يومًا كاملًا متتاليًا أولًا`);
-  if (s.keys < 1) return fail('تحتاج مفتاحًا');
+  if (!next.adds.length) return fail('اكتب مهام هذه الرتبة أولًا ✎');
+  if ((s.keys || 0) < 1) return fail('تحتاج مفتاحًا 🗝 لرفع الرتبة');
   s.keys--;
   ch.stage = next.stage;
   ch.level = next.level;
   ch.levelReady = false;
   ch.levelDays = 0;
-  const stageName = def.stages[ch.stage].name;
-  addLog(s, `⬆ ${def.name} → ${stageName} · مستوى ${ch.level}`);
-  const events = [{ type: 'levelUp', kind: 'character', name: def.name, level: ch.level, label: stageName }];
-  if (next.promotion) events.push({ type: 'rank', name: def.name, rank: next.promotion });
+  const stageName = rankName(ch);
+  addLog(s, `⬆ ${def.name} → ${stageName}`);
+  const events = [{ type: 'rank', name: def.name, rank: stageName }];
   return done(s, events);
 }
 
@@ -245,11 +288,20 @@ export function taskProgress(s, charId, taskId) {
   return s.tasks[taskKey(charId, taskId)] || { streak: 0, lastDate: null, lastResult: null };
 }
 
-export const taskDoneToday = (p, date = today()) => p.lastDate === date;
+// A task may be needed several times a day (`times`). Today's progress lives in
+// { lastDate, count, lastResult: 'partial' | 'success' | 'fail' }; `doneDate` is the
+// last day it was fully completed (older saves only have lastResult 'success').
+export const timesOf = (task) => Math.max(1, task?.times || 1);
+export const taskComplete = (p, date) => p?.lastDate === date && p.lastResult === 'success';
+// Settled for the day: completed or failed (a partial day is still open).
+export const taskDoneToday = (p, date = today()) => p.lastDate === date && p.lastResult !== 'partial';
+export const countToday = (p, date = today()) => (p.lastDate !== date ? 0 : p.lastResult === 'partial' ? p.count || 0 : p.lastResult === 'success' ? p.count || 1 : p.count || 0);
+const lastDone = (p) => p.doneDate ?? (p.lastResult === 'success' ? p.lastDate : null);
 
 export function currentStreak(p, date = today()) {
-  if (!p.lastDate || p.lastResult !== 'success') return 0;
-  return dayDiff(p.lastDate, date) <= 1 ? p.streak : 0;
+  const d = lastDone(p);
+  if (!d || p.lastResult === 'fail') return 0;
+  return dayDiff(d, date) <= 1 ? p.streak || 0 : 0;
 }
 
 export function reportTask(s, charId, taskId, success, { applyPenalty = true, date = today() } = {}) {
@@ -261,22 +313,27 @@ export function reportTask(s, charId, taskId, success, { applyPenalty = true, da
   const p = { ...taskProgress(s, charId, taskId) };
   if (taskDoneToday(p, date)) return fail('سجّلت نتيجة اليوم بالفعل');
   const events = [];
+  const times = timesOf(task);
+  p.doneDate = lastDone(p);
+  const count = countToday(p, date) + (success ? 1 : 0);
   if (success) {
-    p.streak = currentStreak(p, date) + 1;
     s.stats.tasksCompleted++;
-    gainGold(s, task.reward, `✔ ${task.title}`, events);
+    gainGold(s, task.reward, `✔ ${task.title}${times > 1 ? ` (${count}/${times})` : ''}`, events);
+    if (count >= times) { p.streak = currentStreak(p, date) + 1; p.doneDate = date; }
   } else {
     p.streak = 0;
     s.stats.tasksFailed++;
     breakChain(ch); // one missed task breaks the key and level chains
+    ch.defeat = { level: totalLevel(ch), date }; // a crushing defeat at this level (see warStatus)
     if (applyPenalty && task.penalty > 0) loseGold(s, task.penalty, `✘ ${task.title}`, events);
     else addLog(s, `✘ ${task.title} (بدون عقوبة)`);
   }
   p.lastDate = date;
-  p.lastResult = success ? 'success' : 'fail';
+  p.count = count;
+  p.lastResult = !success ? 'fail' : count >= times ? 'success' : 'partial';
   p.at = Date.now(); // when it was reported (used to reject reports made outside a prayer's time)
   s.tasks[taskKey(charId, taskId)] = p;
-  if (success) checkPerfectDay(s, def, ch, date, events);
+  if (p.lastResult === 'success') checkPerfectDay(s, def, ch, date, events);
   return done(s, events);
 }
 
@@ -303,6 +360,28 @@ export function revokeTask(s, charId, taskId, date) {
   }
   addLog(s, `↩ أُلغي: ${task?.title ?? taskId} (سُجّلت قبل وقتها)`, -back);
   return true;
+}
+
+// ---------- End of day ----------
+// Every task must be fully done and logged by the end of its day. When a new day
+// starts, whatever was left unfinished on the last day played counts as missed
+// (no gold penalty), which breaks the chain.
+export function closeDays(s, now = today()) {
+  const last = s.lastDay;
+  s.lastDay = now;
+  if (!last || last >= now) return [];
+  const missed = [];
+  for (const def of CHARACTERS) {
+    const ch = s.characters[def.id];
+    if (!ch) continue;
+    for (const t of activeTasks(def, ch)) {
+      const p = taskProgress(s, def.id, t.id);
+      if (taskDoneToday(p, last) || (p.lastDate && p.lastDate > last)) continue;
+      reportTask(s, def.id, t.id, false, { applyPenalty: false, date: last });
+      missed.push(t.title);
+    }
+  }
+  return missed;
 }
 
 // ---------- Regions ----------
@@ -366,4 +445,25 @@ export function demoState() {
   s.stats.goldEarned = 100;
   addLog(s, 'مرحبًا بك في No Means No', 100);
   return s;
+}
+
+// ---------- War map (خريطة الحرب) ----------
+// Overall level of a character: 5 levels per stage.
+export const totalLevel = (ch) => (ch.stage || 0) * 5 + (ch.level || 1);
+// Each level is a rank: level 1 = Bronze 1, level 2 = Bronze 2 … level 12 = Platinum 3.
+export const rankName = (ch) => RANKS[totalLevel(ch) - 1]?.name || `مستوى ${totalLevel(ch)}`;
+export const rankColor = (ch) => RANKS[totalLevel(ch) - 1]?.color || '#3f7d6e';
+
+// coming  — the place is not opened yet (حرب قادمة)
+// ongoing — opened, no defeat recorded (حرب مستمرة)
+// crushed — a missed task zeroed the counter at level L, and the character is still at ≤ L (هزيمة ساحقة)
+// fierce  — recovered from a defeat by reaching level L + 1 (حرب طاحنة)
+export function warStatus(s, region) {
+  if (!s.regions[region.id]) return { id: 'coming' };
+  const ch = region.characterId && s.characters[region.characterId];
+  if (!ch) return { id: 'coming' };
+  const lvl = totalLevel(ch);
+  if (!ch.defeat) return { id: 'ongoing', level: lvl };
+  if (lvl <= ch.defeat.level) return { id: 'crushed', level: lvl, defeatLevel: ch.defeat.level, need: ch.defeat.level + 1 };
+  return { id: 'fierce', level: lvl, defeatLevel: ch.defeat.level };
 }

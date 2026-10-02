@@ -45,7 +45,7 @@ function coinBurst(origin, n = 10) {
   g.classList.remove('pulse'); void g.offsetWidth; g.classList.add('pulse');
 }
 
-function confetti() {
+export function confetti() {
   const colors = ['#f4d58d', '#3f7d6e', '#e9e4d8', '#c9a45c', '#9cc3e8'];
   for (let i = 0; i < 40; i++) {
     const c = document.createElement('div');
