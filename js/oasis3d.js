@@ -476,10 +476,10 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
   const fnt = fountain(); fnt.position.set(0, 0.4, 5); fnt.scale.setScalar(1.2); scene.add(fnt);
   const arch = mihrabArch(); arch.position.set(0, 0.4, -4.2); scene.add(arch);
 
-  // The rank tree, beside the prayer rug.
-  const STAND = { x: -7, z: 2.5 };
+  // The rank stand, small, against the side arcade between two cypresses.
+  const STAND = { x: -19.6, z: 9.5 };
   const stand = rank ? buildRankStand(rank) : null;
-  if (stand) { stand.root.position.set(STAND.x, 0.4, STAND.z); stand.root.rotation.y = Math.atan2(-STAND.x, -STAND.z); stand.root.scale.setScalar(1.25); scene.add(stand.root); }
+  if (stand) { stand.root.position.set(STAND.x, 0.4, STAND.z); stand.root.rotation.y = Math.PI / 2; scene.add(stand.root); }
 
   const setFeatures = (f, lvl) => {
     lanterns.visible = f.has('lanterns');
@@ -647,7 +647,7 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
   window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey);
   const jump = () => { if (grounded && !hero.busy()) { vy = 7.5; grounded = false; sfx.jump(); } };
   const blocked = (x, z) => {
-    if (stand && Math.hypot(x - STAND.x, z - STAND.z) < 2.6) return true;               // rank tree
+    if (stand && Math.hypot(x - STAND.x, z - STAND.z) < 1) return true;               // rank stand
     if (Math.abs(x) > 20.3 || Math.abs(z) > 20.3) return true;
     if (Math.abs(x) < 2.6 && z > 6 && z < 21) return true;                           // reflecting pool
     if (fnt.visible && Math.hypot(x, z - 5) < 2.6) return true;                        // fountain

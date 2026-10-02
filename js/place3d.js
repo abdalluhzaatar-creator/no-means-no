@@ -87,10 +87,10 @@ export function mountPlace(container, { regionId, palette, rank, sky: skyInfo, o
   const landmark = build ? build() : new THREE.Group();
   landmark.scale.setScalar(1.4); landmark.position.set(0, 0, -16); scene.add(landmark);
 
-  // The rank tree, to the side of the plaza.
-  const STAND = { x: -8, z: 4 };
+  // The rank stand, small, beside the landmark.
+  const STAND = { x: -7, z: -3 };
   const stand = rank ? buildRankStand(rank) : null;
-  if (stand) { stand.root.position.set(STAND.x, 0, STAND.z); stand.root.rotation.y = Math.atan2(-STAND.x, 10 - STAND.z); stand.root.scale.setScalar(1.25); scene.add(stand.root); }
+  if (stand) { stand.root.position.set(STAND.x, 0, STAND.z); stand.root.rotation.y = Math.atan2(-STAND.x, 10 - STAND.z); scene.add(stand.root); }
 
   // Character
   const hero = buildWorshipper(palette);
@@ -98,7 +98,7 @@ export function mountPlace(container, { regionId, palette, rank, sky: skyInfo, o
   const blocked = (x, z) => {
     if (Math.hypot(x, z) > 48) return true;
     if (Math.hypot(x, z + 16) < 13) return true;       // the landmark
-    if (stand && Math.hypot(x - STAND.x, z - STAND.z) < 2.6) return true;
+    if (stand && Math.hypot(x - STAND.x, z - STAND.z) < 1) return true;
     for (const p of props) if (Math.hypot(x - p.x, z - p.z) < p.r) return true;
     return false;
   };
