@@ -26,7 +26,10 @@ const HL = 34;          // half length (z)
 const WALL_H = 18;      // wall height before the vault
 // A stairwell in the floor (front left) goes down to the vault door; an arch in the
 // right wall opens onto the long gallery that leads to the warriors.
-const WELL = { x0: -10.4, x1: -6.6, z0: 12, z1: 27, depth: 6, run: 11 };   // stairs from z0 down to z0 + run
+// Round stairwell: a spiral of steps around a central column, 1.5 turns down to the vault.
+const WELL = { cx: -7.2, cz: 19, r: 3.6, ring: [1.15, 3.05], depth: 9, turns: 1.5, a0: 0, gap: 0.65 };
+WELL.total = WELL.turns * Math.PI * 2;
+WELL.doorA = WELL.a0 + WELL.total + 0.7;          // the vault door, just past the last step
 const SIDE = { z: 15.5, w: 3.2, h: 6.5 };
 
 function canvasTex(w, h, draw, repeat) {
@@ -77,7 +80,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
 
   // ---------- shell: floor, walls, vaulted ceiling ----------
   const floorShape = new THREE.Shape(); floorShape.moveTo(-HW, -HL); floorShape.lineTo(HW, -HL); floorShape.lineTo(HW, HL); floorShape.lineTo(-HW, HL); floorShape.lineTo(-HW, -HL);
-  const wellHole = new THREE.Path(); wellHole.moveTo(WELL.x0, -WELL.z1); wellHole.lineTo(WELL.x1, -WELL.z1); wellHole.lineTo(WELL.x1, -WELL.z0); wellHole.lineTo(WELL.x0, -WELL.z0); wellHole.lineTo(WELL.x0, -WELL.z1);
+  const wellHole = new THREE.Path(); wellHole.absarc(WELL.cx, -WELL.cz, WELL.r, 0, Math.PI * 2, true);
   floorShape.holes.push(wellHole);
   const floorGeo = new THREE.ShapeGeometry(floorShape);
   { const pos = floorGeo.attributes.position, uv = floorGeo.attributes.uv; for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) + HW) / (HW * 2), (pos.getY(i) + HL) / (HL * 2)); }
@@ -136,40 +139,58 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.08, 8, 24), brightGold); ring.position.set(sx * 0.7, 5.5, HL + 0.1); scene.add(ring);
   }
 
-  // ---------- stairwell down to the vault ----------
+  // ---------- spiral stairwell down to the vault ----------
   const ironM = std(0x2b2b30, { metalness: 0.85, roughness: 0.45 });
-  const wellD = WELL.depth, wellW = WELL.x1 - WELL.x0, wellCx = (WELL.x0 + WELL.x1) / 2;
-  const STEPS = 18, stepRun = WELL.run / STEPS, stepRise = wellD / STEPS;
+  const wellPos = (a, r, y = 0) => new THREE.Vector3(WELL.cx + Math.cos(a) * r, y, WELL.cz + Math.sin(a) * r);
+  const STEPS = 40, stepA = WELL.total / STEPS;
+  // Floating stone slabs (sectors) winding down around the column, gold on their edge.
   for (let i = 0; i < STEPS; i++) {
-    const top = -stepRise * (i + 1);
-    const st = new THREE.Mesh(new THREE.BoxGeometry(wellW, top + wellD + 0.4, stepRun), i % 2 ? marbleM : darkStone);
-    st.position.set(wellCx, (top - wellD - 0.4) / 2, WELL.z0 + stepRun * (i + 0.5)); st.receiveShadow = true; scene.add(st);
-    const nose = new THREE.Mesh(new THREE.BoxGeometry(wellW, 0.06, 0.08), goldM); nose.position.set(wellCx, top + 0.03, WELL.z0 + stepRun * i + 0.04); scene.add(nose);
+    const top = -WELL.depth * (i + 1) / STEPS, a = WELL.a0 + i * stepA;
+    // CylinderGeometry measures theta from +z toward +x; convert from our angle (atan2(z, x)).
+    const slab = new THREE.Mesh(new THREE.CylinderGeometry(WELL.r - 0.05, WELL.r - 0.05, 0.32, 10, 1, false, Math.PI / 2 - a - stepA, stepA), i % 2 ? marbleM : darkStone);
+    slab.position.set(WELL.cx, top - 0.16, WELL.cz); slab.receiveShadow = true; slab.castShadow = true; scene.add(slab);
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(WELL.r - 1, 0.05, 0.06), goldM);
+    const mid = wellPos(a, (WELL.r + 1) / 2, top + 0.01); edge.position.copy(mid); edge.rotation.y = -a; scene.add(edge);
   }
-  const landing = new THREE.Mesh(new THREE.BoxGeometry(wellW, 0.4, WELL.z1 - WELL.z0 - WELL.run), darkStone); landing.position.set(wellCx, -wellD - 0.2, WELL.z0 + WELL.run + (WELL.z1 - WELL.z0 - WELL.run) / 2); landing.receiveShadow = true; scene.add(landing);
-  // well walls (stone) down to the landing
-  for (const [x, z, w, d] of [[WELL.x0 - 0.3, (WELL.z0 + WELL.z1) / 2, 0.6, WELL.z1 - WELL.z0 + 0.6], [WELL.x1 + 0.3, (WELL.z0 + WELL.z1) / 2, 0.6, WELL.z1 - WELL.z0 + 0.6], [wellCx, WELL.z0 - 0.3, wellW, 0.6], [wellCx, WELL.z1 + 0.3, wellW, 0.6]]) {
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(w, wellD + 0.6, d), wallM); wall.position.set(x, -wellD / 2 - 0.3, z); wall.receiveShadow = true; scene.add(wall);
+  // Top landing (the entry, level with the hall) and the bottom landing.
+  const topLand = new THREE.Mesh(new THREE.CylinderGeometry(WELL.r - 0.05, WELL.r - 0.05, 0.3, 12, 1, false, Math.PI / 2 - WELL.a0, WELL.gap + 0.05), marbleM);
+  topLand.position.set(WELL.cx, -0.15, WELL.cz); scene.add(topLand);
+  const bottom = new THREE.Mesh(new THREE.CylinderGeometry(WELL.r, WELL.r, 0.4, 48), darkStone); bottom.position.set(WELL.cx, -WELL.depth - 0.2, WELL.cz); bottom.receiveShadow = true; scene.add(bottom);
+  // Central column with a gold cap, and the round stone shaft.
+  const col = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.9, WELL.depth + 1.4, 24), marbleM); col.position.set(WELL.cx, (1.4 - WELL.depth) / 2, WELL.cz); col.castShadow = true; scene.add(col);
+  const colCap = new THREE.Mesh(new THREE.SphereGeometry(0.5, 20, 12), brightGold); colCap.position.set(WELL.cx, 1.55, WELL.cz); scene.add(colCap);
+  const shaftTex = stoneTex.clone(); shaftTex.needsUpdate = true; shaftTex.repeat.set(5, 3);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(WELL.r + 0.05, WELL.r + 0.05, WELL.depth + 0.6, 48, 1, true), new THREE.MeshStandardMaterial({ map: shaftTex, roughness: 0.95, side: THREE.BackSide }));
+  shaft.position.set(WELL.cx, -WELL.depth / 2 - 0.3, WELL.cz); shaft.receiveShadow = true; scene.add(shaft);
+  // Balustrade round the opening, open where the stairs begin.
+  const railPost = new THREE.CylinderGeometry(0.11, 0.14, 1.1, 8);
+  for (let k = 0; k < 28; k++) {
+    const a = WELL.a0 + (k / 28) * Math.PI * 2; const d = Math.atan2(Math.sin(a - WELL.a0 + WELL.gap / 2), Math.cos(a - WELL.a0 + WELL.gap / 2));
+    if (Math.abs(d) < WELL.gap / 2 + 0.12) continue;
+    const p = new THREE.Mesh(railPost, darkStone); p.position.copy(wellPos(a, WELL.r + 0.12, 0.55)); scene.add(p);
   }
-  // balustrade around the opening (open at the top of the stairs)
-  const railPost = new THREE.CylinderGeometry(0.12, 0.15, 1.1, 8);
-  for (let z = WELL.z0 + 1.2; z <= WELL.z1 + 0.01; z += 1.2) { const p = new THREE.Mesh(railPost, darkStone); p.position.set(WELL.x1 + 0.1, 0.55, z); scene.add(p); }
-  for (let x = WELL.x0 + 0.4; x <= WELL.x1 + 0.01; x += 1.2) { const p = new THREE.Mesh(railPost, darkStone); p.position.set(x, 0.55, WELL.z1 + 0.1); scene.add(p); }
-  const railA = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, WELL.z1 - WELL.z0 - 1.2), goldM); railA.position.set(WELL.x1 + 0.1, 1.15, (WELL.z0 + 1.2 + WELL.z1) / 2); scene.add(railA);
-  const railB = new THREE.Mesh(new THREE.BoxGeometry(wellW + 0.2, 0.14, 0.22), goldM); railB.position.set(wellCx, 1.15, WELL.z1 + 0.1); scene.add(railB);
-  // the vault door at the bottom, in the front wall of the well
-  const vaultDoorZ = WELL.z1 - 0.02;
-  const vArch = new THREE.Shape(); vArch.moveTo(-1.2, 0); vArch.lineTo(-1.2, 3); vArch.absarc(0, 3, 1.2, Math.PI, 0, true); vArch.lineTo(1.2, 0); vArch.lineTo(-1.2, 0);
-  const vDoor = new THREE.Mesh(new THREE.ExtrudeGeometry(vArch, { depth: 0.15, bevelEnabled: false, curveSegments: 20 }), ironM); vDoor.position.set(wellCx, -wellD, vaultDoorZ - 0.15); scene.add(vDoor);
-  for (let y = 0.6; y < 3.6; y += 0.7) { const b = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.1, 0.05), std(0x5a4a3a, { metalness: 0.6 })); b.position.set(wellCx, -wellD + y, vaultDoorZ - 0.18); scene.add(b); }
-  const vRing = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.045, 8, 20), std(0x8a7a5a, { metalness: 0.8 })); vRing.position.set(wellCx + 0.6, -wellD + 1.9, vaultDoorZ - 0.22); scene.add(vRing);
+  const rail = new THREE.Mesh(new THREE.TorusGeometry(WELL.r + 0.12, 0.08, 6, 64, Math.PI * 2 - WELL.gap - 0.25), goldM);
+  rail.rotation.x = Math.PI / 2; rail.rotation.z = WELL.a0 + 0.12; rail.position.set(WELL.cx, 1.12, WELL.cz); scene.add(rail);
+  // Torches down the shaft.
+  const wellFlames = [];
+  for (const [a, y] of [[WELL.a0 + 1.6, -1.6], [WELL.a0 + 3.4, -3.4], [WELL.a0 + 5.2, -5.2], [WELL.a0 + 7, -7], [WELL.a0 + 8.8, -8.6]]) {
+    const pos = wellPos(a, WELL.r - 0.2, y);
+    const hold = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.1, 0.6, 8), ironM); hold.position.copy(pos); scene.add(hold);
+    const fl = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.45, 8), new THREE.MeshBasicMaterial({ color: 0xff9a2e, toneMapped: false })); fl.position.copy(pos).add(new THREE.Vector3(0, 0.5, 0)); scene.add(fl);
+    const l = new THREE.PointLight(0xff8a3c, 14, 11, 1.5); l.position.copy(wellPos(a, WELL.r - 1, y + 0.6)); scene.add(l);
+    wellFlames.push({ fl, l });
+  }
+  // The vault door on the shaft wall at the bottom.
+  const vArch = new THREE.Shape(); vArch.moveTo(-1.1, 0); vArch.lineTo(-1.1, 2.9); vArch.absarc(0, 2.9, 1.1, Math.PI, 0, true); vArch.lineTo(1.1, 0); vArch.lineTo(-1.1, 0);
+  const door = new THREE.Group(); door.position.copy(wellPos(WELL.doorA, WELL.r - 0.02, -WELL.depth)); door.lookAt(WELL.cx, -WELL.depth, WELL.cz); scene.add(door);
+  const vDoor = new THREE.Mesh(new THREE.ExtrudeGeometry(vArch, { depth: 0.12, bevelEnabled: false, curveSegments: 20 }), ironM); door.add(vDoor);
+  for (let y = 0.6; y < 3.4; y += 0.7) { const b = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.1, 0.05), std(0x5a4a3a, { metalness: 0.6 })); b.position.set(0, y, 0.15); door.add(b); }
+  const vRing = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.045, 8, 20), std(0x8a7a5a, { metalness: 0.8 })); vRing.position.set(0.55, 1.8, 0.2); door.add(vRing);
   const plaqueTex = canvasTex(512, 128, (g, w, h) => {
     g.fillStyle = '#1e140c'; g.fillRect(0, 0, w, h); g.strokeStyle = '#9a7a4a'; g.lineWidth = 8; g.strokeRect(6, 6, w - 12, h - 12);
     g.direction = 'rtl'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '800 64px Tajawal, system-ui, sans-serif'; g.fillStyle = '#c9a36a'; g.fillText('القبو', w / 2, h / 2 + 4);
   });
-  const vSign = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.45), new THREE.MeshBasicMaterial({ map: plaqueTex })); vSign.position.set(wellCx, -wellD + 4.6, vaultDoorZ - 0.05); vSign.rotation.y = Math.PI; scene.add(vSign);
-  const vTorch = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.4, 8), new THREE.MeshBasicMaterial({ color: 0xff9a2e, toneMapped: false })); vTorch.position.set(wellCx - 1.55, -wellD + 3.1, vaultDoorZ - 0.3); scene.add(vTorch);
-  const vLight = new THREE.PointLight(0xff8a3c, 10, 9, 1.6); vLight.position.set(wellCx - 1.2, -wellD + 3.2, vaultDoorZ - 0.8); scene.add(vLight);
+  const vSign = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.4), new THREE.MeshBasicMaterial({ map: plaqueTex })); vSign.position.set(0, 4.35, 0.12); door.add(vSign);
 
   // ---------- arch in the right wall onto the gallery ----------
   // No door and no name: only a warm light deep inside.
@@ -339,15 +360,31 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   const heaven = buildHeaven(scene, { owned: new Set(owned) });
   const gallery = buildVestibule(scene);
   dungeon.setFuture(future); dungeon.setChild(child);
-  const inWell = (x, z) => x > WELL.x0 + 0.35 && x < WELL.x1 - 0.35 && z > WELL.z0 - 0.4 && z < WELL.z1 - 0.45;
   const inSide = (x, z) => x > 10 && x < HW + 0.8 && Math.abs(z - SIDE.z) < SIDE.w / 2 - 0.45;
-  // Floor height: the stairs go down from the top step to the vault landing.
-  const hallGround = (x, z) => (x > WELL.x0 && x < WELL.x1 && z > WELL.z0 ? -WELL.depth * THREE.MathUtils.clamp((z - WELL.z0) / WELL.run, 0, 1) : 0);
+  // Spiral stairs: follow how far round the commander has walked (angle unwrapped),
+  // so each point of the ring knows which turn of the spiral it is on.
+  const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+  const wellR = (x, z) => Math.hypot(x - WELL.cx, z - WELL.cz), wellA = (x, z) => Math.atan2(z - WELL.cz, x - WELL.cx);
+  const inGap = (x, z) => { const d = wrap(wellA(x, z) - WELL.a0); return d < 0.05 && d > -WELL.gap; };
+  const spiral = { on: false, acc: 0, last: 0 };
+  const trackSpiral = (x, z) => {
+    if (wellR(x, z) > WELL.ring[1] + 0.1) { spiral.on = false; return; }
+    const a = wellA(x, z);
+    if (!spiral.on) { spiral.on = true; spiral.acc = wrap(a - WELL.a0); } else spiral.acc += wrap(a - spiral.last);
+    spiral.last = a;
+  };
+  const spiralY = (acc) => (acc <= 0 ? 0 : -WELL.depth * Math.min(1, acc / WELL.total));
+  const hallGround = (x, z) => { trackSpiral(x, z); return spiral.on ? spiralY(spiral.acc) : 0; };
   const inHall = (x, z) => {
     if (inSide(x, z)) return false;                                                    // passage to the gallery
-    // around the stairwell: only the open top edge lets you onto the stairs
-    if (inWell(x, z)) { const c = cmd.root.position; return !(inWell(c.x, c.z) || (c.z <= WELL.z0 + 0.3 && c.x > WELL.x0 && c.x < WELL.x1)); }
-    if (x > WELL.x0 - 0.2 && x < WELL.x1 + 0.45 && z > WELL.z0 && z < WELL.z1 + 0.45) return true;   // balustrade
+    // Stairwell: you get on and off only at the top landing; inside, stay on the ring.
+    const c = cmd.root.position, rc = wellR(c.x, c.z), r = wellR(x, z);
+    if (rc < WELL.ring[1] + 0.05) {
+      if (r < WELL.ring[0]) return true;
+      if (r <= WELL.ring[1]) return false;
+      return !(spiral.acc <= 0.05 && inGap(x, z));
+    }
+    if (r < WELL.r + 0.2) return !(r > WELL.ring[0] && r <= WELL.ring[1] && inGap(x, z));
     if (Math.abs(x) > 10.5 || z > HL - 1.2 || z < -HL + 12) return true;          // nave walls, doors, dais
     if (Math.abs(x) < 5.6 && z > -8 && z < 0) return true;                          // war table
     for (const [bx, bz] of [[-7, -9], [7, -9], [-7, 1], [7, 1]]) if (Math.hypot(x - bx, z - bz) < 1.2) return true; // braziers
@@ -363,8 +400,22 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   walker.setGround(hallGround);
   walker.teleport(0, 6, 0);   // facing the great doors
   if (window.__nmnDebug) window.__hqTeleport = (x, z, f = Math.PI) => walker.teleport(x, z, f);
+  if (window.__nmnDebug) window.__hqStairs = (acc) => { const ang = WELL.a0 + acc, x = WELL.cx + Math.cos(ang) * 2.1, z = WELL.cz + Math.sin(ang) * 2.1; spiral.on = true; spiral.acc = acc; spiral.last = Math.atan2(z - WELL.cz, x - WELL.cx); walker.teleport(x, z, -ang); };
   let room = 'hall';
-  const clampHall = (p) => { const cy = cmd.root.position.y; p.x = Math.max(-10.5, Math.min(10.5, p.x)); p.z = Math.max(-HL + 2, Math.min(HL - 1, p.z)); p.y = Math.max(cy < -0.5 ? cy + 1.2 : 0.8, Math.min(WALL_H + 6, p.y)); };
+  const stairCam = new THREE.Vector3(), stairTarget = new THREE.Vector3();
+  let stairBlend = 0;
+  const clampHall = (p) => {
+    p.x = Math.max(-10.5, Math.min(10.5, p.x)); p.z = Math.max(-HL + 2, Math.min(HL - 1, p.z)); p.y = Math.max(0.8, Math.min(WALL_H + 6, p.y));
+    // On the stairs the camera follows along the spiral behind and above him, inside the shaft.
+    const want = spiral.on && spiral.acc > 0.25 ? 1 : 0;
+    stairBlend += (want - stairBlend) * 0.08;
+    if (stairBlend < 0.01) return;
+    const back = spiral.acc - 1.0, a = WELL.a0 + Math.max(back, -0.4);
+    stairTarget.set(WELL.cx + Math.cos(a) * 2.9, spiralY(back) + 3.8, WELL.cz + Math.sin(a) * 2.9);
+    if (stairCam.lengthSq() === 0) stairCam.copy(p);
+    stairCam.lerp(stairTarget, 0.12);
+    p.lerp(stairCam, stairBlend);
+  };
   const clampDungeon = (p) => { p.x = Math.max(DX - D.hw + 1, Math.min(DX + D.hw - 1, p.x)); p.z = Math.max(-D.hl + 10, Math.min(D.hl - 1, p.z)); p.y = Math.max(0.8, Math.min(14, p.y)); };
   walker.setCameraClamp(clampHall);
 
@@ -383,11 +434,15 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
       room = to;
       setRoomLights(to);
       if (to === 'dungeon') { walker.setGround(null); walker.teleport(DX, D.hl - 4, Math.PI, 0); walker.setBlocked(inDungeon); walker.setCameraClamp(clampDungeon); scene.fog.color.set(0x0a0806); scene.fog.density = 0.03; chains(); }
-      else if (to === 'gallery') { walker.setGround(null); walker.teleport(gallery.entrance.x, gallery.entrance.z, Math.PI, 0); walker.setBlocked(gallery.blocked); walker.setCameraClamp(gallery.clamp); scene.fog.color.set(0xd8c8a8); scene.fog.density = 0.016; renderer.toneMappingExposure = 0.85; }
+      else if (to === 'gallery') { walker.setGround(null); if (from === 'heaven') walker.teleport(gallery.fromLight.x, gallery.fromLight.z, 0, 0); else walker.teleport(gallery.entrance.x, gallery.entrance.z, Math.PI, 0); walker.setBlocked(gallery.blocked); walker.setCameraClamp(gallery.clamp); scene.fog.color.set(0xd8c8a8); scene.fog.density = 0.016; renderer.toneMappingExposure = 0.85; }
       else if (to === 'heaven') { walker.setGround(null); walker.teleport(heaven.entrance.x, heaven.entrance.z, Math.PI, 0); walker.setBlocked(heaven.blocked); walker.setCameraClamp(heaven.clamp); heavenSky(); }
       else {
         walker.setGround(hallGround); walker.setBlocked(inHall); walker.setCameraClamp(clampHall); scene.fog.color.set(0x1a120c); scene.fog.density = 0.012; setCry(0); applySky();
-        if (from === 'dungeon') walker.teleport((WELL.x0 + WELL.x1) / 2, WELL.z1 - 1.6, Math.PI); else walker.teleport(HW - 3, SIDE.z, -Math.PI / 2);
+        if (from === 'dungeon') {
+          const a = WELL.doorA - 0.55, x = WELL.cx + Math.cos(a) * 2.1, z = WELL.cz + Math.sin(a) * 2.1;
+          spiral.on = true; spiral.acc = WELL.total + 0.15; spiral.last = Math.atan2(z - WELL.cz, x - WELL.cx); stairBlend = 1; stairCam.set(0, 0, 0);
+          walker.teleport(x, z, Math.PI - a);   // facing back up the stairs
+        } else walker.teleport(HW - 3, SIDE.z, -Math.PI / 2);
       }
       onRoom?.(to);
       setTimeout(() => { fade.classList.remove('on'); going = false; }, white ? 500 : 150);
@@ -403,7 +458,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   const updatePrompts = () => {
     const p = cmd.root.position; if (window.__nmnDebug) window.__hqPos = [p.x, p.z, room];
     if (room === 'hall') {
-      const atVault = p.y < -WELL.depth + 0.6 && p.z > WELL.z1 - 3.2;
+      const atVault = spiral.on && spiral.acc > WELL.total - 0.2 && Math.hypot(p.x - (WELL.cx + Math.cos(WELL.doorA) * 2.4), p.z - (WELL.cz + Math.sin(WELL.doorA) * 2.4)) < 1.8;
       const nearMap = Math.abs(p.x) < 7.5 && p.z > -10 && p.z < 2.2;
       if (p.x > HW - 1.4 && inSide(p.x, p.z) && !going) { going = true; go('gallery'); }
       if (atVault) showPrompt('🚪 ادخل القبو', () => go('dungeon'));
@@ -411,13 +466,15 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
       else { prompt.hidden = true; action = null; }
       caption.hidden = true;
     } else if (room === 'gallery') {
-      if (gallery.atDoor(p)) showPrompt('🚪 ارجع إلى القاعة', () => go('hall')); else { prompt.hidden = true; action = null; }
+      prompt.hidden = true; action = null;
+      if (gallery.atDoor(p) && !going) { going = true; go('hall'); }
       if (gallery.reachedLight(p) && !going) { going = true; go('heaven', { white: true }); }
       caption.hidden = true;
     } else if (room === 'heaven') {
-      const nearDoor = p.distanceTo(heaven.door) < 4.5;
+      const nearDoor = p.distanceTo(heaven.door) < 2.6;
       const onSeal = Math.hypot(p.x - heaven.seal.x, p.z - heaven.seal.z) < 2.8;
-      if (nearDoor) showPrompt('🚪 ارجع إلى القاعة', () => go('hall')); else { prompt.hidden = true; action = null; }
+      prompt.hidden = true; action = null;
+      if (nearDoor && !going) { going = true; go('gallery', { white: true }); }   // back the way he came, through the light
       if (onSeal) { caption.hidden = false; caption.innerHTML = `<b>🫡 محاربوك</b><span>${heaven.ownedCount} من ${heaven.total} أبعاد انضمّت لجيشك. كل بُعد تفتحه بيصحى محاربه وبيوقف معك.</span><i style="--v:${Math.round((heaven.ownedCount / heaven.total) * 100)}%"></i>`; }
       else caption.hidden = true;
     } else {
@@ -472,6 +529,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
     const mv = walker.update(dt);
     cmd.update(t, dt, mv.walk, mv.air);
     dungeon.tick(t, dt);
+    for (const w of wellFlames) { const k = 0.85 + Math.sin(t * 11 + w.l.position.y) * 0.12; w.fl.scale.y = k; w.l.intensity = 14 * k; }
     if (room === 'heaven') { heaven.tick(t, dt, cmd.root.position); heaven.weatherTick(t, dt); }
     if (room === 'gallery') { const k = gallery.tick(t, dt, cmd.root.position); bloom.strength = 0.55 + k * 0.6; scene.fog.density = 0.012 + k * 0.012; }
     else bloom.strength = 0.5;

@@ -50,11 +50,33 @@ export function buildVestibule(scene) {
     for (const sx of [-1, 1]) {
       const p = new THREE.Mesh(new THREE.BoxGeometry(0.9, H, 1.3), dark); p.position.set(sx * (W - 0.2), H / 2, z); p.castShadow = true; g.add(p);
       const hold = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.14, 0.9, 8), gold); hold.position.set(sx * (W - 0.75), 4.2, z); hold.rotation.z = sx * 0.4; g.add(hold);
-      const fl = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.6, 8), new THREE.MeshBasicMaterial({ color: 0xff9a2e, toneMapped: false })); fl.position.set(sx * (W - 0.95), 4.85, z); g.add(fl);
-      flames.push({ fl, ph: Math.random() * 6 });
+      const fire = new THREE.Group(); fire.position.set(sx * (W - 0.95), 4.75, z); g.add(fire);
+      for (const [r, h, c, dx] of [[0.26, 0.85, 0xff7a1f, 0], [0.17, 0.65, 0xffb347, 0.08], [0.1, 0.45, 0xffe6a0, -0.05]]) {
+        const fl = new THREE.Mesh(new THREE.ConeGeometry(r, h, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(1.6), toneMapped: false, transparent: true, opacity: 0.92 }));
+        fl.position.set(dx, h / 2, 0); fire.add(fl);
+      }
+      flames.push({ fl: fire, ph: Math.random() * 6 });
     }
     const rib = new THREE.Mesh(new THREE.TorusGeometry(W - 0.2, 0.35, 8, 32, Math.PI), dark); rib.position.set(0, H, z); g.add(rib);
   }
+
+  // Fire bowls on stands along the carpet.
+  const bowlM = std(0x3a2a1c, { metalness: 0.7, roughness: 0.4 });
+  const bowls = [];
+  for (const z of [22, 10, -2, -14]) for (const sx of [-1, 1]) {
+    const x = sx * 2.4;
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.35, 1.5, 8), bowlM); leg.position.set(x, 0.75, z); g.add(leg);
+    const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), gold); bowl.position.set(x, 1.9, z); g.add(bowl);
+    const coals = new THREE.Mesh(new THREE.CircleGeometry(0.5, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(2, 0.6, 0.15), toneMapped: false })); coals.rotation.x = -Math.PI / 2; coals.position.set(x, 1.86, z); g.add(coals);
+    const fire = new THREE.Group(); fire.position.set(x, 1.9, z); g.add(fire);
+    for (let k = 0; k < 4; k++) { const fl = new THREE.Mesh(new THREE.ConeGeometry(0.22 - k * 0.03, 0.9 - k * 0.12, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(k % 2 ? 0xff7a1f : 0xffc34d).multiplyScalar(1.7), toneMapped: false, transparent: true, opacity: 0.9 })); fl.position.set((Math.random() - 0.5) * 0.3, 0.4, (Math.random() - 0.5) * 0.3); fire.add(fl); }
+    bowls.push({ fire, ph: Math.random() * 6 });
+  }
+  // Embers rising from the bowls.
+  const EM = 260, ep = new Float32Array(EM * 3), eo = Array.from({ length: EM }, (_, i) => bowls[i % bowls.length]);
+  for (let i = 0; i < EM; i++) { const b = eo[i].fire.position; ep.set([b.x, 2 + Math.random() * 4, b.z], i * 3); }
+  const embers = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(ep, 3)), new THREE.PointsMaterial({ color: 0xffa040, size: 0.08, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  g.add(embers);
 
   // The great arch of light at the far end.
   const arch = new THREE.Group(); arch.position.z = -LEN; g.add(arch);
@@ -64,7 +86,7 @@ export function buildVestibule(scene) {
   for (const sx of [-1, 1]) { const piece = new THREE.Mesh(new THREE.BoxGeometry(W - 2.8, H, 0.8), wallM); piece.position.set(sx * (W - (W - 2.8) / 2), H / 2, 0); arch.add(piece); }
   const lintel = new THREE.Mesh(new THREE.BoxGeometry(W * 2, H - 9.2, 0.8), wallM); lintel.position.set(0, 9.2 + (H - 9.2) / 2, 0); arch.add(lintel);
   // Beyond: blinding light (colour above 1 so the bloom flares it).
-  const glowM = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 2.9, 2.4), toneMapped: false, fog: false });
+  const glowM = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 2.35, 1.95), toneMapped: false, fog: false });
   const back = new THREE.Mesh(new THREE.PlaneGeometry(40, 30), glowM); back.position.set(0, 10, -18); arch.add(back);
   const beyondFloor = new THREE.Mesh(new THREE.PlaneGeometry(40, 20), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 2.0, 1.7), toneMapped: false, fog: false })); beyondFloor.rotation.x = -Math.PI / 2; beyondFloor.position.set(0, 0.01, -9); arch.add(beyondFloor);
   // Eight dark figures standing in the light.
@@ -109,8 +131,9 @@ export function buildVestibule(scene) {
   // Lights: torches near the entrance, a strong light from the arch casting long shadows.
   const lights = new THREE.Group(); g.add(lights);
   lights.add(new THREE.HemisphereLight(0x6a6080, 0x1a120c, 0.25));
-  const torchLights = [LEN - 4, LEN - 12].flatMap((z) => [-1, 1].map((sx) => { const l = new THREE.PointLight(0xff8a3c, 14, 14, 1.6); l.position.set(sx * (W - 1.3), 5, z); lights.add(l); return l; }));
-  const beam = new THREE.SpotLight(0xfff0d8, 160, 70, 0.32, 0.8, 1.4); beam.position.set(0, 4.5, -LEN - 4); beam.target.position.set(0, 0, LEN); beam.castShadow = true; beam.shadow.mapSize.set(1024, 1024); beam.shadow.bias = -0.0005;
+  const torchLights = [LEN - 4, LEN - 12, LEN - 20, LEN - 28].flatMap((z) => [-1, 1].map((sx) => { const l = new THREE.PointLight(0xff8a3c, 30, 18, 1.5); l.position.set(sx * (W - 1.3), 5, z); l.userData.base = 30; lights.add(l); return l; }));
+  for (const z of [22, 10, -2, -14]) { const l = new THREE.PointLight(0xff9440, 26, 12, 1.5); l.position.set(0, 3, z); l.userData.base = 26; lights.add(l); torchLights.push(l); }
+  const beam = new THREE.SpotLight(0xfff0d8, 90, 60, 0.3, 0.85, 1.5); beam.position.set(0, 4.5, -LEN - 4); beam.target.position.set(0, 0, LEN); beam.castShadow = true; beam.shadow.mapSize.set(1024, 1024); beam.shadow.bias = -0.0005;
   lights.add(beam, beam.target);
   lights.visible = false;
 
@@ -120,9 +143,12 @@ export function buildVestibule(scene) {
   // Returns how far along the gallery the commander is (0 at the door … 1 at the arch).
   function tick(t, dt, pos) {
     const z = pos.z - VZ, k = THREE.MathUtils.clamp((LEN - z) / (LEN * 2), 0, 1);
-    for (const f of flames) f.fl.scale.y = 0.85 + Math.sin(t * 12 + f.ph) * 0.15;
-    for (const l of torchLights) l.intensity = 14 * (0.85 + Math.sin(t * 11 + l.position.z) * 0.12);
-    shafts.forEach((s, i) => { s.material.opacity = (0.02 + k * 0.03) + Math.sin(t * 0.7 + i) * 0.008; });
+    for (const f of flames) { f.fl.scale.y = 0.82 + Math.sin(t * 12 + f.ph) * 0.14 + Math.sin(t * 25 + f.ph) * 0.06; f.fl.rotation.y = t + f.ph; }
+    for (const l of torchLights) l.intensity = l.userData.base * (0.82 + Math.sin(t * 11 + l.position.z) * 0.1 + Math.sin(t * 23 + l.position.x) * 0.06);
+    for (const b of bowls) { const k = 0.85 + Math.sin(t * 9 + b.ph) * 0.12 + Math.sin(t * 21 + b.ph) * 0.06; b.fire.scale.set(1, k * 1.15, 1); b.fire.rotation.y = t * 0.8 + b.ph; }
+    for (let i = 0; i < EM; i++) { const b = eo[i].fire.position; let y = ep[i * 3 + 1] + dt * (0.6 + (i % 7) * 0.15); if (y > 7) { y = 2.2; ep[i * 3] = b.x; ep[i * 3 + 2] = b.z; } ep[i * 3 + 1] = y; ep[i * 3] += Math.sin(t * 2 + i) * dt * 0.15; }
+    embers.geometry.attributes.position.needsUpdate = true;
+    shafts.forEach((s, i) => { s.material.opacity = (0.012 + k * 0.018) + Math.sin(t * 0.7 + i) * 0.005; });
     for (const m of mist.children) {
       const u = m.userData; m.position.z = u.z0 + Math.sin(t * 0.25 * u.v + u.ph) * 2; m.position.x += Math.sin(t * 0.3 + u.ph) * dt * 0.2;
       m.material.rotation = t * 0.05 * u.v;
@@ -130,14 +156,15 @@ export function buildVestibule(scene) {
     for (let i = 0; i < N; i++) { dp[i * 3 + 1] += dt * 0.12; dp[i * 3] += Math.sin(t + i) * dt * 0.05; if (dp[i * 3 + 1] > 9) dp[i * 3 + 1] = 0; }
     dust.geometry.attributes.position.needsUpdate = true;
     figures.forEach((h, i) => { h.update(t, dt, 0, false); h.root.position.y = 0.02 + Math.sin(t * 0.6 + i) * 0.02; });
-    beam.intensity = 140 + k * 160;
+    beam.intensity = 80 + k * 90;
     return k;
   }
 
   return {
     group: g, lights, tick, blocked, clamp,
-    entrance: new THREE.Vector3(0, 0, VZ + LEN - 3),
+    entrance: new THREE.Vector3(0, 0, VZ + LEN - 6),
+    fromLight: new THREE.Vector3(0, 0, VZ - LEN + 6),
     reachedLight: (pos) => pos.z - VZ < -LEN + 2.2,
-    atDoor: (pos) => pos.z - VZ > LEN - 3.6,
+    atDoor: (pos) => pos.z - VZ > LEN - 2.2,
   };
 }

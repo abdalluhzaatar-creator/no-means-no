@@ -176,14 +176,15 @@ export function buildHeaven(scene, { owned = new Set() } = {}) {
   // Colonnade: tall marble columns with gold bases and capitals, joined by arches.
   const COLS = 16, CR = 21;
   const colGeo = new THREE.CylinderGeometry(0.75, 0.9, 15, 24);
-  const cols = [];
+  const cols = [], colFires = [];
   for (let i = 0; i < COLS; i++) {
     const a = (i / COLS) * Math.PI * 2 + Math.PI / COLS;
     if (Math.cos(a - Math.PI / 2) > 0.97) continue;                                  // leave the door bay open
     const x = Math.cos(a) * CR, z = Math.sin(a) * CR; cols.push([x, z]);
     const c = new THREE.Mesh(colGeo, marble); c.position.set(x, 7.5, z); c.castShadow = true; g.add(c);
     for (const [y, s] of [[0.35, 1.4], [15.2, 1.6]]) { const b = new THREE.Mesh(new THREE.CylinderGeometry(s * 0.9, s, 0.7, 24), gold); b.position.set(x, y, z); g.add(b); }
-    const flame = new THREE.Mesh(new THREE.SphereGeometry(0.45, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffe2a0, toneMapped: false })); flame.position.set(x, 16.2, z); g.add(flame);
+    const fire = new THREE.Group(); fire.position.set(x, 15.9, z); g.add(fire); colFires.push(fire);
+    for (const [r, h, c] of [[0.5, 1.5, 0xff7a1f], [0.34, 1.15, 0xffb347], [0.18, 0.8, 0xffe6a0]]) { const f = new THREE.Mesh(new THREE.ConeGeometry(r, h, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(1.5), toneMapped: false, transparent: true, opacity: 0.92 })); f.position.y = h / 2; fire.add(f); }
   }
   const ring = new THREE.Mesh(new THREE.TorusGeometry(CR, 0.55, 12, 160), gold); ring.rotation.x = Math.PI / 2; ring.position.y = 15.6; g.add(ring);
   const ring2 = new THREE.Mesh(new THREE.TorusGeometry(CR, 0.25, 8, 160), marble); ring2.rotation.x = Math.PI / 2; ring2.position.y = 16.5; g.add(ring2);
@@ -193,7 +194,7 @@ export function buildHeaven(scene, { owned = new Set() } = {}) {
   const haloM = new THREE.MeshStandardMaterial({ color: 0xffd98a, emissive: 0xffc24d, emissiveIntensity: 1.6, metalness: 0.6, roughness: 0.3 });
   for (const [r, w] of [[11, 0.35], [8.5, 0.18], [13.5, 0.12]]) { const h = new THREE.Mesh(new THREE.TorusGeometry(r, w, 12, 160), haloM); h.rotation.x = Math.PI / 2; halo.add(h); }
   const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(1.4), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff0c8, emissiveIntensity: 2.2 })); crystal.scale.y = 1.8; halo.add(crystal);
-  const rayMat = new THREE.MeshBasicMaterial({ color: 0xffe6b0, transparent: true, opacity: 0.03, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+  const rayMat = new THREE.MeshBasicMaterial({ color: 0xffe6b0, transparent: true, opacity: 0.02, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
   const rays = [];
   for (let i = 0; i < 7; i++) {
     const cone = new THREE.Mesh(new THREE.CylinderGeometry(i ? 1.2 : 2.5, i ? 4.5 : 9, 27, 32, 1, true), rayMat.clone());
@@ -224,6 +225,15 @@ export function buildHeaven(scene, { owned = new Set() } = {}) {
   const dTop = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.5, 12, 48, Math.PI), gold); dTop.position.y = 6.5; door.add(dTop);
   const dVeil = veil.clone(); dVeil.material = veil.material; dVeil.scale.set(0.58, 0.55, 1); dVeil.position.set(0, 4.3, 0); door.add(dVeil);
 
+  // Four great fire bowls round the seal.
+  const braziers = [];
+  for (const [x, z] of [[-4.2, -17.5], [4.2, -17.5], [-4.2, -10.5], [4.2, -10.5]]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.55, 2.4, 10), std(0x3a2a1c, { metalness: 0.7 })); leg.position.set(x, 1.2, z); g.add(leg);
+    const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.95, 20, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), gold); bowl.position.set(x, 3, z); g.add(bowl);
+    const fire = new THREE.Group(); fire.position.set(x, 3, z); g.add(fire);
+    for (let k = 0; k < 5; k++) { const f = new THREE.Mesh(new THREE.ConeGeometry(0.4 - k * 0.05, 1.6 - k * 0.2, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(k % 2 ? 0xff7a1f : 0xffc34d).multiplyScalar(1.6), toneMapped: false, transparent: true, opacity: 0.9 })); f.position.set((rnd() - 0.5) * 0.5, 0.7, (rnd() - 0.5) * 0.5); fire.add(f); }
+    braziers.push({ fire, ph: rnd() * 6, light: null, x, z });
+  }
   // Banners behind each warrior hang from the columns' ring.
   // ---- the eight warriors ----
   const chars = CHARACTERS.filter((c) => REGIONS.some((r) => r.characterId === c.id));
@@ -268,7 +278,8 @@ export function buildHeaven(scene, { owned = new Set() } = {}) {
   key.castShadow = true; key.shadow.mapSize.set(2048, 2048); Object.assign(key.shadow.camera, { left: -28, right: 28, top: 28, bottom: -28, near: 1, far: 120 }); key.shadow.bias = -0.0004;
   lights.add(key, key.target);
   const sealLight = new THREE.PointLight(0xffd27a, 22, 16, 1.6); sealLight.position.set(0, 4, HEAVEN.seal.z); lights.add(sealLight);
-  const haloLight = new THREE.PointLight(0xfff0d0, 40, 40, 1.6); haloLight.position.set(0, 20, -4); lights.add(haloLight);
+  const haloLight = new THREE.PointLight(0xfff0d0, 28, 40, 1.6); haloLight.position.set(0, 20, -4); lights.add(haloLight);
+  for (const b of braziers) { b.light = new THREE.PointLight(0xff8a3c, 30, 16, 1.5); b.light.position.set(b.x, 4.2, b.z); lights.add(b.light); }
   lights.visible = false;
 
   g.traverse((m) => { if (m.isMesh && m.castShadow === false && m.material?.blending !== THREE.AdditiveBlending && !m.material?.transparent) m.receiveShadow = true; });
@@ -280,6 +291,7 @@ export function buildHeaven(scene, { owned = new Set() } = {}) {
     if (z < -18.6) return true;                                                     // the arch
     for (const w of warriors) if (Math.hypot(x - w.x, z - w.z) < 1.3) return true;
     for (const [cx, cz] of cols) if (Math.hypot(x - cx, z - cz) < 1.4) return true;
+    for (const b of braziers) if (Math.hypot(x - b.x, z - b.z) < 1.1) return true;
     return false;
   };
   const clamp = (p) => {
@@ -293,7 +305,9 @@ export function buildHeaven(scene, { owned = new Set() } = {}) {
   function tick(t, dt, cmdPos) {
     sky.material.uniforms.t.value = t; veil.material.uniforms.t.value = t;
     halo.rotation.y = t * 0.12; halo.children[1].rotation.z = t * 0.4; crystal.rotation.y = t * 0.6; crystal.position.y = Math.sin(t * 1.2) * 0.4;
-    rays.forEach((r, i) => { r.material.opacity = 0.022 + Math.sin(t * 0.8 + i) * 0.012; });
+    rays.forEach((r, i) => { r.material.opacity = 0.014 + Math.sin(t * 0.8 + i) * 0.007; });
+    colFires.forEach((f, i) => { f.scale.y = 0.85 + Math.sin(t * 10 + i) * 0.12 + Math.sin(t * 23 + i * 2) * 0.05; f.rotation.y = t + i; });
+    for (const b of braziers) { b.fire.scale.y = 0.85 + Math.sin(t * 9 + b.ph) * 0.15; b.fire.rotation.y = t * 0.9 + b.ph; b.light.intensity = 30 * (0.85 + Math.sin(t * 12 + b.ph) * 0.12); }
     seal.material.opacity = 0.55 + Math.sin(t * 2) * 0.15; seal.rotation.z = t * 0.15;
     for (const s of clouds.children) { s.position.x += dt * s.userData.v; if (s.position.x > 230) s.position.x -= 460; }
     for (let i = 0; i < N; i++) { let y = mp[i * 3 + 1] + dt * ms[i] * 0.8; if (y > 22) y = 0; mp[i * 3 + 1] = y; mp[i * 3] += Math.sin(t * 0.7 + i) * dt * 0.08; }
