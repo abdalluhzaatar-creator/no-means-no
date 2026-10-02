@@ -408,15 +408,20 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   if (window.__nmnDebug) window.__hqStairs = (acc) => { const ang = WELL.a0 + acc, x = WELL.cx + Math.cos(ang) * 2.1, z = WELL.cz + Math.sin(ang) * 2.1; spiral.on = true; spiral.acc = acc; spiral.last = Math.atan2(z - WELL.cz, x - WELL.cx); walker.teleport(x, z, -ang); };
   let room = 'hall';
   const stairCam = new THREE.Vector3(), stairTarget = new THREE.Vector3();
-  let stairBlend = 0;
+  let stairBlend = 0, stairDir = 1;
   const clampHall = (p) => {
     p.x = Math.max(-10.5, Math.min(10.5, p.x)); p.z = Math.max(-HL + 2, Math.min(HL - 1, p.z)); p.y = Math.max(0.8, Math.min(WALL_H + 6, p.y));
     // On the stairs the camera follows along the spiral behind and above him, inside the shaft.
     const want = spiral.on && spiral.acc > 0.25 ? 1 : 0;
     stairBlend += (want - stairBlend) * 0.08;
     if (stairBlend < 0.01) return;
-    const back = spiral.acc - 1.0, a = WELL.a0 + Math.max(back, -0.4);
-    stairTarget.set(WELL.cx + Math.cos(a) * 2.9, spiralY(back) + 3.8, WELL.cz + Math.sin(a) * 2.9);
+    // Behind him along the way he faces: up the stairs while he goes down, down the stairs while he climbs,
+    // so "forward" always walks the way he is looking.
+    const f = cmd.root.rotation.y, ang = WELL.a0 + spiral.acc;
+    const down = Math.sin(f) * -Math.sin(ang) + Math.cos(f) * Math.cos(ang);
+    if (Math.abs(down) > 0.3) stairDir = down > 0 ? 1 : -1;
+    const back = Math.max(-0.4, Math.min(WELL.total + 0.6, spiral.acc - stairDir)), a = WELL.a0 + back;
+    stairTarget.set(WELL.cx + Math.cos(a) * 2.9, Math.max(spiralY(back), spiralY(spiral.acc)) + 3.8, WELL.cz + Math.sin(a) * 2.9);
     if (stairCam.lengthSq() === 0) stairCam.copy(p);
     stairCam.lerp(stairTarget, 0.12);
     p.lerp(stairCam, stairBlend);
@@ -451,9 +456,9 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
         walker.setGround(hallGround); walker.setBlocked(inHall); walker.setCameraClamp(clampHall); scene.fog.color.set(0x1a120c); scene.fog.density = 0.012; setCry(0); applySky();
         if (from === 'dungeon') {
           const a = WELL.doorA - 0.55, x = WELL.cx + Math.cos(a) * 2.1, z = WELL.cz + Math.sin(a) * 2.1;
-          spiral.on = true; spiral.acc = WELL.total + 0.15; spiral.last = Math.atan2(z - WELL.cz, x - WELL.cx); stairBlend = 1; stairCam.set(0, 0, 0);
+          spiral.on = true; spiral.acc = WELL.total + 0.15; spiral.last = Math.atan2(z - WELL.cz, x - WELL.cx); stairBlend = 1; stairDir = -1; stairCam.set(0, 0, 0);
           walker.teleport(x, z, Math.PI - a);   // facing back up the stairs
-        } else walker.teleport(HW - 3, SIDE.z, -Math.PI / 2);
+        } else walker.teleport(7, SIDE.z, -Math.PI / 2);   // inside the hall, so the camera is behind him
       }
       onRoom?.(to);
       setTimeout(() => { fade.classList.remove('on'); going = false; }, white ? 500 : 150);
@@ -469,7 +474,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   const showPrompt = (text, fn) => { action = fn; prompt.hidden = false; prompt.innerHTML = `<kbd>E</kbd> ${text}`; };
   let childLevel = child, futureLevel = future, going = false;
   const updatePrompts = () => {
-    const p = cmd.root.position; if (window.__nmnDebug) window.__hqPos = [p.x, p.z, room];
+    const p = cmd.root.position; if (window.__nmnDebug) window.__hqPos = [p.x, p.z, room, camera.position.x, camera.position.z, cmd.root.rotation.y];
     if (room === 'hall') {
       const atVault = spiral.on && spiral.acc > WELL.total - 0.2 && Math.hypot(p.x - (WELL.cx + Math.cos(WELL.doorA) * 2.4), p.z - (WELL.cz + Math.sin(WELL.doorA) * 2.4)) < 1.8;
       const nearMap = Math.abs(p.x) < 7.5 && p.z > -10 && p.z < 2.2;
