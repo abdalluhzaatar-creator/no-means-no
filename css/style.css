@@ -570,23 +570,78 @@ body.in-heaven .hud .cup-side, body.in-heaven .hud .dock, body.in-heaven .hud .v
 .puppet-bar button { padding: 9px 14px; border-radius: 12px; border: 1px solid #ffc83d88; background: rgba(30,20,10,.82); color: #ffe7a8; font: inherit; font-weight: 700; cursor: pointer; }
 .puppet-bar button:active { transform: scale(.96); }
 .puppet-bar kbd { display: inline-block; min-width: 20px; margin-inline-end: 6px; border-radius: 5px; background: #ffe7a8; color: #2a1c10; font: 800 .8rem system-ui; padding: 1px 5px; }
-/* Habit picker */
-.picker h2 { margin-bottom: 4px; }
-.habit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; margin: 12px 0; }
-.habit { display: grid; justify-items: center; gap: 4px; padding: 12px 8px; border-radius: 14px; border: 2px solid #0000001a; background: #00000006; color: inherit; font: inherit; cursor: pointer; text-align: center; }
-.habit span { font-size: 1.6rem; }
-.habit b { font-size: .92rem; line-height: 1.3; }
-.habit small { color: #9a6a10; font-size: .75rem; }
-.habit.on { border-color: #e0a526; background: #ffc83d2e; box-shadow: 0 0 0 3px #ffc83d40; }
-.habit.own { border-style: dashed; }
-.hp-own { width: 100%; padding: 12px; border-radius: 12px; border: 2px solid #e0a526; background: #fff; color: inherit; font: inherit; font-size: 1rem; margin-bottom: 10px; }
-.hp-own[hidden] { display: none; }
-.hp-times { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 6px 0 12px; font-weight: 700; }
-.hp-times .step { width: 44px; height: 44px; border-radius: 50%; border: 2px solid #e0a526; background: #fff; color: #9a6a10; font-size: 1.5rem; cursor: pointer; }
-.hp-times b { min-width: 34px; text-align: center; font-size: 1.6rem; color: #9a6a10; }
-.hp-sum { padding: 10px 14px; border-radius: 12px; background: #f6efe0; margin-bottom: 12px; line-height: 1.7; }
-.hp-sum p { margin: 0; }
-.hp-sum .warn { color: #b8560f; }
+/* Habit picker — a game panel: dark glass, gold frame, inventory-style cards */
+.modal.game { background: radial-gradient(circle at 50% 30%, rgba(40,28,10,.55), rgba(0,0,0,.78)); backdrop-filter: blur(3px); }
+.modal.game .modal-box { width: min(620px, 100%); padding: 0; color: #f4ead2; border-radius: 22px; overflow: auto;
+  background: radial-gradient(120% 70% at 50% 0%, #3a2c16 0%, #1b1712 46%, #0f0d0b 100%);
+  border: 1px solid #e0b24d; box-shadow: 0 0 0 4px #00000066, 0 0 0 5px #e0b24d55, 0 30px 80px #000c, inset 0 1px 0 #ffe7a855;
+  animation: pkIn .42s cubic-bezier(.2,1.3,.4,1); }
+.modal.game .modal-close { color: #e8d3a0; z-index: 2; }
+@keyframes pkIn { from { transform: translateY(24px) scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
+.picker { padding: 0 18px 18px; }
+.pk-head { display: flex; align-items: center; gap: 14px; margin: 0 -18px 4px; padding: 20px 22px 16px; position: relative;
+  background: linear-gradient(180deg, #5a4220aa, transparent); border-bottom: 1px solid #e0b24d33; }
+.pk-head::after { content: ''; position: absolute; inset-inline: 20%; bottom: -1px; height: 2px; background: linear-gradient(90deg, transparent, #ffd36b, transparent); }
+.pk-medal { flex: none; width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; font-size: 1.7rem;
+  background: radial-gradient(circle at 35% 30%, #fff3c4, #e0a526 55%, #7a4f0c); box-shadow: 0 0 0 3px #2a1c0c, 0 0 0 5px #e0b24d, 0 0 26px var(--glow, #ffc83d); animation: pkGlow 2.6s ease-in-out infinite; }
+@keyframes pkGlow { 50% { box-shadow: 0 0 0 3px #2a1c0c, 0 0 0 5px #ffd36b, 0 0 40px var(--glow, #ffc83d); } }
+.pk-head small { color: #e0b24d; font-weight: 800; letter-spacing: .02em; }
+.pk-head h2 { margin: 2px 0 0; font-size: 1.35rem; color: #fff6dc; text-shadow: 0 2px 0 #0008; }
+.pk-lead { color: #cdbd98; margin: 10px 2px 6px; line-height: 1.6; }
+.pk-lead b { color: #ffe7a8; }
+.pk-step { display: flex; align-items: center; gap: 8px; margin: 14px 0 8px; font-weight: 800; color: #ffe7a8; }
+.pk-step b { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: .8rem; color: #2a1c0c; background: linear-gradient(#ffe7a8, #e0a526); }
+.habit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 10px; }
+.habit { position: relative; display: grid; justify-items: center; align-content: start; gap: 5px; padding: 14px 8px 12px; border-radius: 16px; cursor: pointer; text-align: center; color: #f4ead2; font: inherit;
+  background: linear-gradient(180deg, #ffffff12, #ffffff05); border: 1px solid #ffffff1c; box-shadow: inset 0 1px 0 #ffffff14, 0 4px 0 #00000055;
+  transition: transform .15s, border-color .15s, box-shadow .15s, background .15s; animation: pkCard .38s backwards; animation-delay: calc(var(--i) * 35ms); }
+@keyframes pkCard { from { transform: translateY(10px); opacity: 0; } }
+.habit:hover { transform: translateY(-3px); border-color: #e0b24d88; }
+.habit:active { transform: translateY(1px); box-shadow: inset 0 1px 0 #ffffff14, 0 1px 0 #00000055; }
+.hb-ic { width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center; font-size: 1.8rem; background: radial-gradient(circle at 50% 35%, #ffffff22, #00000033); box-shadow: inset 0 0 0 1px #ffffff18; }
+.habit b { font-size: .9rem; line-height: 1.35; }
+.habit small { color: #e0b24d; font-size: .74rem; font-weight: 700; }
+.hb-check { position: absolute; top: -7px; inset-inline-start: -7px; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: .75rem; color: #2a1c0c; background: linear-gradient(#ffe7a8, #e0a526); box-shadow: 0 2px 6px #0008; transform: scale(0); transition: transform .2s cubic-bezier(.2,1.6,.4,1); }
+.habit.on { border-color: #ffd36b; background: linear-gradient(180deg, #e0a52633, #e0a52610); box-shadow: 0 0 0 2px #ffd36b66, 0 0 22px #ffc83d44, 0 4px 0 #00000055; }
+.habit.on .hb-check { transform: scale(1); }
+.habit.own { border-style: dashed; border-color: #e0b24d66; }
+.pk-custom { margin-top: 4px; padding: 4px 14px 14px; border-radius: 18px; background: #00000038; border: 1px solid #e0b24d2a; animation: pkCard .3s; }
+.pk-custom[hidden] { display: none; }
+.pk-name { display: flex; gap: 10px; align-items: center; }
+.pk-icon { flex: none; width: 54px; height: 54px; border-radius: 14px; font-size: 1.8rem; cursor: pointer; background: radial-gradient(circle at 50% 35%, #ffffff26, #00000040); border: 1px solid #e0b24d88; position: relative; }
+.pk-icon::after { content: '✎'; position: absolute; bottom: -5px; inset-inline-start: -5px; font-size: .7rem; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: #e0a526; color: #2a1c0c; }
+.pk-name input { flex: 1; min-width: 0; padding: 14px; border-radius: 14px; border: 1px solid #e0b24d88; background: #0006; color: #fff6dc; font: inherit; font-size: 1.05rem; font-weight: 700; }
+.pk-name input:focus { outline: none; border-color: #ffd36b; box-shadow: 0 0 0 3px #ffc83d33; }
+.pk-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 6px; margin-top: 10px; padding: 10px; border-radius: 14px; background: #0005; max-height: 190px; overflow: auto; }
+.pk-icons[hidden] { display: none; }
+.pk-icons button { height: 42px; border-radius: 10px; border: 1px solid transparent; background: #ffffff0d; font-size: 1.35rem; cursor: pointer; }
+.pk-icons button:hover { border-color: #e0b24d; background: #e0a52622; }
+.hp-times { display: flex; align-items: center; justify-content: center; gap: 18px; }
+.hp-times .step { width: 50px; height: 50px; border-radius: 50%; border: 0; cursor: pointer; font-size: 1.6rem; font-weight: 800; color: #2a1c0c; background: radial-gradient(circle at 40% 30%, #fff3c4, #e0a526 60%, #8a5a10); box-shadow: 0 4px 0 #5a3a08, 0 6px 14px #0008; }
+.hp-times .step:active { transform: translateY(3px); box-shadow: 0 1px 0 #5a3a08; }
+.hp-times .step:disabled { opacity: .35; cursor: default; }
+.hp-times b { min-width: 56px; text-align: center; font-size: 2.2rem; color: #fff6dc; text-shadow: 0 0 18px #ffc83d88; }
+.pk-prayers { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 10px; }
+.pk-prayers[hidden] { display: none; }
+.pk-prayers span { padding: 4px 10px; border-radius: 99px; background: #e0a52622; border: 1px solid #e0b24d66; font-size: .8rem; font-weight: 700; color: #ffe7a8; }
+.hp-sum { margin-top: 14px; padding: 12px 14px; border-radius: 14px; background: linear-gradient(180deg, #f3e2b4, #e2c98c); color: #3a2a10; line-height: 1.7; box-shadow: inset 0 0 0 1px #8a5a1044, 0 6px 16px #0006; }
+.hp-sum p { margin: 2px 0; display: flex; gap: 8px; }
+.hp-sum p span { flex: none; }
+.hp-sum b { color: #5a3608; }
+.hp-sum .warn { color: #9a3a08; }
+.pk-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.pk-ok { flex: 1 1 220px; position: relative; overflow: hidden; padding: 16px; border: 0; border-radius: 16px; cursor: pointer; font: inherit; font-size: 1.15rem; font-weight: 900; color: #2a1c0c;
+  background: linear-gradient(180deg, #fff0b8, #ffc83d 45%, #d08a12); box-shadow: 0 5px 0 #7a4f0c, 0 10px 24px #ffc83d33; text-shadow: 0 1px 0 #fff8; }
+.pk-ok::after { content: ''; position: absolute; top: 0; bottom: 0; width: 40%; left: -60%; background: linear-gradient(100deg, transparent, #ffffff99, transparent); animation: pkShine 2.8s infinite; }
+@keyframes pkShine { 60%, 100% { left: 130%; } }
+.pk-ok small { font-size: .8rem; opacity: .8; margin-inline-start: 6px; }
+.pk-ok:active { transform: translateY(3px); box-shadow: 0 2px 0 #7a4f0c; }
+.pk-ok:disabled { filter: grayscale(.8) brightness(.6); cursor: default; }
+.pk-ok:disabled::after { display: none; }
+.pk-ghost { padding: 14px 18px; border-radius: 16px; border: 1px solid #ffffff2a; background: #ffffff0a; color: #e8d9b4; font: inherit; font-weight: 700; cursor: pointer; }
+.t-ic { display: inline-block; min-width: 1.3em; }
+.times.prayers i { width: auto; height: auto; padding: 1px 7px; border-radius: 99px; font-style: normal; font-size: .72rem; border-width: 1.5px; }
+.times.prayers i.on { color: #2a1c0c; }
 .edit-task { border: 0; background: transparent; color: #ffffff88; cursor: pointer; font-size: .95rem; padding: 0 4px; }
 .edit-task:hover { color: #ffe7a8; }
 .road { padding: 10px 12px 12px; border-top: 1px solid #ffffff18; font-size: .88rem; }

@@ -185,13 +185,17 @@ const parseLine = (l) => {
   return { title: (m?.[1] || '').trim(), times: +m?.[2] || 1 };
 };
 export const MAX_TIMES = 20;
+// The five daily prayers as one habit: never less than five times a day.
+export const isFivePrayers = (title) => /^(ال)?صل[اوي][ةهت]?$|^الصلوات|صلواتي|(الخمس|5|خمس)\s*صلوات|الصلاة?\s*(الخمس|5)/.test(String(title || '').trim());
+const minTimes = (title) => (isFivePrayers(title) ? 5 : 1);
+const cleanIcon = (i) => (typeof i === 'string' ? [...i.trim()].slice(0, 4).join('') : '');
 
 export function setRankPlan(s, id, rankIndex, input) {
   const def = findCharacter(id), ch = s.characters[id];
   if (!def || !ch) return fail('غير مملوكة');
   if (rankIndex < 0 || rankIndex >= RANK_COUNT) return fail('رتبة غير موجودة');
   const items = (Array.isArray(input) ? input : String(input).split('\n').map(parseLine))
-    .map((x) => ({ title: String(x.title || '').trim().slice(0, 80), times: Math.max(1, Math.min(MAX_TIMES, Math.round(+x.times) || 1)) }))
+    .map((x) => { const title = String(x.title || '').trim().slice(0, 80); return { title, icon: cleanIcon(x.icon), times: Math.max(minTimes(title), Math.min(MAX_TIMES, Math.round(+x.times) || 1)) }; })
     .filter((x) => x.title);
   const seen = new Set();
   const uniq = items.filter((x) => !seen.has(x.title) && seen.add(x.title)).slice(0, 12);
@@ -199,15 +203,16 @@ export function setRankPlan(s, id, rankIndex, input) {
   const known = plan.flat();
   // Prayers already tied to a task in another rank (or earlier in this list).
   const taken = new Set(plan.filter((_, i) => i !== rankIndex).flat().map((t) => t.prayer).filter(Boolean));
-  plan[rankIndex] = uniq.map(({ title, times }) => {
+  plan[rankIndex] = uniq.map(({ title, times, icon }) => {
     const old = known.find((t) => t.title === title);
     if (old) {
       plan.forEach((r, i) => { if (i !== rankIndex) plan[i] = r.filter((t) => t.id !== old.id); });
-      const t = { ...old, times };
+      const t = { ...old, times }; if (icon) t.icon = icon;
       if (times > 1) delete t.prayer; else if (old.prayer) taken.add(old.prayer);
       return t;
     }
     const t = { id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title, times, reward: 20, penalty: 10 };
+    if (icon) t.icon = icon;
     // A once-a-day line naming one of the five prayers is tied to that prayer's time (once per plan).
     const pr = times === 1 ? prayerIn(title) : undefined;
     if (pr && !taken.has(pr)) { t.prayer = pr; taken.add(pr); }
@@ -221,7 +226,7 @@ export function setRankPlan(s, id, rankIndex, input) {
 // ---------- Habits: one habit per rank ----------
 // Each rank brings one new daily habit, chosen by the player when they get there
 // (Bronze 1 = the first habit; every promotion with a key adds the next one).
-const cleanHabit = (h) => ({ title: String(h?.title || '').trim().slice(0, 80), times: Math.max(1, Math.min(MAX_TIMES, Math.round(+h?.times) || 1)) });
+const cleanHabit = (h) => { const title = String(h?.title || '').trim().slice(0, 80); return { title, icon: cleanIcon(h?.icon), times: Math.max(minTimes(title), Math.min(MAX_TIMES, Math.round(+h?.times) || 1)) }; };
 
 // Change (taskId given) or add a habit in one rank.
 export function setHabit(s, id, rankIndex, taskId, habit) {
@@ -231,7 +236,7 @@ export function setHabit(s, id, rankIndex, taskId, habit) {
   if (!h.title) return fail('اختار مهمة أو اكتب اسمها');
   const all = activeTasks(def, ch);
   if (all.some((t) => t.title === h.title && t.id !== taskId)) return fail('هاي المهمة عندك أصلًا');
-  const list = (planOf(def, ch)[rankIndex] || []).map((t) => ({ title: t.title, times: t.times, id: t.id }));
+  const list = (planOf(def, ch)[rankIndex] || []).map((t) => ({ title: t.title, times: t.times, icon: t.icon, id: t.id }));
   const i = list.findIndex((t) => t.id === taskId);
   if (i >= 0) list[i] = h; else list.push(h);
   return setRankPlan(s, id, rankIndex, list);

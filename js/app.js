@@ -82,9 +82,10 @@ function showLogin() {
 }
 
 // ---------- Modal ----------
-function modal(html, { closable = true } = {}) {
+function modal(html, { closable = true, theme = '' } = {}) {
   const m = $('#modal');
-  m.classList.remove('wide');
+  m.classList.remove('wide', 'game');
+  if (theme) m.classList.add(theme);
   if (m.hidden) SND.sfx.open();
   $('#modal-body').innerHTML = html;
   m.hidden = false;
@@ -92,7 +93,7 @@ function modal(html, { closable = true } = {}) {
   $('#modal-close').hidden = !closable;
 }
 let modalRefresh = null;
-function closeModal() { if (!$('#modal').hidden) SND.sfx.close(); $('#modal').hidden = true; $('#modal').classList.remove('wide'); modalRefresh = null; }
+function closeModal() { if (!$('#modal').hidden) SND.sfx.close(); $('#modal').hidden = true; $('#modal').classList.remove('wide', 'game'); modalRefresh = null; }
 // Re-draws an open panel (upgrades / path) after the state it shows changed.
 function refreshModal() { if (modalRefresh && !$('#modal').hidden) { const f = modalRefresh; f(); } }
 
@@ -225,17 +226,19 @@ function taskRow(charId, t) {
   const w = pd?.windows[t.prayer];
   const ws = w ? windowState(w, new Date()) : null;
   const timeInfo = w ? `<small class="ptime ${ws}">🕰 ${fmtTime(w.start)} – ${fmtTime(w.end)}</small>` : '';
-  const dots = times > 1 ? `<span class="times">${Array.from({ length: times }, (_, i) => `<i class="${i < count ? 'on' : ''}"></i>`).join('')}<b><bdi>${count}/${times}</bdi></b></span>` : '';
+  const five = E.isFivePrayers(t.title) && times === 5;
+  const dots = five ? `<span class="times prayers">${PRAYER_LABELS.map((x, i) => `<i class="${i < count ? 'on' : ''}">${x}</i>`).join('')}<b><bdi>${count}/5</bdi></b></span>`
+    : times > 1 ? `<span class="times">${Array.from({ length: times }, (_, i) => `<i class="${i < count ? 'on' : ''}"></i>`).join('')}<b><bdi>${count}/${times}</bdi></b></span>` : '';
   let actions;
   if (doneToday) actions = `<span class="result">${p.lastResult === 'success' ? '✔ أنجزتها' : '✘ فاتت'}</span>`;
   else if (t.prayer && !state.location) actions = '<button class="btn small" data-pick-location>اختر مدينتك</button>';
   else if (ws === 'upcoming') actions = `<span class="result">لم يدخل وقتها بعد</span>`;
-  else actions = `<button class="btn ok" data-task-ok="${charId}:${t.id}">${times > 1 ? `أنجزت مرة (+1)` : 'أنجزت'}</button>
+  else actions = `<button class="btn ok" data-task-ok="${charId}:${t.id}">${five ? `صلّيت ${PRAYER_LABELS[Math.min(4, count)]}` : times > 1 ? `أنجزت مرة (+1)` : 'أنجزت'}</button>
            <button class="btn bad" data-task-fail="${charId}:${t.id}">لم أنجز</button>`;
   return `
   <li class="task ${doneToday ? 'is-' + p.lastResult : ''} ${ws === 'open' && !doneToday ? 'is-open' : ''}">
     <div class="task-main">
-      <strong>${esc(t.title)}${times > 1 ? ` <small class="muted">× ${times} باليوم</small>` : ''}${E.findCharacter(charId)?.stages ? ` <button class="edit-task" data-edit-task="${charId}:${t.id}" title="عدّل" aria-label="عدّل">✎</button>` : ''}</strong>
+      <strong><span class="t-ic">${taskIcon(charId, t)}</span> ${esc(t.title)}${times > 1 ? ` <small class="muted">× ${times} باليوم</small>` : ''}${E.findCharacter(charId)?.stages ? ` <button class="edit-task" data-edit-task="${charId}:${t.id}" title="عدّل" aria-label="عدّل">✎</button>` : ''}</strong>
       ${dots}
       ${timeInfo}
       <small class="muted"><bdi>+${t.reward}</bdi>${times > 1 ? ' لكل مرة' : ''} / <bdi>−${t.penalty}</bdi> · 🔥 ${E.currentStreak(p, date)}</small>
@@ -338,10 +341,14 @@ function progressionPanel(c, ch) {
 }
 
 // The habit picker — one clear screen: pick a ready habit (or write your own),
-// choose how many times a day, see what it leads to, and confirm.
+// rename it and give it an icon, choose how many times a day, see what it leads to.
 //   mode 'first'   : the dimension's first habit (Bronze 1)
 //   mode 'promote' : spend a key → next rank + the new habit it brings
 //   mode 'edit'    : change one of today's habits (taskId)
+const ICONS = ['🕌', '📖', '📿', '🤲', '💝', '🌙', '🎧', '📚', '🧠', '🔁', '🗣', '✍', '🏋', '💧', '😴', '🚶', '🥗', '🤸', '🏃', '🚴', '📝', '🌬', '🙏', '📵', '🧘', '😊', '👪', '📞', '🤝', '🏠', '💬', '🍽', '🎯', '🗓', '🛠', '⏰', '📈', '📧', '🧾', '🐖', '🚫', '📊', '💡', '🧹', '🌳', '♻', '🌱', '🚯', '🎨', '🎸', '🧩', '⭐', '🔥', '💪', '🍎', '☕', '🚭', '🕯'];
+const PRAYER_LABELS = ['الفجر', 'الظهر', 'العصر', 'المغرب', 'العشاء'];
+const DIM_ICON = { worshipper: '☪', scholar: '📚', athlete: '🏋', empath: '💗', host: '🤝', builder: '🛠', merchant: '🪙', keeper: '🌳' };
+const taskIcon = (charId, t) => t.icon || (SUGGEST[charId] || []).find(([, x]) => x === t.title)?.[0] || DIM_ICON[charId] || '⭐';
 function pickHabit(id, { mode = 'first', taskId = null } = {}) {
   const c = E.findCharacter(id), ch = state.characters[id];
   const rd = E.road(state, id);
@@ -350,58 +357,77 @@ function pickHabit(id, { mode = 'first', taskId = null } = {}) {
   const rankIndex = mode === 'promote' ? E.totalLevel(ch) : mode === 'edit' ? plan.findIndex((r) => r.some((t) => t.id === taskId)) : E.totalLevel(ch) - 1;
   const have = new Set(E.activeTasks(c, ch).map((t) => t.title).filter((t) => t !== editing?.title));
   const ideas = (SUGGEST[id] || []).filter(([, t]) => !have.has(t));
-  let pick = editing ? { title: editing.title, times: E.timesOf(editing) } : null;
-  let custom = !!editing && !ideas.some(([, t]) => t === editing.title);
   const every = rd?.every || 15;
-  const title = mode === 'promote' ? `⬆ ترقية لـ ${esc(rd.next.name)}` : mode === 'edit' ? '✎ عدّل مهمتك' : `🎯 أول مهمة — ${esc(c.name)}`;
-  const lead = mode === 'promote'
-    ? `بمفتاح 🗝 واحد بتترقّى، و<b>بتنضاف عادة جديدة</b> لمهامك اليومية. اختارها:`
-    : mode === 'edit' ? 'غيّر المهمة أو عدد المرات. إذا غيّرت الاسم، سلسلتها بتبلّش من جديد.'
-      : 'اختار <b>عادة وحدة</b> بتعملها كل يوم. ابدأ بإشي صغير بتقدر تلتزم فيه.';
+  // What is being built: { from: suggestion title | 'own', title, icon, times }
+  const cur = editing
+    ? { from: ideas.some(([, t]) => t === editing.title) ? editing.title : 'own', title: editing.title, icon: taskIcon(id, editing), times: E.timesOf(editing) }
+    : { from: null, title: '', icon: '', times: 1 };
+  const head = mode === 'promote' ? { k: `ترقية لـ ${esc(rd.next.name)}`, t: 'عادة جديدة لرتبتك الجديدة' }
+    : mode === 'edit' ? { k: 'تعديل المهمة', t: 'غيّر اسمها أو صورتها أو عدد مراتها' } : { k: esc(c.name), t: 'اختار أول عادة إلك' };
+  const lead = mode === 'promote' ? 'بمفتاح 🗝 واحد بتترقّى، و<b>بتنضاف عادة جديدة</b> لمهامك اليومية.'
+    : mode === 'edit' ? 'إذا غيّرت الاسم، سلسلة الأيام تبعتها بتبلّش من جديد.' : 'عادة وحدة بتعملها كل يوم. ابدأ بإشي صغير بتقدر تلتزم فيه 💪';
   modal(`
-    <div class="picker">
-      <h2>${title}</h2>
-      <p class="muted">${lead}</p>
+    <div class="picker" style="--glow:${c.palette.glow}">
+      <header class="pk-head"><div class="pk-medal">${DIM_ICON[id] || '⭐'}</div><div><small>${head.k}</small><h2>${head.t}</h2></div></header>
+      <p class="pk-lead">${lead}</p>
+      <div class="pk-step"><b>1</b> اختار عادة</div>
       <div class="habit-grid">
-        ${ideas.map(([ic, t, n]) => `<button class="habit" type="button" data-h="${esc(t)}" data-n="${n}"><span>${ic}</span><b>${esc(t)}</b>${n > 1 ? `<small>× ${n} باليوم</small>` : ''}</button>`).join('')}
-        <button class="habit own" type="button" data-own><span>✍</span><b>مهمة من عندي</b></button>
+        ${ideas.map(([ic, t, n], i) => `<button class="habit" type="button" data-h="${esc(t)}" data-n="${n}" data-ic="${ic}" style="--i:${i}"><span class="hb-ic">${ic}</span><b>${esc(t)}</b>${n > 1 ? `<small>× ${n} باليوم</small>` : ''}<i class="hb-check">✔</i></button>`).join('')}
+        <button class="habit own" type="button" data-own style="--i:${ideas.length}"><span class="hb-ic">✍</span><b>مهمة من عندي</b><i class="hb-check">✔</i></button>
       </div>
-      <input id="hp-own" class="hp-own" maxlength="80" placeholder="اكتب مهمتك — مثال: قراءة كتاب" hidden>
-      <div class="hp-times"><span>كم مرة باليوم؟</span><button type="button" class="step" data-step="-1" aria-label="أقل">−</button><b id="hp-n">1</b><button type="button" class="step" data-step="1" aria-label="أكثر">+</button></div>
-      <div class="hp-sum" id="hp-sum"></div>
-      <div class="row wrap">
-        <button class="btn primary big" id="hp-ok" disabled>${mode === 'promote' ? `⬆ ترقّى — 🗝 1 <small>(معك ${state.keys})</small>` : 'ثبّت المهمة ✔'}</button>
-        ${mode === 'edit' && E.activeTasks(c, ch).length > 1 ? '<button class="btn ghost" id="hp-del">🗑 احذفها</button>' : ''}
-        <button class="btn ghost" id="hp-cancel">${mode === 'first' ? 'لاحقًا' : 'رجوع'}</button>
+      <div class="pk-custom" id="pk-custom" hidden>
+        <div class="pk-step"><b>2</b> خصّصها على كيفك</div>
+        <div class="pk-name">
+          <button type="button" class="pk-icon" id="pk-icon" title="غيّر الصورة">⭐</button>
+          <input id="pk-title" maxlength="80" placeholder="اسم المهمة">
+        </div>
+        <div class="pk-icons" id="pk-icons" hidden>${ICONS.map((x) => `<button type="button" data-icon="${x}">${x}</button>`).join('')}</div>
+        <div class="pk-step"><b>3</b> كم مرة باليوم؟</div>
+        <div class="hp-times"><button type="button" class="step" data-step="-1" aria-label="أقل">−</button><b id="hp-n">1</b><button type="button" class="step" data-step="1" aria-label="أكثر">+</button></div>
+        <div class="pk-prayers" id="pk-prayers" hidden>${PRAYER_LABELS.map((x) => `<span>${x}</span>`).join('')}</div>
+        <div class="hp-sum" id="hp-sum"></div>
       </div>
-    </div>`);
+      <div class="pk-actions">
+        <button class="pk-ok" id="hp-ok" disabled>${mode === 'promote' ? `⬆ ترقّى <small>🗝 1 · معك ${state.keys}</small>` : 'ثبّت المهمة ✔'}</button>
+        ${mode === 'edit' && E.activeTasks(c, ch).length > 1 ? '<button class="pk-ghost" id="hp-del">🗑 احذفها</button>' : ''}
+        <button class="pk-ghost" id="hp-cancel">${mode === 'first' ? 'لاحقًا' : 'رجوع'}</button>
+      </div>
+    </div>`, { theme: 'game' });
   modalRefresh = null;
-  const own = $('#hp-own'), nEl = $('#hp-n'), ok = $('#hp-ok'), sum = $('#hp-sum');
-  let n = pick?.times || 1;
+  const nEl = $('#hp-n'), ok = $('#hp-ok'), sum = $('#hp-sum'), title = $('#pk-title'), iconBtn = $('#pk-icon'), icons = $('#pk-icons');
   const draw = () => {
-    document.querySelectorAll('.habit').forEach((b) => b.classList.toggle('on', custom ? b.hasAttribute('data-own') : b.dataset.h === pick?.title));
-    own.hidden = !custom;
-    nEl.textContent = n;
-    const t = custom ? own.value.trim() : pick?.title;
+    document.querySelectorAll('.habit').forEach((b) => b.classList.toggle('on', cur.from === 'own' ? b.hasAttribute('data-own') : b.dataset.h === cur.from));
+    $('#pk-custom').hidden = !cur.from;
+    const t = cur.title.trim(), five = E.isFivePrayers(t);
+    if (five && cur.times < 5) cur.times = 5;
+    nEl.textContent = cur.times;
+    iconBtn.textContent = cur.icon || '⭐';
+    $('#pk-prayers').hidden = !five;
+    document.querySelector('[data-step="-1"]').disabled = cur.times <= (five ? 5 : 1);
     ok.disabled = !t || (mode === 'promote' && !state.keys);
     sum.innerHTML = t
-      ? `<p>📅 كل يوم: <b>${esc(t)}${n > 1 ? ` × ${n}` : ''}</b> — تسجّلها قبل 12 بالليل.</p>
-         <p>🗝 ${every} يوم ورا بعض بدون ما تفوّت = <b>مفتاح</b>${rd?.next && mode !== 'promote' ? ` → بتترقّى لـ <b>${esc(rd.next.name)}</b> وبتختار عادة جديدة.` : '.'}</p>
-         ${n > 10 ? '<p class="warn">⚠ رقم كبير. ابدأ أقل وزيد مع الوقت.</p>' : ''}`
-      : '<p class="muted">اختار مهمة من فوق 👆</p>';
+      ? `<p><span>📅</span>كل يوم: <b>${esc(cur.icon || '⭐')} ${esc(t)}${cur.times > 1 ? ` × ${cur.times}` : ''}</b> — تسجّلها قبل 12 بالليل.</p>
+         ${five ? '<p><span>🕌</span>الصلاة خمس مرات باليوم — ما بتنفع أقل من 5.</p>' : ''}
+         <p><span>🗝</span>${every} يوم ورا بعض بدون ما تفوّت = <b>مفتاح</b>${rd?.next && mode !== 'promote' ? ` ← بتترقّى لـ <b>${esc(rd.next.name)}</b> وبتختار عادة جديدة.` : '.'}</p>
+         ${cur.times > 10 && !five ? '<p class="warn"><span>⚠</span>رقم كبير. ابدأ أقل وزيد مع الوقت.</p>' : ''}`
+      : '<p class="muted">اكتب اسم المهمة 👆</p>';
   };
   document.querySelectorAll('.habit').forEach((b) => (b.onclick = () => {
-    if (b.hasAttribute('data-own')) { custom = true; setTimeout(() => own.focus(), 0); }
-    else { custom = false; pick = { title: b.dataset.h }; n = +b.dataset.n || 1; }
-    SND.sfx.click(); draw();
+    if (b.hasAttribute('data-own')) Object.assign(cur, { from: 'own', title: cur.from === 'own' ? cur.title : '', icon: cur.from === 'own' ? cur.icon : '✍', times: cur.from === 'own' ? cur.times : 1 });
+    else Object.assign(cur, { from: b.dataset.h, title: b.dataset.h, icon: b.dataset.ic, times: +b.dataset.n || 1 });
+    title.value = cur.title; SND.sfx.click(); draw();
+    if (cur.from === 'own') setTimeout(() => title.focus(), 0);
+    $('#pk-custom').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }));
-  if (custom) own.value = editing.title;
-  own.oninput = draw;
-  document.querySelectorAll('[data-step]').forEach((b) => (b.onclick = () => { n = Math.max(1, Math.min(E.MAX_TIMES, n + +b.dataset.step)); draw(); }));
+  title.value = cur.title;
+  title.oninput = () => { cur.title = title.value; draw(); };
+  iconBtn.onclick = () => { icons.hidden = !icons.hidden; };
+  icons.querySelectorAll('[data-icon]').forEach((b) => (b.onclick = () => { cur.icon = b.dataset.icon; icons.hidden = true; SND.sfx.click(); draw(); }));
+  document.querySelectorAll('[data-step]').forEach((b) => (b.onclick = () => { cur.times = Math.max(1, Math.min(E.MAX_TIMES, cur.times + +b.dataset.step)); SND.sfx.click(); draw(); }));
   $('#hp-cancel').onclick = () => (mode === 'promote' ? showDimRanks() : closeModal());
   if ($('#hp-del')) $('#hp-del').onclick = () => ask(`تحذف "${editing.title}"؟`, () => { const r = act(E.removeHabit(state, id, taskId)); if (r.ok) closeModal(); });
   ok.onclick = () => {
-    const habit = { title: custom ? own.value.trim() : pick?.title, times: n };
+    const habit = { title: cur.title.trim(), icon: cur.icon, times: cur.times };
     if (mode === 'promote') { const r = act(E.promoteWith(state, id, habit), ok); if (r.ok) { FX.toast(`🎖 صرت ${E.rankName(ch)} — وانضافت "${habit.title}"`); showDimRanks(); } return; }
     const r = E.setHabit(state, id, rankIndex, editing?.id || null, habit);
     if (!r.ok) return FX.toast(r.reason, 'err');
@@ -472,8 +498,9 @@ async function bindPlace() {
       const { mountPlace } = await import('./place3d.js');
       if (!v.isConnected) return;
       v.querySelector('.w3-loading')?.remove();
-      const scene = mountPlace(v, { regionId: c.regionId, palette: c.palette, rank: placeState().rank, onRanks: () => showRanks(c.id), sky: skyInfo, onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${['يلا نكمل!', 'خطوة كل يوم', 'أنا جاهز', 'الاستمرار سر النجاح'][Math.random() * 4 | 0]}`); } });
+      const scene = mountPlace(v, { regionId: c.regionId, palette: c.palette, rank: placeState().rank, onRanks: () => showRanks(c.id), sky: skyInfo, weather: currentWeather(), onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${['يلا نكمل!', 'خطوة كل يوم', 'أنا جاهز', 'الاستمرار سر النجاح'][Math.random() * 4 | 0]}`); } });
       oasis = { char: c.id, scene };
+      loadWeather();
       return;
     }
     const { mountOasis } = await import('./oasis3d.js');
@@ -690,7 +717,7 @@ function showDimRanks() {
           : `<button class="btn small ${rd.canPromote ? 'primary' : ''}" data-promote="${c.id}" ${rd.canPromote ? '' : 'disabled'}>⬆ ${esc(rd.next.name)} — 🗝 1</button>`;
       return `<li>
         <div class="dr-head"><b>${esc(c.name)}</b><span class="rank" style="--rank:${rd.rank.color}">${esc(rd.rank.name)}</span></div>
-        <div class="dr-habits">${tasks.length ? tasks.map((t) => `<span>${esc(t.title)}${E.timesOf(t) > 1 ? ` ×${E.timesOf(t)}` : ''}</span>`).join('') : '<span class="muted">ما في مهام لسا</span>'}</div>
+        <div class="dr-habits">${tasks.length ? tasks.map((t) => `<span>${taskIcon(c.id, t)} ${esc(t.title)}${E.timesOf(t) > 1 ? ` ×${E.timesOf(t)}` : ''}</span>`).join('') : '<span class="muted">ما في مهام لسا</span>'}</div>
         ${bar(rd.keyDays, rd.every, '🗝 أيام نحو المفتاح')}
         <div class="row wrap">${btn}</div>
       </li>`;
