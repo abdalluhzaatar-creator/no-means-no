@@ -257,4 +257,31 @@ t('a written line naming a prayer is tied to that prayer time', () => {
   assert.equal(E.activeTasks(def(), s.characters[W])[0].prayer, undefined, 'a task done several times a day is not tied to one prayer time');
 });
 
+t('habit picker: first habit, edit it, promotion adds the next habit for a key', () => {
+  const s = E.newState();
+  assert.ok(E.setHabit(s, W, 0, null, { title: 'الصلاة', times: 5 }).ok);
+  assert.equal(E.activeTasks(def(), s.characters[W]).length, 1);
+  const id = task(s, 'الصلاة').id;
+  assert.ok(E.setHabit(s, W, 0, id, { title: 'الصلاة', times: 4 }).ok);
+  assert.equal(task(s, 'الصلاة').id, id, 'same name keeps the task');
+  assert.equal(E.timesOf(task(s, 'الصلاة')), 4);
+  assert.equal(E.road(s, W).canPromote, false, 'no key yet');
+  assert.equal(E.promoteWith(s, W, { title: 'ورد', times: 1 }).ok, false);
+  s.keys = 1;
+  assert.equal(E.promoteWith(s, W, { title: 'الصلاة', times: 1 }).ok, false, 'no duplicate habit');
+  assert.ok(E.promoteWith(s, W, { title: 'صفحة قرآن', times: 1 }).ok);
+  assert.equal(s.keys, 0);
+  assert.equal(E.rankName(s.characters[W]), 'برونز 2');
+  assert.deepEqual(E.activeTasks(def(), s.characters[W]).map((x) => x.title), ['الصلاة', 'صفحة قرآن']);
+  assert.ok(E.removeHabit(s, W, id).ok);
+  assert.equal(E.removeHabit(s, W, task(s, 'صفحة قرآن').id).ok, false, 'the last habit stays');
+});
+
+t('new dimensions start empty; old saves keep their preset tasks', () => {
+  const s = E.newState(); s.characters.scholar = { stage: 0, level: 1 };
+  assert.equal(E.activeTasks(E.findCharacter('scholar'), E.migrate(s).characters.scholar).length, 0);
+  const old = E.migrate({ version: 3, characters: { scholar: { stage: 0, level: 1 } } });
+  assert.equal(E.activeTasks(E.findCharacter('scholar'), old.characters.scholar).length, 3);
+});
+
 console.log(`\n${passed} tests passed`);

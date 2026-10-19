@@ -12,6 +12,18 @@ export const RANKS = [
 // Generic path for characters whose levels add no extra tasks yet.
 const plainStages = () => [{ id: 'start', name: 'البداية', levels: Array.from({ length: 5 }, () => ({ adds: [] })) }, ...RANKS.map((r) => ({ ...r, levels: null }))];
 
+// Ready-made habits the player can pick for each dimension (or write their own).
+export const SUGGEST = {
+  worshipper: [['🕌', 'الصلاة', 5], ['📖', 'قراءة صفحة قرآن', 1], ['📿', 'أذكار الصباح والمساء', 2], ['🤲', 'الاستغفار 100 مرة', 1], ['💝', 'صدقة ولو بسيطة', 1], ['🌙', 'ركعتين قيام ليل', 1], ['🎧', 'سماع درس ديني', 1]],
+  scholar: [['📚', 'قراءة 10 صفحات', 1], ['🧠', 'تعلّم شي جديد 20 دقيقة', 1], ['🔁', 'مراجعة اللي تعلّمته', 1], ['🗣', 'تعلّم 5 كلمات بلغة جديدة', 1], ['✍', 'لخّص فكرة بدفترك', 1], ['🎧', 'بودكاست مفيد', 1]],
+  athlete: [['🏋', 'تمرين 30 دقيقة', 1], ['💧', 'كاسة مي', 8], ['😴', 'نوم 7 ساعات', 1], ['🚶', 'مشي 6000 خطوة', 1], ['🥗', 'أكل صحي بدون سكر', 1], ['🤸', 'تمارين تمدّد 10 دقايق', 1]],
+  empath: [['📝', 'اكتب مشاعر اليوم', 1], ['🌬', '5 دقايق تنفّس وهدوء', 1], ['🙏', '3 نعم بتشكر عليها', 1], ['📵', 'ساعة بدون جوال', 1], ['🧘', 'تأمّل 10 دقايق', 1], ['😊', 'كلمة حلوة لنفسك', 1]],
+  host: [['👪', 'تواصل مع حدا من العيلة', 1], ['📞', 'كلّم صديق', 1], ['🤝', 'ساعد شخص', 1], ['🏠', 'زور قريب', 1], ['💬', 'كلمة شكر لحدا', 1], ['🍽', 'أكلة مع العيلة', 1]],
+  builder: [['🎯', 'ساعة شغل مركّز', 1], ['🗓', 'خطّط مهام بكرا', 1], ['🛠', 'طوّر مهارة بشغلك', 1], ['⏰', 'اصحى بكّير', 1], ['📈', 'اشتغل على مشروعك 30 دقيقة', 1], ['📧', 'صفّر الإيميلات', 1]],
+  merchant: [['🧾', 'سجّل مصاريف اليوم', 1], ['🐖', 'ادّخر ولو مبلغ صغير', 1], ['🚫', 'يوم بلا شراء مش ضروري', 1], ['📊', 'راجع ميزانيتك', 1], ['💡', 'فكّر بدخل إضافي 10 دقايق', 1], ['📚', 'تعلّم عن المال 10 دقايق', 1]],
+  keeper: [['🧹', 'رتّب غرفتك', 1], ['🌳', '15 دقيقة بالطبيعة', 1], ['♻', 'قلّل الهدر', 1], ['🌱', 'اسقِ نبتة', 1], ['🚯', 'يوم بدون بلاستيك', 1], ['🚶', 'امشِ بدل السيارة', 1]],
+};
+
 export const CHARACTERS = [
   {
     id: 'worshipper',
@@ -37,7 +49,9 @@ export const CHARACTERS = [
     regionId: 'library',
     cost: {},
     requires: [{ type: 'ownsRegion', id: 'library' }],
-    tasks: [
+    tasks: [],
+    // Old preset tasks: kept only so saves from before the habit picker keep them.
+    legacyTasks: [
       { id: 'read', title: 'قراءة 10 صفحات', reward: 25, penalty: 10 },
       { id: 'learn', title: 'تعلّم شيء جديد لمدة 20 دقيقة', reward: 25, penalty: 10 },
       { id: 'review', title: 'مراجعة ما تعلّمته اليوم', reward: 20, penalty: 10 },
@@ -54,7 +68,9 @@ export const CHARACTERS = [
     regionId: 'body',
     cost: {},
     requires: [{ type: 'ownsRegion', id: 'body' }],
-    tasks: [
+    tasks: [],
+    // Old preset tasks: kept only so saves from before the habit picker keep them.
+    legacyTasks: [
       { id: 'workout', title: 'تمرين 30 دقيقة', reward: 20, penalty: 10 },
       { id: 'water', title: 'شرب 8 أكواب ماء', reward: 20, penalty: 10 },
       { id: 'sleep', title: 'نوم 7 ساعات', reward: 20, penalty: 10 },
@@ -71,7 +87,9 @@ export const CHARACTERS = [
     regionId: 'heart',
     cost: {},
     requires: [{ type: 'ownsRegion', id: 'heart' }],
-    tasks: [
+    tasks: [],
+    // Old preset tasks: kept only so saves from before the habit picker keep them.
+    legacyTasks: [
       { id: 'journal', title: 'كتابة مشاعر اليوم', reward: 20, penalty: 10 },
       { id: 'calm', title: '5 دقائق تنفّس وهدوء', reward: 20, penalty: 10 },
       { id: 'gratitude', title: 'ذكر 3 نعم تشكر عليها', reward: 20, penalty: 10 },
@@ -88,7 +106,9 @@ export const CHARACTERS = [
     regionId: 'social',
     cost: {},
     requires: [{ type: 'ownsRegion', id: 'social' }],
-    tasks: [
+    tasks: [],
+    // Old preset tasks: kept only so saves from before the habit picker keep them.
+    legacyTasks: [
       { id: 'family', title: 'تواصل مع أحد من العائلة', reward: 20, penalty: 10 },
       { id: 'friend', title: 'التواصل مع صديق', reward: 20, penalty: 10 },
       { id: 'help', title: 'مساعدة شخص', reward: 20, penalty: 10 },
@@ -105,7 +125,9 @@ export const CHARACTERS = [
     regionId: 'career',
     cost: {},
     requires: [{ type: 'ownsRegion', id: 'career' }],
-    tasks: [
+    tasks: [],
+    // Old preset tasks: kept only so saves from before the habit picker keep them.
+    legacyTasks: [
       { id: 'deepwork', title: 'ساعة عمل مركّز', reward: 20, penalty: 10 },
       { id: 'plan', title: 'تخطيط مهام الغد', reward: 20, penalty: 10 },
       { id: 'skill', title: 'تطوير مهارة مهنية', reward: 20, penalty: 10 },
@@ -122,7 +144,9 @@ export const CHARACTERS = [
     regionId: 'wealth',
     cost: {},
     requires: [{ type: 'ownsRegion', id: 'wealth' }],
-    tasks: [
+    tasks: [],
+    // Old preset tasks: kept only so saves from before the habit picker keep them.
+    legacyTasks: [
       { id: 'track', title: 'تسجيل مصاريف اليوم', reward: 20, penalty: 10 },
       { id: 'save', title: 'ادخار مبلغ ولو صغير', reward: 20, penalty: 10 },
       { id: 'nowaste', title: 'يوم بلا شراء غير ضروري', reward: 20, penalty: 10 },
@@ -139,7 +163,9 @@ export const CHARACTERS = [
     regionId: 'nature',
     cost: {},
     requires: [{ type: 'ownsRegion', id: 'nature' }],
-    tasks: [
+    tasks: [],
+    // Old preset tasks: kept only so saves from before the habit picker keep them.
+    legacyTasks: [
       { id: 'tidy', title: 'ترتيب غرفتك أو مكانك', reward: 20, penalty: 10 },
       { id: 'outside', title: '15 دقيقة في الطبيعة', reward: 20, penalty: 10 },
       { id: 'reduce', title: 'تقليل الهدر (بلاستيك/ماء/كهرباء)', reward: 20, penalty: 10 },

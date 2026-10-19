@@ -1,5 +1,5 @@
 // UI layer: renders screens from state, calls engine actions, saves, plays effects.
-import { CHARACTERS, REGIONS, CUPS, JOD_TO_USD, RANKS, COMMAND_RANKS } from './content.js';
+import { CHARACTERS, REGIONS, CUPS, JOD_TO_USD, RANKS, COMMAND_RANKS, SUGGEST } from './content.js';
 import * as C from './cups.js';
 import { commander, KEYS_PER_RANK } from './hq.js';
 import { warMapSVG, WAR } from './warmap.js';
@@ -235,7 +235,7 @@ function taskRow(charId, t) {
   return `
   <li class="task ${doneToday ? 'is-' + p.lastResult : ''} ${ws === 'open' && !doneToday ? 'is-open' : ''}">
     <div class="task-main">
-      <strong>${esc(t.title)}${times > 1 ? ` <small class="muted">× ${times} باليوم</small>` : ''}</strong>
+      <strong>${esc(t.title)}${times > 1 ? ` <small class="muted">× ${times} باليوم</small>` : ''}${E.findCharacter(charId)?.stages ? ` <button class="edit-task" data-edit-task="${charId}:${t.id}" title="عدّل" aria-label="عدّل">✎</button>` : ''}</strong>
       ${dots}
       ${timeInfo}
       <small class="muted"><bdi>+${t.reward}</bdi>${times > 1 ? ' لكل مرة' : ''} / <bdi>−${t.penalty}</bdi> · 🔥 ${E.currentStreak(p, date)}</small>
@@ -324,54 +324,91 @@ function progressionPanel(c, ch) {
   return `
   <section class="card">
     <div class="row between"><h3>🎖 الرتب</h3><button class="rank" data-ranks="${c.id}" title="اعرض كل الرتب" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))} ▾</button></div>
-    <p class="muted small-text">أنت تقرّر مهام كل رتبة وكم مرة باليوم: اضغط ✎.</p>
+    <p class="muted small-text">كل رتبة بتجيب عادة جديدة بتختارها لما تترقّى.</p>
     <ol class="path">${ladder.map((r, i) => {
       const n = i + 1, cls = n < cur ? 'done' : n === cur ? 'current' : '';
-      const what = r.adds.length ? r.adds.map((a) => (n === 1 ? '' : '+ ') + a.title + (E.timesOf(a) > 1 ? ` ×${E.timesOf(a)}` : '')).join('، ') : 'لم تكتب مهامها بعد';
-      const unlock = n === cur + 1 && r.adds.length
-        ? `<button class="btn small ${state.keys ? 'primary' : ''}" data-level="${c.id}" ${state.keys ? '' : 'disabled'} title="يحتاج مفتاحًا">🗝 1 افتح</button>` : '';
-      return `<li class="${cls}" style="--rank:${r.color}"><b class="rk">${esc(r.name)}</b><span>${esc(what)}</span>${unlock}<button class="btn small ghost" data-edit-rank="${c.id}:${i}" title="اكتب مهام هذه الرتبة">✎</button></li>`;
+      const what = r.adds.length ? r.adds.map((a) => (n === 1 ? '' : '+ ') + a.title + (E.timesOf(a) > 1 ? ` ×${E.timesOf(a)}` : '')).join('، ') : n > cur ? 'عادة جديدة بتختارها' : '—';
+      const unlock = n === cur + 1
+        ? `<button class="btn small ${state.keys ? 'primary' : ''}" data-promote="${c.id}" ${state.keys ? '' : 'disabled'} title="يحتاج مفتاحًا">🗝 1 افتح</button>` : '';
+      return `<li class="${cls}" style="--rank:${r.color}"><b class="rk">${esc(r.name)}</b><span>${esc(what)}</span>${unlock}</li>`;
     }).join('')}</ol>
     ${c.keyEveryDays ? bar(live.keyDays, c.keyEveryDays, 'أيام كاملة متتالية نحو المفتاح التالي 🗝') : ''}
     <p class="muted small-text">كل ${c.keyEveryDays} يومًا كاملًا متتاليًا تكسب مفتاحًا 🗝، وبالمفتاح ترفع رتبتك أو تفتح منطقة. اليوم الكامل = إنجاز كل مهام اليوم، وأي مهمة فائتة تُصفّر العدّاد.</p>
   </section>`;
 }
 
-// Write one rank's tasks: each row is a task and how many times a day it is needed.
-function editRank(v, { first = false } = {}) {
-  const [id, i] = v.split(':'), c = E.findCharacter(id), idx = +i;
-  const r = rankLadder(c)[idx];
-  const back = () => (first ? closeModal() : showPath(id));
-  const row = (t = { title: '', times: 1 }) => `
-    <div class="task-edit">
-      <input class="te-title" maxlength="80" placeholder="اسم المهمة — مثال: الصلاة" value="${esc(t.title)}">
-      <label class="te-times" title="كم مرة باليوم">×<input type="number" min="1" max="${E.MAX_TIMES}" value="${E.timesOf(t)}" inputmode="numeric"><small>باليوم</small></label>
-      ${first ? '' : '<button class="btn small ghost te-del" type="button" aria-label="احذف">✕</button>'}
-    </div>`;
+// The habit picker — one clear screen: pick a ready habit (or write your own),
+// choose how many times a day, see what it leads to, and confirm.
+//   mode 'first'   : the dimension's first habit (Bronze 1)
+//   mode 'promote' : spend a key → next rank + the new habit it brings
+//   mode 'edit'    : change one of today's habits (taskId)
+function pickHabit(id, { mode = 'first', taskId = null } = {}) {
+  const c = E.findCharacter(id), ch = state.characters[id];
+  const rd = E.road(state, id);
+  const plan = E.planOf(c, ch);
+  const editing = mode === 'edit' ? E.activeTasks(c, ch).find((t) => t.id === taskId) : null;
+  const rankIndex = mode === 'promote' ? E.totalLevel(ch) : mode === 'edit' ? plan.findIndex((r) => r.some((t) => t.id === taskId)) : E.totalLevel(ch) - 1;
+  const have = new Set(E.activeTasks(c, ch).map((t) => t.title).filter((t) => t !== editing?.title));
+  const ideas = (SUGGEST[id] || []).filter(([, t]) => !have.has(t));
+  let pick = editing ? { title: editing.title, times: E.timesOf(editing) } : null;
+  let custom = !!editing && !ideas.some(([, t]) => t === editing.title);
+  const every = rd?.every || 15;
+  const title = mode === 'promote' ? `⬆ ترقية لـ ${esc(rd.next.name)}` : mode === 'edit' ? '✎ عدّل مهمتك' : `🎯 أول مهمة — ${esc(c.name)}`;
+  const lead = mode === 'promote'
+    ? `بمفتاح 🗝 واحد بتترقّى، و<b>بتنضاف عادة جديدة</b> لمهامك اليومية. اختارها:`
+    : mode === 'edit' ? 'غيّر المهمة أو عدد المرات. إذا غيّرت الاسم، سلسلتها بتبلّش من جديد.'
+      : 'اختار <b>عادة وحدة</b> بتعملها كل يوم. ابدأ بإشي صغير بتقدر تلتزم فيه.';
   modal(`
-    <h2>${first ? `🎯 حدّد مهامك — ${esc(c.name)}` : `✎ ${esc(r.name)}`}</h2>
-    <p class="muted">${idx === E.totalLevel(state.characters[id]) - 1 || idx === 0
-      ? (first ? `اختار <b>مهمة وحدة</b> بتعملها <b>كل يوم</b>، وكم مرة لازم تعملها باليوم (مثلًا الصلاة × 5). لازم تخلّصها وتسجّلها قبل الساعة 12 بالليل.`
-        : `هاي المهام بتعملها <b>كل يوم</b>. اكتب كل مهمة وكم مرة لازم تعملها باليوم (مثلًا الصلاة × 5). لازم تخلّصها كلها وتسجّلها قبل الساعة 12 بالليل، و<b>15 يوم ورا بعض</b> = مفتاح 🗝 بترقّى فيه.`)
-      : 'بتنضاف لمهامك لما توصل هاي الرتبة، فوق مهام الرتب اللي قبلها.'}</p>
-    <div id="te-list">${(first ? [r.adds[0]] : r.adds.length ? r.adds : [undefined]).map((t) => row(t)).join('')}</div>
-    ${first ? '' : `<button class="btn ghost small" id="te-add" type="button">＋ مهمة ثانية</button>
-    <p class="muted small-text">المهمة اللي بتضل بنفس الاسم بتحتفظ بسلسلتها.</p>`}
-    <div class="row wrap"><button class="btn primary" id="rank-save">حفظ</button><button class="btn ghost" id="rank-cancel">${first ? 'لاحقًا' : 'رجوع'}</button></div>`);
+    <div class="picker">
+      <h2>${title}</h2>
+      <p class="muted">${lead}</p>
+      <div class="habit-grid">
+        ${ideas.map(([ic, t, n]) => `<button class="habit" type="button" data-h="${esc(t)}" data-n="${n}"><span>${ic}</span><b>${esc(t)}</b>${n > 1 ? `<small>× ${n} باليوم</small>` : ''}</button>`).join('')}
+        <button class="habit own" type="button" data-own><span>✍</span><b>مهمة من عندي</b></button>
+      </div>
+      <input id="hp-own" class="hp-own" maxlength="80" placeholder="اكتب مهمتك — مثال: قراءة كتاب" hidden>
+      <div class="hp-times"><span>كم مرة باليوم؟</span><button type="button" class="step" data-step="-1" aria-label="أقل">−</button><b id="hp-n">1</b><button type="button" class="step" data-step="1" aria-label="أكثر">+</button></div>
+      <div class="hp-sum" id="hp-sum"></div>
+      <div class="row wrap">
+        <button class="btn primary big" id="hp-ok" disabled>${mode === 'promote' ? `⬆ ترقّى — 🗝 1 <small>(معك ${state.keys})</small>` : 'ثبّت المهمة ✔'}</button>
+        ${mode === 'edit' && E.activeTasks(c, ch).length > 1 ? '<button class="btn ghost" id="hp-del">🗑 احذفها</button>' : ''}
+        <button class="btn ghost" id="hp-cancel">${mode === 'first' ? 'لاحقًا' : 'رجوع'}</button>
+      </div>
+    </div>`);
   modalRefresh = null;
-  const list = $('#te-list');
-  const wire = () => list.querySelectorAll('.te-del').forEach((b) => (b.onclick = () => { b.closest('.task-edit').remove(); if (!list.children.length) { list.insertAdjacentHTML('beforeend', row()); wire(); } }));
-  wire();
-  list.querySelector('.te-title')?.focus();
-  if (!first) $('#te-add').onclick = () => { list.insertAdjacentHTML('beforeend', row()); wire(); list.lastElementChild.querySelector('.te-title').focus(); };
-  $('#rank-cancel').onclick = back;
-  $('#rank-save').onclick = () => {
-    const items = [...list.querySelectorAll('.task-edit')].slice(0, first ? 1 : undefined).map((el) => ({ title: el.querySelector('.te-title').value, times: el.querySelector('.te-times input').value }));
-    const res = E.setRankPlan(state, id, idx, items);
-    if (!res.ok) return FX.toast(res.reason, 'err');
-    scheduleSave(); FX.toast('حُفظت مهام ' + r.name);
-    if (first) { questsCollapsed = false; render(); if (items.some((x) => x.title.trim())) showKeyUses(id); else closeModal(); } else { render(); back(); }
+  const own = $('#hp-own'), nEl = $('#hp-n'), ok = $('#hp-ok'), sum = $('#hp-sum');
+  let n = pick?.times || 1;
+  const draw = () => {
+    document.querySelectorAll('.habit').forEach((b) => b.classList.toggle('on', custom ? b.hasAttribute('data-own') : b.dataset.h === pick?.title));
+    own.hidden = !custom;
+    nEl.textContent = n;
+    const t = custom ? own.value.trim() : pick?.title;
+    ok.disabled = !t || (mode === 'promote' && !state.keys);
+    sum.innerHTML = t
+      ? `<p>📅 كل يوم: <b>${esc(t)}${n > 1 ? ` × ${n}` : ''}</b> — تسجّلها قبل 12 بالليل.</p>
+         <p>🗝 ${every} يوم ورا بعض بدون ما تفوّت = <b>مفتاح</b>${rd?.next && mode !== 'promote' ? ` → بتترقّى لـ <b>${esc(rd.next.name)}</b> وبتختار عادة جديدة.` : '.'}</p>
+         ${n > 10 ? '<p class="warn">⚠ رقم كبير. ابدأ أقل وزيد مع الوقت.</p>' : ''}`
+      : '<p class="muted">اختار مهمة من فوق 👆</p>';
   };
+  document.querySelectorAll('.habit').forEach((b) => (b.onclick = () => {
+    if (b.hasAttribute('data-own')) { custom = true; setTimeout(() => own.focus(), 0); }
+    else { custom = false; pick = { title: b.dataset.h }; n = +b.dataset.n || 1; }
+    SND.sfx.click(); draw();
+  }));
+  if (custom) own.value = editing.title;
+  own.oninput = draw;
+  document.querySelectorAll('[data-step]').forEach((b) => (b.onclick = () => { n = Math.max(1, Math.min(E.MAX_TIMES, n + +b.dataset.step)); draw(); }));
+  $('#hp-cancel').onclick = () => (mode === 'promote' ? showDimRanks() : closeModal());
+  if ($('#hp-del')) $('#hp-del').onclick = () => ask(`تحذف "${editing.title}"؟`, () => { const r = act(E.removeHabit(state, id, taskId)); if (r.ok) closeModal(); });
+  ok.onclick = () => {
+    const habit = { title: custom ? own.value.trim() : pick?.title, times: n };
+    if (mode === 'promote') { const r = act(E.promoteWith(state, id, habit), ok); if (r.ok) { FX.toast(`🎖 صرت ${E.rankName(ch)} — وانضافت "${habit.title}"`); showDimRanks(); } return; }
+    const r = E.setHabit(state, id, rankIndex, editing?.id || null, habit);
+    if (!r.ok) return FX.toast(r.reason, 'err');
+    scheduleSave(); questsCollapsed = false; render();
+    if (mode === 'first') showKeyUses(id); else { FX.toast('تم ✔'); closeModal(); }
+  };
+  draw();
 }
 
 // Shown after the first task is set: stay with it 15 days for a key, and what a key does.
@@ -571,6 +608,18 @@ function prayerNowLine() {
   return next ? `<div class="hud-chip">⏳ ${PRAYER_NAMES[next[0]]} ${fmtTime(next[1].start)}</div>` : '';
 }
 
+// The road under today's tasks: days to the next key, and what the key gives.
+function roadLine(id) {
+  const rd = E.road(state, id);
+  if (!rd) return '';
+  const left = Math.max(0, rd.every - rd.keyDays);
+  return `<div class="road">
+    <div class="road-bar"><i style="width:${Math.round((rd.keyDays / rd.every) * 100)}%"></i></div>
+    <p>🗝 <b><bdi>${rd.keyDays}/${rd.every}</bdi></b> يوم — ${left ? `باقي ${left} يوم للمفتاح` : 'مفتاح!'}${rd.next ? ` · بعدها <b>${esc(rd.next.name)}</b> + عادة جديدة` : ''}</p>
+    ${rd.canPromote ? '<p class="road-ready">🗝 معك مفتاح! روح للقائد بمقر القيادة ← 🎖 رتب الأبعاد وترقّى.</p>' : ''}
+  </div>`;
+}
+
 function placeHUD() {
   const c = E.findCharacter(currentChar);
   const ch = state.characters[c.id];
@@ -600,7 +649,8 @@ function placeHUD() {
     <button class="quests-head" data-toggle-quests>
       <span>📜 مهام اليوم</span><b>${done} / ${tasks.length}</b>
     </button>
-    <ul class="tasks">${tasks.length ? tasks.map((t) => taskRow(c.id, t)).join('') : `<li class="task"><div class="task-main"><strong>ما حدّدت مهامك لسا</strong><small class="muted">حدّد شو بدك تعمل كل يوم ل15 يوم.</small></div><div class="task-actions"><button class="btn ok" data-set-tasks="${c.id}:${E.totalLevel(ch) - 1}">🎯 حدّد مهامك</button></div></li>`}</ul>
+    <ul class="tasks">${tasks.length ? tasks.map((t) => taskRow(c.id, t)).join('') : `<li class="task"><div class="task-main"><strong>ما حدّدت مهامك لسا</strong><small class="muted">اختار عادة وحدة بتعملها كل يوم.</small></div><div class="task-actions"><button class="btn ok" data-set-tasks="${c.id}">🎯 اختار مهمتك</button></div></li>`}</ul>
+    ${tasks.length ? roadLine(c.id) : ''}
   </aside>
 
   <div class="dock">
@@ -625,57 +675,27 @@ function showUpgrades() {
   bind();
 }
 
-const backToDims = '<p><button class="btn ghost small" data-dim-ranks>→ كل الأبعاد</button></p>';
 
-// Commander's ranks desk (HQ): every opened dimension with its rank, the 15-day
-// counter, its rank tasks and promotion. Ranks are granted here, not inside a dimension.
+// Commander's ranks desk (HQ): every opened dimension, its rank, its habits and the
+// 15-day road to the next key. Ranks are granted here: one key = next rank + a new habit.
 function showDimRanks() {
   const list = CHARACTERS.filter((c) => c.stages && state.characters[c.id]);
   modal(`
     <h2>🎖 رتب الأبعاد</h2>
-    <p class="muted">القائد هو اللي بيعطي الرتب وبيتابع كل الأبعاد. من هون بتكتب مهام كل رتبة وبترقّي بالمفتاح 🗝 (معك ${state.keys}).</p>
+    <p class="muted">معك <b>🗝 ${state.keys}</b>. كل مفتاح = رتبة جديدة لبُعد + عادة جديدة بتختارها.</p>
     <ul class="dim-ranks">${list.map((c) => {
-      const ch = state.characters[c.id], live = E.liveProgress(ch, dayFor(c.id)), next = E.nextLevel(c, ch);
-      const ready = next && !next.max && next.adds?.length && state.keys;
+      const ch = state.characters[c.id], rd = E.road(state, c.id), tasks = E.activeTasks(c, ch);
+      const btn = !rd.next ? '<span class="muted">🏆 أعلى رتبة</span>'
+        : !tasks.length ? `<button class="btn small" data-set-tasks="${c.id}">🎯 اختار أول مهمة</button>`
+          : `<button class="btn small ${rd.canPromote ? 'primary' : ''}" data-promote="${c.id}" ${rd.canPromote ? '' : 'disabled'}>⬆ ${esc(rd.next.name)} — 🗝 1</button>`;
       return `<li>
-        <div class="dr-head"><b>${esc(c.name)}</b><span class="rank" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))}</span></div>
-        ${bar(live.keyDays, c.keyEveryDays || 15, '🗝 أيام نحو المفتاح')}
-        <div class="row wrap"><button class="btn small" data-open-path="${c.id}">✎ مهام الرتب</button><button class="btn small ${ready ? 'primary' : ''}" data-promote="${c.id}">⬆ ترقية</button></div>
+        <div class="dr-head"><b>${esc(c.name)}</b><span class="rank" style="--rank:${rd.rank.color}">${esc(rd.rank.name)}</span></div>
+        <div class="dr-habits">${tasks.length ? tasks.map((t) => `<span>${esc(t.title)}${E.timesOf(t) > 1 ? ` ×${E.timesOf(t)}` : ''}</span>`).join('') : '<span class="muted">ما في مهام لسا</span>'}</div>
+        ${bar(rd.keyDays, rd.every, '🗝 أيام نحو المفتاح')}
+        <div class="row wrap">${btn}</div>
       </li>`;
     }).join('')}</ul>`);
   modalRefresh = showDimRanks;
-  bind();
-}
-
-// The level-up screen: where you are, what the next rank adds, and one big button.
-function showPromote(id) {
-  const c = E.findCharacter(id), ch = state.characters[c.id];
-  const next = E.nextLevel(c, ch), n = E.totalLevel(ch);
-  const nextRank = RANKS[n];
-  let body;
-  if (!next || next.max) body = '<p>وصلت أعلى رتبة 🏆</p>';
-  else {
-    const adds = next.adds || [];
-    body = `
-      <div class="promote-steps"><span class="rank" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))}</span><b>←</b><span class="rank" style="--rank:${nextRank.color}">${esc(nextRank.name)}</span></div>
-      <p class="muted">بتنضاف لمهامك اليومية:</p>
-      ${adds.length ? `<ul class="promote-adds">${adds.map((t) => `<li>+ ${esc(t.title)}${E.timesOf(t) > 1 ? ` × ${E.timesOf(t)} باليوم` : ''}${t.prayer ? ' 🕰' : ''}</li>`).join('')}</ul>` : '<p><b>ما كتبت مهام هاي الرتبة لسا.</b></p>'}
-      <p>التكلفة: <b>🗝 1</b> · معك <b>${state.keys}</b></p>
-      <div class="row wrap">
-        ${adds.length ? `<button class="btn primary big" data-level="${c.id}" ${state.keys ? '' : 'disabled'}>⬆ ترقَّ إلى ${esc(nextRank.name)}</button>` : ''}
-        <button class="btn ghost" data-edit-rank="${c.id}:${n}">✎ اكتب مهام ${esc(nextRank.name)}</button>
-      </div>
-      ${state.keys ? '' : `<p class="muted small-text">ما معك مفاتيح. بتكسب مفتاح كل ${c.keyEveryDays} يوم كامل ورا بعض.</p>`}`;
-  }
-  modal(`<h2>⬆ ترقية ${esc(c.name)}</h2>${body}${backToDims}`);
-  modalRefresh = () => showPromote(id);
-  bind();
-}
-
-function showPath(id) {
-  const c = E.findCharacter(id);
-  modal(progressionPanel(c, state.characters[c.id]).replace('<section class="card">', '<section>').replace('<h3>🎖 الرتب</h3>', `<h3>🎖 رتب ${esc(c.name)}</h3>`) + backToDims);
-  modalRefresh = () => showPath(id);
   bind();
 }
 
@@ -882,7 +902,7 @@ function hqHUD() {
     </div>
   </aside>
   <div class="dock">
-    <button class="dock-btn promote-btn" data-dim-ranks>🎖<span>رتب الأبعاد</span>${CHARACTERS.some((c) => { const ch = state.characters[c.id]; const n = ch && c.stages && E.nextLevel(c, ch); return n && !n.max && n.adds?.length; }) && state.keys ? '<i class="dot"></i>' : ''}</button>
+    <button class="dock-btn promote-btn" data-dim-ranks>🎖<span>رتب الأبعاد</span>${CHARACTERS.some((c) => E.road(state, c.id)?.canPromote) ? '<i class="dot"></i>' : ''}</button>
     <button class="dock-btn" data-war-map>🗺<span>خريطة الحرب</span></button>
     <button class="dock-btn" data-go="shop">🛒<span>افتح مكانًا</span></button>
     <button class="dock-btn" data-go="trophies">🏆<span>الكؤوس</span></button>
@@ -1155,7 +1175,7 @@ function enter(id) {
   currentChar = id;
   go('character');
   const c = E.findCharacter(id), ch = state.characters[id];
-  if (c?.stages && ch && !E.activeTasks(c, ch).length) setTimeout(() => editRank(`${id}:${E.totalLevel(ch) - 1}`, { first: true }), 400);
+  if (c?.stages && ch && !E.activeTasks(c, ch).length) setTimeout(() => pickHabit(id, { mode: 'first' }), 400);
 }
 
 document.addEventListener('click', (e) => { if (e.target.closest('button, [data-spot], [data-war]')) SND.sfx.click(); }, true);
@@ -1176,7 +1196,6 @@ function bind() {
     if (r.ok && oasis?.char === c) { oasis.scene.pray(); if (c === 'worshipper') SND.sfx.prayer(); }
   });
   on('data-open-upgrades', showUpgrades);
-  on('data-open-path', (id) => showPath(id));
   on('data-dim-ranks', showDimRanks);
   on('data-open-atmo', showAtmosphere);
   on('data-cup-picker', showCupPicker);
@@ -1207,9 +1226,9 @@ function bind() {
   on('data-go', go);
   on('data-spot', openSpot);
   on('data-ranks', showRanks);
-  on('data-edit-rank', (v) => editRank(v));
-  on('data-set-tasks', (v) => editRank(v, { first: true }));
-  on('data-promote', (id) => showPromote(id));
+  on('data-edit-task', (v) => { const [c, t] = v.split(':'); pickHabit(c, { mode: 'edit', taskId: t }); });
+  on('data-set-tasks', (v) => pickHabit(v.split(':')[0], { mode: 'first' }));
+  on('data-promote', (id) => pickHabit(id, { mode: 'promote' }));
 }
 
 function go(s) { if (s !== screen) SND.sfx.whoosh(); screen = s; closeModal(); render(); window.scrollTo(0, 0); }

@@ -83,6 +83,7 @@ export function newState() {
     regions: {},
     tasks: {}, // progress per task: `${characterId}.${taskId}` -> { streak, lastDate, lastResult }
     log: [],
+    planV: 2,
   };
   for (const c of CHARACTERS.filter((c) => c.starter)) s.characters[c.id] = newCharacter();
   for (const r of REGIONS.filter((r) => r.starter)) s.regions[r.id] = { level: 1 };
@@ -107,6 +108,12 @@ export function migrate(raw) {
   // The spiritual dimension no longer comes with the five prayers: the player sets its tasks.
   const w = s.characters.worshipper;
   if (w?.plan) w.plan = w.plan.map((r) => (r || []).filter((t) => !OLD_PRAYER_IDS.includes(t.id)));
+  // Habit picker (planV 2): dimensions start empty. Saves from before keep their old preset tasks.
+  if ((raw.planV || 1) < 2) for (const id in s.characters) {
+    const def = findCharacter(id), ch = s.characters[id];
+    if (def?.legacyTasks && !ch.plan) { ch.plan = defaultPlan(def); ch.plan[0] = def.legacyTasks.map((t) => ({ ...t })); }
+  }
+  s.planV = 2;
   s.version = SAVE_VERSION;
   return s;
 }
@@ -209,6 +216,62 @@ export function setRankPlan(s, id, rankIndex, input) {
   ch.plan = plan;
   addLog(s, `✎ ${def.name}: ${RANKS[rankIndex].name}`);
   return done(s, []);
+}
+
+// ---------- Habits: one habit per rank ----------
+// Each rank brings one new daily habit, chosen by the player when they get there
+// (Bronze 1 = the first habit; every promotion with a key adds the next one).
+const cleanHabit = (h) => ({ title: String(h?.title || '').trim().slice(0, 80), times: Math.max(1, Math.min(MAX_TIMES, Math.round(+h?.times) || 1)) });
+
+// Change (taskId given) or add a habit in one rank.
+export function setHabit(s, id, rankIndex, taskId, habit) {
+  const def = findCharacter(id), ch = s.characters[id];
+  if (!def || !ch) return fail('غير مملوكة');
+  const h = cleanHabit(habit);
+  if (!h.title) return fail('اختار مهمة أو اكتب اسمها');
+  const all = activeTasks(def, ch);
+  if (all.some((t) => t.title === h.title && t.id !== taskId)) return fail('هاي المهمة عندك أصلًا');
+  const list = (planOf(def, ch)[rankIndex] || []).map((t) => ({ title: t.title, times: t.times, id: t.id }));
+  const i = list.findIndex((t) => t.id === taskId);
+  if (i >= 0) list[i] = h; else list.push(h);
+  return setRankPlan(s, id, rankIndex, list);
+}
+
+// Remove a habit (never the last one left).
+export function removeHabit(s, id, taskId) {
+  const def = findCharacter(id), ch = s.characters[id];
+  if (!def || !ch) return fail('غير مملوكة');
+  if (activeTasks(def, ch).length <= 1) return fail('لازم يضل عندك مهمة وحدة على الأقل');
+  ch.plan = planOf(def, ch).map((r) => r.filter((t) => t.id !== taskId));
+  addLog(s, `🗑 ${def.name}: حذف مهمة`);
+  return done(s, []);
+}
+
+// Promotion: one key → next rank, and the habit chosen for it joins the daily tasks.
+export function promoteWith(s, id, habit) {
+  const def = findCharacter(id), ch = s.characters[id];
+  if (!def || !ch) return fail('غير مملوكة');
+  const next = nextLevel(def, ch);
+  if (!next || next.max) return fail('وصلت أعلى رتبة 🏆');
+  if ((s.keys || 0) < 1) return fail('بدك مفتاح 🗝 عشان تترقّى');
+  const h = cleanHabit(habit);
+  if (!h.title) return fail('اختار العادة الجديدة');
+  if (activeTasks(def, ch).some((t) => t.title === h.title)) return fail('هاي المهمة عندك أصلًا');
+  const n = totalLevel(ch);
+  const r = setRankPlan(s, id, n, [h]);
+  if (!r.ok) return r;
+  return levelUpCharacter(s, id);
+}
+
+// Where a character stands on the key → rank road, in one object for the UI.
+export function road(s, id, date = today()) {
+  const def = findCharacter(id), ch = s.characters[id];
+  if (!def?.stages || !ch) return null;
+  const n = totalLevel(ch), next = RANKS[n];
+  return {
+    rank: RANKS[n - 1], next, keyDays: liveProgress(ch, date).keyDays, every: def.keyEveryDays || 15,
+    keys: s.keys || 0, canPromote: !!next && (s.keys || 0) > 0 && activeTasks(def, ch).length > 0, habits: activeTasks(def, ch).length,
+  };
 }
 
 export function activeTasks(def, ch) {

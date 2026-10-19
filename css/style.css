@@ -570,3 +570,29 @@ body.in-heaven .hud .cup-side, body.in-heaven .hud .dock, body.in-heaven .hud .v
 .puppet-bar button { padding: 9px 14px; border-radius: 12px; border: 1px solid #ffc83d88; background: rgba(30,20,10,.82); color: #ffe7a8; font: inherit; font-weight: 700; cursor: pointer; }
 .puppet-bar button:active { transform: scale(.96); }
 .puppet-bar kbd { display: inline-block; min-width: 20px; margin-inline-end: 6px; border-radius: 5px; background: #ffe7a8; color: #2a1c10; font: 800 .8rem system-ui; padding: 1px 5px; }
+/* Habit picker */
+.picker h2 { margin-bottom: 4px; }
+.habit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; margin: 12px 0; }
+.habit { display: grid; justify-items: center; gap: 4px; padding: 12px 8px; border-radius: 14px; border: 2px solid #0000001a; background: #00000006; color: inherit; font: inherit; cursor: pointer; text-align: center; }
+.habit span { font-size: 1.6rem; }
+.habit b { font-size: .92rem; line-height: 1.3; }
+.habit small { color: #9a6a10; font-size: .75rem; }
+.habit.on { border-color: #e0a526; background: #ffc83d2e; box-shadow: 0 0 0 3px #ffc83d40; }
+.habit.own { border-style: dashed; }
+.hp-own { width: 100%; padding: 12px; border-radius: 12px; border: 2px solid #e0a526; background: #fff; color: inherit; font: inherit; font-size: 1rem; margin-bottom: 10px; }
+.hp-own[hidden] { display: none; }
+.hp-times { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 6px 0 12px; font-weight: 700; }
+.hp-times .step { width: 44px; height: 44px; border-radius: 50%; border: 2px solid #e0a526; background: #fff; color: #9a6a10; font-size: 1.5rem; cursor: pointer; }
+.hp-times b { min-width: 34px; text-align: center; font-size: 1.6rem; color: #9a6a10; }
+.hp-sum { padding: 10px 14px; border-radius: 12px; background: #f6efe0; margin-bottom: 12px; line-height: 1.7; }
+.hp-sum p { margin: 0; }
+.hp-sum .warn { color: #b8560f; }
+.edit-task { border: 0; background: transparent; color: #ffffff88; cursor: pointer; font-size: .95rem; padding: 0 4px; }
+.edit-task:hover { color: #ffe7a8; }
+.road { padding: 10px 12px 12px; border-top: 1px solid #ffffff18; font-size: .88rem; }
+.road p { margin: 6px 0 0; }
+.road-bar { height: 7px; border-radius: 99px; background: #ffffff1c; overflow: hidden; }
+.road-bar i { display: block; height: 100%; background: linear-gradient(90deg, #ffc83d, #ffe7a8); border-radius: 99px; }
+.road-ready { color: #ffe7a8; font-weight: 700; }
+.dr-habits { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.dr-habits span { padding: 3px 10px; border-radius: 99px; background: #0000000d; font-size: .85rem; }
