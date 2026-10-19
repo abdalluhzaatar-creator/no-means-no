@@ -334,17 +334,87 @@ function fountain() {
   return g;
 }
 
+// A proper mihrab: a tiled wall with a pointed-arch niche, a gilded frame, a
+// calligraphy band, slender columns and a lamp glowing inside the niche.
+const mosaicTex = () => canvasTex(512, 512, (g, w) => {
+  g.fillStyle = '#f4efe2'; g.fillRect(0, 0, w, w);
+  const s = w / 4;
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+    const cx = i * s + s / 2, cy = j * s + s / 2;
+    for (const [rot, col] of [[0, '#1f6f78'], [Math.PI / 4, '#1f6f78']]) { g.save(); g.translate(cx, cy); g.rotate(rot); g.fillStyle = col; g.fillRect(-s * 0.3, -s * 0.3, s * 0.6, s * 0.6); g.restore(); }
+    for (const [rot] of [[0], [Math.PI / 4]]) { g.save(); g.translate(cx, cy); g.rotate(rot); g.fillStyle = '#f4efe2'; g.fillRect(-s * 0.2, -s * 0.2, s * 0.4, s * 0.4); g.restore(); }
+    g.fillStyle = '#c99a2e'; g.beginPath(); g.arc(cx, cy, s * 0.1, 0, 7); g.fill();
+    g.fillStyle = '#2a4a8a'; for (const [dx, dy] of [[0, 0], [s, 0], [0, s], [s, s]]) { g.beginPath(); g.arc(i * s + dx, j * s + dy, s * 0.07, 0, 7); g.fill(); }
+  }
+});
+const pointedArch = (hw, spring, rise) => {
+  // a two-centred pointed arch from (-hw, spring) up to (0, spring + rise) and down to (hw, spring)
+  const pts = [];
+  for (let i = 0; i <= 24; i++) { const u = i / 24, x = -hw + u * hw, y = spring + Math.sin(u * Math.PI / 2) ** 0.85 * rise; pts.push(new THREE.Vector2(x, y)); }
+  for (let i = 23; i >= 0; i--) pts.push(new THREE.Vector2(-pts[i].x, pts[i].y));
+  return pts;
+};
 function mihrabArch() {
   const g = new THREE.Group();
-  const stone = std(0xf1e6cf, { roughness: 0.6 }), gold = std(0xd4a53a, { metalness: 0.9, roughness: 0.3 }), tile = std(0x2f6f5e, { roughness: 0.4 });
-  for (const x of [-1.6, 1.6]) {
-    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, 3.6, 16), stone); c.position.set(x, 1.8, 0); g.add(c);
-    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.25, 0.6), gold); cap.position.set(x, 3.7, 0); g.add(cap);
+  const stone = std(0xf1e6cf, { roughness: 0.6 }), gold = std(0xd4a53a, { metalness: 0.9, roughness: 0.28 }), marble = std(0xfbf8f2, { roughness: 0.3 });
+  const W = 3.4, H = 6.2, HW = 1.15, SPRING = 3.2, RISE = 1.7;
+  // Wall with the niche opening, tiled.
+  const wall = new THREE.Shape(); wall.moveTo(-W / 2, 0); wall.lineTo(W / 2, 0); wall.lineTo(W / 2, H); wall.lineTo(-W / 2, H); wall.closePath();
+  const arch = pointedArch(HW, SPRING, RISE);
+  const hole = new THREE.Path(); hole.moveTo(-HW, 0.25); arch.forEach((p) => hole.lineTo(p.x, p.y)); hole.lineTo(HW, 0.25); hole.closePath(); wall.holes.push(hole);
+  const mos = mosaicTex(); mos.wrapS = mos.wrapT = THREE.RepeatWrapping; mos.repeat.set(0.5, 0.5);
+  const wallM = new THREE.MeshStandardMaterial({ map: mos, roughness: 0.45 });
+  const wallMesh = new THREE.Mesh(new THREE.ExtrudeGeometry(wall, { depth: 0.5, bevelEnabled: false }), [wallM, stone]); wallMesh.position.z = -0.5; g.add(wallMesh);
+  // Niche: a half-cylinder and a half-dome, deep teal with gold stars.
+  const nicheTex = canvasTex(256, 256, (c, w) => { c.fillStyle = '#123e46'; c.fillRect(0, 0, w, w); c.fillStyle = '#d4a53a'; for (let i = 0; i < 40; i++) { const x = Math.random() * w, y = Math.random() * w; c.save(); c.translate(x, y); c.rotate(Math.PI / 4); c.fillRect(-3, -3, 6, 6); c.restore(); c.fillRect(x - 3, y - 3, 6, 6); } });
+  const nicheM = new THREE.MeshStandardMaterial({ map: nicheTex, side: THREE.BackSide, roughness: 0.5 });
+  const back = new THREE.Mesh(new THREE.CylinderGeometry(HW, HW, SPRING - 0.25, 24, 1, true, Math.PI / 2, Math.PI), nicheM); back.position.set(0, 0.25 + (SPRING - 0.25) / 2, -0.5); g.add(back);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(HW, 24, 12, Math.PI / 2, Math.PI, 0, Math.PI / 2), nicheM); dome.position.set(0, SPRING, -0.5); dome.scale.y = RISE / HW; g.add(dome);
+  // Gilded frame around the arch and a raised stone step.
+  const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(-HW - 0.12, 0.25, 0.02), ...arch.map((p) => new THREE.Vector3(p.x * (1 + 0.1 / HW), p.y + 0.06, 0.02)), new THREE.Vector3(HW + 0.12, 0.25, 0.02)]);
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 80, 0.09, 8), gold));
+  const outer = new THREE.CatmullRomCurve3([new THREE.Vector3(-W / 2 + 0.1, 0.1, 0.02), new THREE.Vector3(-W / 2 + 0.1, H - 0.1, 0.02), new THREE.Vector3(W / 2 - 0.1, H - 0.1, 0.02), new THREE.Vector3(W / 2 - 0.1, 0.1, 0.02)]);
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(outer, 40, 0.06, 6), gold));
+  const step = new THREE.Mesh(new THREE.BoxGeometry(W + 0.4, 0.25, 1.2), marble); step.position.set(0, 0.125, -0.1); g.add(step);
+  // Calligraphy band above the arch.
+  const band = canvasTex(1024, 160, (c, w, h) => { c.fillStyle = '#123e46'; c.fillRect(0, 0, w, h); c.strokeStyle = '#d4a53a'; c.lineWidth = 6; c.strokeRect(8, 8, w - 16, h - 16); c.fillStyle = '#f2cf6a'; c.font = 'bold 84px "Amiri", "Traditional Arabic", Tajawal, serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.direction = 'rtl'; c.fillText('اللّٰهُ نُورُ السَّمَاوَاتِ وَالْأَرْضِ', w / 2, h / 2 + 6); });
+  const bandM = new THREE.Mesh(new THREE.PlaneGeometry(W - 0.3, 0.48), new THREE.MeshStandardMaterial({ map: band, roughness: 0.4, emissive: 0xffffff, emissiveMap: band, emissiveIntensity: 0.15 })); bandM.position.set(0, H - 0.5, 0.03); g.add(bandM);
+  // Slender twisted columns with gold capitals.
+  for (const x of [-HW - 0.35, HW + 0.35]) {
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, SPRING - 0.25, 16), marble); c.position.set(x, 0.25 + (SPRING - 0.25) / 2, 0.15); g.add(c);
+    for (let k = 0; k < 6; k++) { const r = new THREE.Mesh(new THREE.TorusGeometry(0.135, 0.02, 6, 16), gold); r.rotation.x = Math.PI / 2; r.position.set(x, 0.5 + k * 0.5, 0.15); g.add(r); }
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.13, 0.25, 16), gold); cap.position.set(x, SPRING + 0.05, 0.15); g.add(cap);
   }
-  const top = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.25, 12, 40, Math.PI), stone); top.position.y = 3.8; g.add(top);
-  const inlay = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.08, 8, 40, Math.PI), gold); inlay.position.set(0, 3.8, 0.24); g.add(inlay);
-  const back = new THREE.Shape(); back.moveTo(-1.4, 0); back.lineTo(-1.4, 3.8); back.absarc(0, 3.8, 1.4, Math.PI, 0, true); back.lineTo(1.4, 0);
-  const panel = new THREE.Mesh(new THREE.ShapeGeometry(back, 20), tile); panel.position.z = -0.2; g.add(panel);
+  // A hanging lamp glowing in the niche.
+  const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.01, 1.2, 4), gold); chain.position.set(0, SPRING + 0.9, -0.35); g.add(chain);
+  const lampM = std(0xffd890, { emissive: 0xffb84a, emissiveIntensity: 1.6, transparent: true, opacity: 0.92 });
+  const lamp = new THREE.Mesh(new THREE.LatheGeometry([[0.001, 0], [0.16, 0.05], [0.22, 0.2], [0.12, 0.38], [0.05, 0.46], [0.001, 0.5]].map(([a, b2]) => new THREE.Vector2(a, b2)), 16), lampM); lamp.position.set(0, SPRING - 0.2, -0.35); g.add(lamp);
+  const lampLight = new THREE.PointLight(0xffc070, 6, 7, 1.6); lampLight.position.set(0, SPRING, -0.1); g.add(lampLight);
+  shadowAll(g);
+  lamp.castShadow = false;
+  return g;
+}
+
+// A slender minaret with balconies and a crescent, rising over the courtyard.
+function minaret() {
+  const g = new THREE.Group();
+  const stone = std(0xf1e6cf, { roughness: 0.6 }), band = std(0x2f7a8a, { roughness: 0.35 }), gold = std(0xd4a53a, { metalness: 0.9, roughness: 0.25 });
+  const add = (geo, m, y) => { const o = new THREE.Mesh(geo, m); o.position.y = y; g.add(o); return o; };
+  add(new THREE.BoxGeometry(4.6, 6, 4.6), stone, 3);
+  add(new THREE.CylinderGeometry(1.7, 2.1, 14, 8), stone, 13);
+  add(new THREE.CylinderGeometry(2.5, 2.1, 0.6, 16), band, 20.3);
+  add(new THREE.CylinderGeometry(2.6, 2.6, 0.9, 16, 1, true), std(0xf6efe0, { side: THREE.DoubleSide }), 21);
+  add(new THREE.CylinderGeometry(1.4, 1.7, 8, 16), stone, 25);
+  add(new THREE.CylinderGeometry(2.0, 1.6, 0.5, 16), band, 29.2);
+  add(new THREE.CylinderGeometry(2.1, 2.1, 0.7, 16, 1, true), std(0xf6efe0, { side: THREE.DoubleSide }), 29.8);
+  add(new THREE.CylinderGeometry(1.0, 1.3, 3, 16), stone, 31.6);
+  const cone = add(new THREE.ConeGeometry(1.25, 4.2, 16), band, 35.2);
+  add(new THREE.SphereGeometry(0.35, 12, 8), gold, 37.5);
+  const crescent = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.12, 8, 24, Math.PI * 1.4), gold); crescent.position.y = 38.5; crescent.rotation.z = Math.PI * 0.8; g.add(crescent);
+  for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; const w = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 1.6), std(0x1a2a30)); w.position.set(Math.cos(a) * 1.72, 15, Math.sin(a) * 1.72); w.lookAt(Math.cos(a) * 9, 15, Math.sin(a) * 9); g.add(w); }
+  const glowM = std(0xffe0a0, { emissive: 0xffc060, emissiveIntensity: 0 }); const ring = new THREE.Mesh(new THREE.TorusGeometry(2.55, 0.08, 6, 32), glowM); ring.rotation.x = Math.PI / 2; ring.position.y = 21.5; g.add(ring);
+  const ring2 = ring.clone(); ring2.scale.setScalar(0.82); ring2.position.y = 30.2; g.add(ring2);
+  g.userData.glow = glowM;
   shadowAll(g);
   return g;
 }
@@ -481,7 +551,8 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
   const grove = new THREE.Group(); scene.add(grove);
   [[-14, 6], [14, 6], [-14, -6], [14, -6], [-6, 20], [6, 20], [-14, 18], [14, 18]].forEach(([x, z]) => { const t = orangeTree(rng); t.position.set(x, 0.4, z); grove.add(t); });
   const fnt = fountain(); fnt.position.set(0, 0.4, 5); fnt.scale.setScalar(1.2); scene.add(fnt);
-  const arch = mihrabArch(); arch.position.set(0, 0.4, -4.2); scene.add(arch);
+  const arch = mihrabArch(); arch.position.set(0, 0.4, -7.5); scene.add(arch);
+  const mina = minaret(); mina.position.set(13, 0, -31); scene.add(mina);
 
   // The rank stand, small, against the side arcade between two cypresses.
   const STAND = { x: -19.6, z: 9.5 };
@@ -493,8 +564,8 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
     grove.visible = f.has('palms');
     fnt.visible = f.has('fountain');
     arch.visible = f.has('arch');
-    moon.visible = f.has('stars');
-    stars.userData.boost = f.has('stars') ? 1 : 0.5;
+    mina.visible = f.has('minaret');
+    stars.userData.boost = 1;
     aura.userData.level = lvl;
   };
   setFeatures(features, level);
@@ -572,7 +643,7 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
   // Camera: front three-quarter view, the palace hall behind the character.
   // Third-person camera: sits behind the character's shoulders and follows him.
   // Drag to look around, wheel / pinch to zoom; while walking it swings back behind him.
-  const cam = { yaw: Math.PI * 0.82, pitch: 0.3, dist: 10, tYaw: Math.PI * 0.82, tPitch: 0.3, tDist: 10, idle: 0 };
+  const cam = { yaw: Math.PI * 0.12, pitch: 0.28, dist: 11, tYaw: Math.PI * 0.12, tPitch: 0.28, tDist: 11, idle: 0 };
   const focus = new THREE.Vector3(0, 2.6, 0), camGoal = new THREE.Vector3();
   const el = renderer.domElement;
   const drags = new Map(); let pinch0 = 0;
@@ -658,6 +729,7 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
     if (Math.abs(x) > 20.3 || Math.abs(z) > 20.3) return true;
     if (Math.abs(x) < 2.6 && z > 6 && z < 21) return true;                           // reflecting pool
     if (fnt.visible && Math.hypot(x, z - 5) < 2.6) return true;                        // fountain
+    if (arch.visible && Math.abs(x) < 2 && z < -6.5 && z > -8.6) return true;           // mihrab
     for (const [bx, bz, w, d] of [[-8, 12, 6, 4], [8, 12, 6, 4], [-8, -14, 7, 3], [8, -14, 7, 3]])
       if (Math.abs(x - bx) < w / 2 + 0.5 && Math.abs(z - bz) < d / 2 + 0.5) return true; // flower beds
     return false;
@@ -729,6 +801,7 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
     stars.material.opacity = night * (stars.userData.boost ?? 0.5) * (1 - W.cloud * 0.9);
     moon.material.opacity = Math.max(0.15, night) * (1 - W.dim * 0.8);
     for (const c of clouds.children) { c.position.x += dt * 3; if (c.position.x > 380) c.position.x -= 760; }
+    mina.userData.glow.emissiveIntensity = night * 2.5;
     for (const l of lanterns.children) {
       const f = 0.85 + Math.sin(t * 9 + l.position.x) * 0.08 + Math.sin(t * 23 + l.position.z) * 0.05;
       l.userData.light.intensity = (2 + (night + W.dim * 0.5) * 10) * f;

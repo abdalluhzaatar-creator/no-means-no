@@ -42,6 +42,15 @@ export function createEnv(scene, renderer, camera, { skyInfo, weather = 'clear',
   const fill = new THREE.DirectionalLight(0xffffff, 0.6);
   scene.add(sun, sun.target, hemi, fill, fill.target);
   scene.fog = new THREE.Fog(fog, 80, far);
+  // A soft sky-and-ground reflection so gold, steel and glass shine instead of looking black.
+  {
+    const es = new THREE.Scene(), geo = new THREE.SphereGeometry(50, 32, 16), cols = [], c = new THREE.Color();
+    for (let i = 0; i < geo.attributes.position.count; i++) { const y = geo.attributes.position.getY(i) / 50; c.set(y > 0 ? 0x8fb4d8 : 0x6a5a48).lerp(new THREE.Color(0xf0e6d0), 1 - Math.abs(y)).multiplyScalar(y > 0 ? 0.9 : 0.5); cols.push(c.r, c.g, c.b); }
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+    es.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+    const sunBox = new THREE.Mesh(new THREE.SphereGeometry(6, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffffff })); sunBox.position.set(20, 30, 10); es.add(sunBox);
+    const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromScene(es, 0.03).texture; pm.dispose();
+  }
 
   const sp = new Float32Array(1600 * 3);
   for (let i = 0; i < 1600; i++) { const v = new THREE.Vector3().setFromSphericalCoords(1000, Math.acos(rand() * 0.95), rand() * Math.PI * 2); sp.set([v.x, v.y, v.z], i * 3); }

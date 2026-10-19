@@ -352,9 +352,20 @@ function progressionPanel(c, ch) {
 //   mode 'first'   : the dimension's first habit (Bronze 1)
 //   mode 'promote' : spend a key → next rank + the new habit it brings
 //   mode 'edit'    : change one of today's habits (taskId)
-const ICONS = ['🕌', '📖', '📿', '🤲', '💝', '🌙', '🎧', '📚', '🧠', '🔁', '🗣', '✍', '🏋', '💧', '😴', '🚶', '🥗', '🤸', '🏃', '🚴', '📝', '🌬', '🙏', '📵', '🧘', '😊', '👪', '📞', '🤝', '🏠', '💬', '🍽', '🎯', '🗓', '🛠', '⏰', '📈', '📧', '🧾', '🐖', '🚫', '📊', '💡', '🧹', '🌳', '♻', '🌱', '🚯', '🎨', '🎸', '🧩', '⭐', '🔥', '💪', '🍎', '☕', '🚭', '🕯'];
+// Icons: the dimension's own first, then general ones for any habit.
+const DIM_ICONS = {
+  worshipper: ['🕌', '📖', '📿', '🤲', '🕋', '🌙', '⭐', '🕯', '💝', '🎧', '🧎', '☪', '📜', '🌅', '🌃', '💧', '🫶', '🍽'],
+  scholar: ['📚', '📖', '🧠', '✍', '📝', '🔬', '🧪', '🧮', '🗣', '🌍', '🎓', '💻', '🔭', '📐', '🗂', '🧩', '🎧', '📰'],
+  athlete: ['🏃', '🏋', '💪', '🚴', '🏊', '🤸', '🧘', '⚽', '🥊', '🥗', '🍎', '🥦', '💧', '😴', '🚶', '❤️‍🩹', '⚖', '🩺'],
+  empath: ['🤝', '🕊', '🎁', '👂', '🏥', '🤲', '🧓', '🫡', '🙊', '🍞', '🫶', '💌', '☎', '🧸', '🌱', '🏠', '🪔', '🙏'],
+  host: ['👪', '📞', '🤝', '🏠', '💬', '🍽', '☕', '🎉', '🫂', '✉', '🎁', '🧆', '🕌', '👋', '🪑', '🔥', '📸', '🎂'],
+  builder: ['🎯', '🗓', '💼', '📈', '⏰', '📧', '💻', '🧑‍💼', '📊', '🗂', '🖊', '📞', '🏆', '🚀', '📌', '🧭', '☕', '📝'],
+  merchant: ['🧾', '🐖', '💰', '🪙', '💳', '📊', '🏦', '💡', '🚫', '📉', '📈', '🧮', '🛒', '🏷', '💵', '🔐', '⚖', '📒'],
+  keeper: ['🌳', '🌱', '♻', '🚯', '💧', '☀', '🌬', '🐝', '🐦', '🌻', '🚶', '🚲', '🌍', '🧹', '🪴', '🍃', '🔋', '🌊'],
+};
+const ICONS = ['⭐', '🔥', '✅', '🎯', '⏰', '📵', '🚭', '☕', '🍎', '💧', '😴', '🧹', '🎨', '🎸', '🧩', '📖', '✍', '💪', '🙏', '❤', '🌙', '☀', '🕯', '🎵', '🏠', '🚗', '📞', '💬', '🛑', '🧠', '👀', '🗝', '🏅', '🌟', '🍀', '🕐'];
 const PRAYER_LABELS = ['الفجر', 'الظهر', 'العصر', 'المغرب', 'العشاء'];
-const DIM_ICON = { worshipper: '☪', scholar: '📚', athlete: '🏋', empath: '💗', host: '🤝', builder: '🛠', merchant: '🪙', keeper: '🌳' };
+const DIM_ICON = { worshipper: '☪', scholar: '📚', athlete: '🏋', empath: '🕊', host: '🤝', builder: '🛠', merchant: '🪙', keeper: '🌳' };
 const taskIcon = (charId, t) => t.icon || (SUGGEST[charId] || []).find(([, x]) => x === t.title)?.[0] || DIM_ICON[charId] || '⭐';
 function pickHabit(id, { mode = 'first', taskId = null } = {}) {
   const c = E.findCharacter(id), ch = state.characters[id];
@@ -388,7 +399,12 @@ function pickHabit(id, { mode = 'first', taskId = null } = {}) {
           <button type="button" class="pk-icon" id="pk-icon" title="غيّر الصورة">⭐</button>
           <input id="pk-title" maxlength="80" placeholder="اسم المهمة">
         </div>
-        <div class="pk-icons" id="pk-icons" hidden>${ICONS.map((x) => `<button type="button" data-icon="${x}">${x}</button>`).join('')}</div>
+        <div class="pk-icons-wrap" id="pk-icons" hidden>
+          <small>صور ${esc(c.name)}</small>
+          <div class="pk-icons">${(DIM_ICONS[id] || []).map((x) => `<button type="button" data-icon="${x}">${x}</button>`).join('')}</div>
+          <small>صور عامة</small>
+          <div class="pk-icons">${ICONS.filter((x) => !(DIM_ICONS[id] || []).includes(x)).map((x) => `<button type="button" data-icon="${x}">${x}</button>`).join('')}</div>
+        </div>
         <div class="pk-step"><b>3</b> كم مرة باليوم؟</div>
         <div class="hp-times"><button type="button" class="step" data-step="-1" aria-label="أقل">−</button><b id="hp-n">1</b><button type="button" class="step" data-step="1" aria-label="أكثر">+</button></div>
         <div class="pk-prayers" id="pk-prayers" hidden>${PRAYER_LABELS.map((x) => `<span>${x}</span>`).join('')}</div>
@@ -406,7 +422,8 @@ function pickHabit(id, { mode = 'first', taskId = null } = {}) {
     document.querySelectorAll('.habit').forEach((b) => b.classList.toggle('on', cur.from === 'own' ? b.hasAttribute('data-own') : b.dataset.h === cur.from));
     $('#pk-custom').hidden = !cur.from;
     const t = cur.title.trim(), five = E.isFivePrayers(t);
-    if (five && cur.times < 5) cur.times = 5;
+    if (five) cur.times = 5;
+    $('.hp-times').hidden = five;
     nEl.textContent = cur.times;
     iconBtn.textContent = cur.icon || '⭐';
     $('#pk-prayers').hidden = !five;
@@ -414,7 +431,7 @@ function pickHabit(id, { mode = 'first', taskId = null } = {}) {
     ok.disabled = !t || (mode === 'promote' && !state.keys);
     sum.innerHTML = t
       ? `<p><span>📅</span>كل يوم: <b>${esc(cur.icon || '⭐')} ${esc(t)}${cur.times > 1 ? ` × ${cur.times}` : ''}</b> — تسجّلها قبل 12 بالليل.</p>
-         ${five ? '<p><span>🕌</span>الصلاة خمس مرات باليوم — ما بتنفع أقل من 5.</p>' : ''}
+         ${five ? '<p><span>🕌</span>الصلاة خمس صلوات باليوم — لا أقل ولا أكثر.</p>' : ''}
          <p><span>🗝</span>${every} يوم ورا بعض بدون ما تفوّت = <b>مفتاح</b>${rd?.next && mode !== 'promote' ? ` ← بتترقّى لـ <b>${esc(rd.next.name)}</b> وبتختار عادة جديدة.` : '.'}</p>
          ${cur.times > 10 && !five ? '<p class="warn"><span>⚠</span>رقم كبير. ابدأ أقل وزيد مع الوقت.</p>' : ''}`
       : '<p class="muted">اكتب اسم المهمة 👆</p>';
@@ -505,7 +522,7 @@ async function bindPlace() {
       const { mountPlace } = await import('./place3d.js');
       if (!v.isConnected) return;
       v.querySelector('.w3-loading')?.remove();
-      const scene = mountPlace(v, { regionId: c.regionId, palette: c.palette, rank: placeState().rank, onRanks: () => showRanks(c.id), sky: skyInfo, weather: currentWeather(), onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${['يلا نكمل!', 'خطوة كل يوم', 'أنا جاهز', 'الاستمرار سر النجاح'][Math.random() * 4 | 0]}`); } });
+      const scene = mountPlace(v, { regionId: c.regionId, palette: c.palette, rank: placeState().rank, features: placeState().features, onRanks: () => showRanks(c.id), sky: skyInfo, weather: currentWeather(), onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${['يلا نكمل!', 'خطوة كل يوم', 'أنا جاهز', 'الاستمرار سر النجاح'][Math.random() * 4 | 0]}`); } });
       oasis = { char: c.id, scene };
       loadWeather();
       return;
@@ -543,7 +560,7 @@ function showSettings() {
       ${slider('master', '🎚 الصوت العام')}
       ${SND.MAIN.map((k) => slider(k, SND.SOUND_LABELS[k])).join('')}
       <details class="snd-more"><summary>تفاصيل كل صوت</summary>${SND.DETAIL.map((k) => slider(k, SND.SOUND_LABELS[k])).join('')}</details>
-      <div class="row wrap"><button class="btn ghost" data-snd-test="coin">🪙 جرّب</button><button class="btn ghost" data-snd-test="prayer">🕌 جرّب</button><button class="btn ghost" data-snd-test="levelUp">⬆ جرّب</button><button class="btn ghost" data-snd-test="thunder">⛈ جرّب</button></div>
+      <div class="row wrap"><button class="btn ghost" data-snd-test="coin">🪙 جرّب</button><button class="btn ghost" data-snd-test="prayer">🕌 جرّب</button><button class="btn ghost" data-snd-test="levelUp">⬆ جرّب</button><button class="btn ghost" data-snd-test="thunder">⛈ جرّب</button><button class="btn ghost" data-snd-test="wolf">🐺 جرّب</button></div>
     </section>
     <section class="set-block">
       <h3>🎙 أصوات حقيقية</h3>

@@ -218,3 +218,84 @@ export async function setCry(level) {
 export const creak = async () => { if (!ensure()) return; const buf = await loadRecording('door'); if (buf) playRec(buf, bus.effects, 1); };
 export const hasRecording = async (key) => !!(await loadRecording(key));
 export const chains = () => { if (!ensure()) return; for (let i = 0; i < 5; i++) tone({ f: 2000 + Math.random() * 1500, dur: 0.12, vol: 0.05, at: i * 0.07, type: 'square', b: 'ambience' }); };
+
+// ---------- each dimension's own soundscape (no music) ----------
+// library: a clock ticking, pages turning · body: running steps, weights, breath ·
+// heart: water from the sabil, leaves, doves · social: fire and people talking, cups ·
+// career: city hum, typing, fountain · wealth: waves, seagulls, creaking ships, coins ·
+// nature: stream and waterfall, wind in the trees, birds, a woodpecker.
+const PLACE_LAYERS = {
+  library: [[300, 0.5, 'lowpass', 0.025]],
+  body: [[500, 0.4, 'lowpass', 0.03]],
+  heart: [[2600, 0.7, 'bandpass', 0.035], [5000, 0.3, 'highpass', 0.012]],
+  social: [[1200, 0.8, 'bandpass', 0.045], [600, 1.2, 'bandpass', 0.03]],
+  career: [[140, 0.6, 'lowpass', 0.06], [2400, 0.6, 'bandpass', 0.02]],
+  wealth: [[480, 0.4, 'lowpass', 0.09]],
+  nature: [[1800, 0.5, 'bandpass', 0.06], [450, 0.4, 'lowpass', 0.04]],
+};
+export function placeAmbience(regionId, env) {
+  let layers = null, timer = null, k = 0, stopped = false;
+  const start = () => {
+    if (stopped || layers || !ensure()) return;
+    layers = (PLACE_LAYERS[regionId] || []).map(([f, q, type, v]) => { const l = loopNoise(f, q, type); l.v = v; return l; });
+    timer = setInterval(() => {
+      if (!ctx || ctx.state !== 'running' || !S.enabled) return;
+      k++;
+      const t = now(), night = env.state.night, rain = env.W.rain, r = Math.random;
+      layers.forEach((l, i) => { const swell = regionId === 'wealth' ? 0.55 + Math.sin(t * 0.45) * 0.45 : regionId === 'nature' && i === 1 ? 0.6 + Math.sin(t * 0.3) * 0.4 : 1; l.g.gain.setTargetAtTime(l.v * swell * S.ambience, t, 0.5); });
+      const T = (o) => tone({ b: 'ambience', ...o }), N = (o) => noise({ b: 'ambience', ...o });
+      if (regionId === 'library') {
+        if (k % 5 === 0) T({ f: k % 10 ? 2600 : 2200, dur: 0.03, vol: 0.03, type: 'square' });
+        if (r() < 0.012) { N({ dur: 0.35, vol: 0.05, freq: 3800, q: 0.7 }); N({ dur: 0.2, vol: 0.03, freq: 2200, q: 1, at: 0.2 }); }
+      } else if (regionId === 'body') {
+        if (k % 2 === 0) N({ dur: 0.05, vol: 0.035, freq: 260, q: 1, filter: 'lowpass' });
+        if (r() < 0.02) { T({ f: 900 + r() * 400, dur: 0.18, vol: 0.04, type: 'square' }); T({ f: 1500 + r() * 300, dur: 0.12, vol: 0.025, type: 'square', at: 0.02 }); }
+        if (r() < 0.015) N({ dur: 0.9, vol: 0.03, freq: 900, q: 0.8, attack: 0.3 });
+      } else if (regionId === 'heart') {
+        if (r() < 0.25) T({ f: 1800 + r() * 2200, f2: 900 + r() * 600, dur: 0.06, vol: 0.015, type: 'sine' });
+        if (night < 0.3 && !rain && r() < 0.01) { T({ f: 520, f2: 470, dur: 0.45, vol: 0.05, attack: 0.08 }); T({ f: 480, f2: 430, dur: 0.6, vol: 0.05, at: 0.55, attack: 0.08 }); T({ f: 500, f2: 450, dur: 0.4, vol: 0.04, at: 1.3, attack: 0.08 }); }
+      } else if (regionId === 'social') {
+        if (r() < 0.45) N({ dur: 0.03, vol: 0.12 + r() * 0.12, freq: 1500 + r() * 3000, q: 3 });
+        if (r() < 0.35) N({ dur: 0.2 + r() * 0.4, vol: 0.02 + r() * 0.02, freq: 350 + r() * 600, q: 4, attack: 0.05 });
+        if (r() < 0.012) { T({ f: 3200, dur: 0.12, vol: 0.03, type: 'triangle' }); T({ f: 4100, dur: 0.1, vol: 0.02, type: 'triangle', at: 0.06 }); }
+      } else if (regionId === 'career') {
+        if (r() < 0.06) for (let i = 0; i < 6 + r() * 10; i++) N({ dur: 0.012, vol: 0.03, freq: 4000 + r() * 2000, q: 2, at: i * (0.07 + r() * 0.05) });
+        if (r() < 0.01) N({ dur: 2.4, vol: 0.04, freq: 700, q: 0.6, attack: 1 });
+      } else if (regionId === 'wealth') {
+        if (night < 0.6 && r() < 0.018) { const f0 = 1500 + r() * 500; for (let i = 0; i < 2 + (r() * 3 | 0); i++) T({ f: f0, f2: f0 * 0.62, dur: 0.28, vol: 0.04, type: 'triangle', at: i * 0.32 }); }
+        if (r() < 0.01) T({ f: 120, f2: 85, dur: 1.1, vol: 0.03, type: 'sawtooth', attack: 0.3 });
+        if (r() < 0.012) for (let i = 0; i < 3; i++) T({ f: 3500 + r() * 1500, dur: 0.15, vol: 0.025, type: 'triangle', at: i * 0.09 });
+      } else if (regionId === 'nature') {
+        if (night < 0.3 && !rain && r() < 0.14) { const f0 = 2400 + r() * 2000; for (let i = 0; i < 2 + (r() * 4 | 0); i++) T({ f: f0 * (1 + r() * 0.3), f2: f0 * (0.7 + r() * 0.6), dur: 0.07 + r() * 0.08, vol: 0.05, at: i * 0.11, type: 'sine', cat: 'birds' }); }
+        if (night < 0.5 && r() < 0.006) for (let i = 0; i < 9; i++) N({ dur: 0.02, vol: 0.12, freq: 1400, q: 5, at: i * 0.06 });
+      }
+    }, 200);
+  };
+  start();
+  const onGesture = () => start();
+  window.addEventListener('pointerdown', onGesture);
+  return {
+    stop() {
+      stopped = true; clearInterval(timer); window.removeEventListener('pointerdown', onGesture);
+      if (layers) { const t = now(); layers.forEach((l) => l.g.gain.setTargetAtTime(0, t, 0.3)); setTimeout(() => layers.forEach((l) => { try { l.g.disconnect(); } catch {} }), 1500); }
+    },
+  };
+}
+
+// A lone wolf howls every fifteen minutes, wherever you are.
+export function wolf() {
+  if (!ensure() || !S.enabled) return;
+  const t = now() + 0.05, o = ctx.createOscillator(), o2 = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain(), vib = ctx.createOscillator(), vg = ctx.createGain();
+  o.type = 'sawtooth'; o2.type = 'sine'; f.type = 'lowpass'; f.frequency.value = 1400; f.Q.value = 2;
+  for (const [os, m] of [[o, 1], [o2, 2]]) {
+    os.frequency.setValueAtTime(300 * m, t); os.frequency.linearRampToValueAtTime(560 * m, t + 0.9);
+    os.frequency.linearRampToValueAtTime(600 * m, t + 2.2); os.frequency.linearRampToValueAtTime(380 * m, t + 3.6);
+  }
+  vib.frequency.value = 5.5; vg.gain.value = 9; vib.connect(vg); vg.connect(o.frequency); vg.connect(o2.frequency);
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.13, t + 0.5); g.gain.setValueAtTime(0.13, t + 2.6); g.gain.exponentialRampToValueAtTime(0.0001, t + 3.8);
+  const dly = ctx.createDelay(1), fb = ctx.createGain(); dly.delayTime.value = 0.42; fb.gain.value = 0.35;
+  o.connect(f); o2.connect(f); f.connect(g); g.connect(bus.ambience); g.connect(dly); dly.connect(fb); fb.connect(dly); fb.connect(bus.ambience);
+  [o, o2, vib].forEach((x) => { x.start(t); x.stop(t + 4); });
+}
+setInterval(wolf, 15 * 60 * 1000);
+sfx.wolf = wolf;

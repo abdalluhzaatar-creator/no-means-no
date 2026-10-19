@@ -265,6 +265,8 @@ t('habit picker: first habit, edit it, promotion adds the next habit for a key',
   assert.ok(E.setHabit(s, W, 0, id, { title: 'الصلاة', times: 1, icon: '🕯' }).ok);
   assert.equal(task(s, 'الصلاة').id, id, 'same name keeps the task');
   assert.equal(E.timesOf(task(s, 'الصلاة')), 5, 'the prayer is never less than five a day');
+  assert.ok(E.setHabit(s, W, 0, id, { title: 'الصلاة', times: 9 }).ok);
+  assert.equal(E.timesOf(task(s, 'الصلاة')), 5, 'and never more than five');
   assert.equal(task(s, 'الصلاة').icon, '🕯', 'the player picks the icon');
   assert.equal(E.road(s, W).canPromote, false, 'no key yet');
   assert.equal(E.promoteWith(s, W, { title: 'ورد', times: 1 }).ok, false);

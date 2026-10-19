@@ -22,14 +22,14 @@ const heartGarden = () => {
   const g = new THREE.Group();
   const sh = new THREE.Shape(); sh.moveTo(0, -3); sh.bezierCurveTo(-5, 1, -3.5, 5, 0, 2.8); sh.bezierCurveTo(3.5, 5, 5, 1, 0, -3);
   const pond = new THREE.Mesh(new THREE.ShapeGeometry(sh, 24), M(0x7fc4d6, { roughness: 0.1 })); pond.rotation.x = -Math.PI / 2; pond.position.y = 0.3; pond.scale.setScalar(1.3); g.add(pond);
-  const rim = new THREE.Mesh(new THREE.ShapeGeometry(sh, 24), M(0xffc1d6)); rim.rotation.x = -Math.PI / 2; rim.position.y = 0.2; rim.scale.setScalar(1.55); g.add(rim);
+  const rim = new THREE.Mesh(new THREE.ShapeGeometry(sh, 24), M(0xc8b890)); rim.rotation.x = -Math.PI / 2; rim.position.y = 0.2; rim.scale.setScalar(1.55); g.add(rim);
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2, x = Math.cos(a) * 8, z = Math.sin(a) * 7;
     cyl(g, 0.2, 0.3, 2.4, M(0x7a5a3c), x, 0, z, 6);
-    const c = new THREE.Mesh(new THREE.IcosahedronGeometry(1.7, 1), M(i % 2 ? 0xffb3cc : 0xff9ebb)); c.position.set(x, 3.4, z); g.add(c);
+    const c = new THREE.Mesh(new THREE.IcosahedronGeometry(1.7, 1), M(i % 2 ? 0x6f8a4a : 0x8a9a5a)); c.position.set(x, 3.4, z); g.add(c);
   }
   const bench = box(g, 2.4, 0.3, 0.8, M(0x8b5a2b), 0, 0.6, 5.4);
-  const pav = cyl(g, 0.1, 0.1, 3, M(0xffffff), -4, 0, -5); const roof = new THREE.Mesh(new THREE.ConeGeometry(1.8, 1.2, 8), M(0xe8a0b8)); roof.position.set(-4, 3.6, -5); g.add(roof);
+  const pav = cyl(g, 0.1, 0.1, 3, M(0xffffff), -4, 0, -5); const roof = new THREE.Mesh(new THREE.ConeGeometry(1.8, 1.2, 8), M(0x6a3a2a)); roof.position.set(-4, 3.6, -5); g.add(roof);
   return finish(g);
 };
 // Social: a ring of colourful houses around a square with a fountain.

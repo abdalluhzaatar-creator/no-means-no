@@ -612,8 +612,10 @@ body.in-heaven .hud .cup-side, body.in-heaven .hud .dock, body.in-heaven .hud .v
 .pk-icon::after { content: '✎'; position: absolute; bottom: -5px; inset-inline-start: -5px; font-size: .7rem; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: #e0a526; color: #2a1c0c; }
 .pk-name input { flex: 1; min-width: 0; padding: 14px; border-radius: 14px; border: 1px solid #e0b24d88; background: #0006; color: #fff6dc; font: inherit; font-size: 1.05rem; font-weight: 700; }
 .pk-name input:focus { outline: none; border-color: #ffd36b; box-shadow: 0 0 0 3px #ffc83d33; }
-.pk-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 6px; margin-top: 10px; padding: 10px; border-radius: 14px; background: #0005; max-height: 190px; overflow: auto; }
-.pk-icons[hidden] { display: none; }
+.pk-icons-wrap { margin-top: 10px; padding: 10px; border-radius: 14px; background: #0005; max-height: 300px; overflow: auto; }
+.pk-icons-wrap[hidden] { display: none; }
+.pk-icons-wrap small { display: block; margin: 4px 2px 6px; color: #e0b24d; font-weight: 800; }
+.pk-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); gap: 6px; margin-bottom: 8px; }
 .pk-icons button { height: 42px; border-radius: 10px; border: 1px solid transparent; background: #ffffff0d; font-size: 1.35rem; cursor: pointer; }
 .pk-icons button:hover { border-color: #e0b24d; background: #e0a52622; }
 .hp-times { display: flex; align-items: center; justify-content: center; gap: 18px; }
@@ -653,3 +655,4 @@ body.in-heaven .hud .cup-side, body.in-heaven .hud .dock, body.in-heaven .hud .v
 .dr-habits span { padding: 3px 10px; border-radius: 99px; background: #0000000d; font-size: .85rem; }
 /* Test mode badge */
 .sandbox-badge { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 25; padding: 5px 14px; border-radius: 99px; border: 1px solid #7fe0a0; background: rgba(10,40,24,.85); color: #b8ffd0; font: inherit; font-weight: 800; font-size: .85rem; cursor: pointer; box-shadow: 0 0 16px #3fd08055; }
+.hp-times[hidden] { display: none; }

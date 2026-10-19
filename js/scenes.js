@@ -10,7 +10,7 @@ export function characterSVG(def, level = 1, { size = 120, locked = false } = {}
   const g = glowId();
   const aura = locked ? 0 : 18 + level * 3;
   const holdsBook = def.id === 'scholar';
-  const PROPS = { athlete: '🏋', empath: '💗', host: '🤝', builder: '🛠', merchant: '🪙', keeper: '🌱' };
+  const PROPS = { athlete: '🏋', empath: '🕊', host: '🤝', builder: '🛠', merchant: '🪙', keeper: '🌱' };
   return `
 <svg viewBox="0 0 120 150" width="${size}" height="${size * 1.25}" class="char-svg ${locked ? 'locked' : ''}" aria-label="${def.name}">
   <defs><radialGradient id="${g}"><stop offset="0" stop-color="${p.glow}" stop-opacity=".75"/><stop offset="1" stop-color="${p.glow}" stop-opacity="0"/></radialGradient></defs>
@@ -109,14 +109,14 @@ function body() {
 // Emotional: calm lake at sunset, blossom trees, heart-shaped island.
 function heart() {
   const g = glowId();
-  return `${skyGrad(g, '#f6a5c0', '#ffe3c9')}
+  return `${skyGrad(g, '#e8b070', '#fbe8c8')}
   <circle cx="300" cy="90" r="30" fill="#fff1d6" opacity=".9"/>
   <path d="M0 150 Q100 125 200 145 T400 140 V260 H0Z" fill="#9fcf8a"/>
   <ellipse cx="200" cy="205" rx="160" ry="40" fill="#7fc4d6"/>
   <path d="M200 222 C170 200 170 180 190 180 C198 180 200 188 200 190 C200 188 202 180 210 180 C230 180 230 200 200 222Z" fill="#6fae5a"/>
-  <circle cx="200" cy="186" r="5" fill="#ff7aa2"/>
-  ${[50, 110, 300, 355].map((x, i) => `<rect x="${x - 3}" y="${118 + (i % 2) * 8}" width="6" height="40" fill="#7a5a3c"/>${[[-14, 0], [0, -12], [14, 0], [0, 6]].map(([dx, dy]) => `<circle cx="${x + dx}" cy="${116 + (i % 2) * 8 + dy}" r="14" fill="${i % 2 ? '#ffb3cc' : '#ff9ebb'}"/>`).join('')}`).join('')}
-  ${[80, 150, 250, 320].map((x, i) => `<path d="M${x} ${60 + i * 7} c-4-6-12-2-6 4l6 6 6-6c6-6-2-10-6-4z" fill="#ff7aa2" opacity=".7"/>`).join('')}`;
+  <circle cx="200" cy="186" r="5" fill="#e8c070"/>
+  ${[50, 110, 300, 355].map((x, i) => `<rect x="${x - 3}" y="${118 + (i % 2) * 8}" width="6" height="40" fill="#7a5a3c"/>${[[-14, 0], [0, -12], [14, 0], [0, 6]].map(([dx, dy]) => `<circle cx="${x + dx}" cy="${116 + (i % 2) * 8 + dy}" r="14" fill="${i % 2 ? '#6f8a4a' : '#8a9a5a'}"/>`).join('')}`).join('')}
+  ${[80, 150, 250, 320].map((x, i) => `<path d="M${x} ${60 + i * 7} c-4-6-12-2-6 4l6 6 6-6c6-6-2-10-6-4z" fill="#e8c070" opacity=".7"/>`).join('')}`;
 }
 
 // Social: village square with houses, market stalls and a fountain.

@@ -187,7 +187,7 @@ const parseLine = (l) => {
 export const MAX_TIMES = 20;
 // The five daily prayers as one habit: never less than five times a day.
 export const isFivePrayers = (title) => /^(ال)?صل[اوي][ةهت]?$|^الصلوات|صلواتي|(الخمس|5|خمس)\s*صلوات|الصلاة?\s*(الخمس|5)/.test(String(title || '').trim());
-const minTimes = (title) => (isFivePrayers(title) ? 5 : 1);
+const fixTimes = (title, n) => (isFivePrayers(title) ? 5 : Math.max(1, Math.min(MAX_TIMES, Math.round(+n) || 1)));   // the prayers are exactly five
 const cleanIcon = (i) => (typeof i === 'string' ? [...i.trim()].slice(0, 4).join('') : '');
 
 export function setRankPlan(s, id, rankIndex, input) {
@@ -195,7 +195,7 @@ export function setRankPlan(s, id, rankIndex, input) {
   if (!def || !ch) return fail('غير مملوكة');
   if (rankIndex < 0 || rankIndex >= RANK_COUNT) return fail('رتبة غير موجودة');
   const items = (Array.isArray(input) ? input : String(input).split('\n').map(parseLine))
-    .map((x) => { const title = String(x.title || '').trim().slice(0, 80); return { title, icon: cleanIcon(x.icon), times: Math.max(minTimes(title), Math.min(MAX_TIMES, Math.round(+x.times) || 1)) }; })
+    .map((x) => { const title = String(x.title || '').trim().slice(0, 80); return { title, icon: cleanIcon(x.icon), times: fixTimes(title, x.times) }; })
     .filter((x) => x.title);
   const seen = new Set();
   const uniq = items.filter((x) => !seen.has(x.title) && seen.add(x.title)).slice(0, 12);
@@ -226,7 +226,7 @@ export function setRankPlan(s, id, rankIndex, input) {
 // ---------- Habits: one habit per rank ----------
 // Each rank brings one new daily habit, chosen by the player when they get there
 // (Bronze 1 = the first habit; every promotion with a key adds the next one).
-const cleanHabit = (h) => { const title = String(h?.title || '').trim().slice(0, 80); return { title, icon: cleanIcon(h?.icon), times: Math.max(minTimes(title), Math.min(MAX_TIMES, Math.round(+h?.times) || 1)) }; };
+const cleanHabit = (h) => { const title = String(h?.title || '').trim().slice(0, 80); return { title, icon: cleanIcon(h?.icon), times: fixTimes(title, h?.times) }; };
 
 // Change (taskId given) or add a habit in one rank.
 export function setHabit(s, id, rankIndex, taskId, habit) {
