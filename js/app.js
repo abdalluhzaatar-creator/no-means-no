@@ -108,7 +108,14 @@ function ask(text, onYes) {
 // Screens: 'world' (default), 'character' (inside one character's place), 'shop'.
 let currentChar = null;
 
+function sandboxBadge() {
+  document.body.classList.toggle('sandbox', !!state?.sandbox);
+  let b = document.getElementById('sandbox-badge');
+  if (state?.sandbox && !b) { b = document.createElement('button'); b.id = 'sandbox-badge'; b.className = 'sandbox-badge'; b.textContent = '🧪 وضع التجربة'; b.onclick = showSettings; document.body.appendChild(b); }
+  if (!state?.sandbox && b) b.remove();
+}
 function render() {
+  sandboxBadge();
   checkCommander();
   syncSound();
   $('#gold').textContent = state.gold;
@@ -549,7 +556,19 @@ function showSettings() {
     <section class="set-block">
       <h3>🌤 الوقت والجو</h3>
       <button class="btn" data-open-atmo>تغيير الوقت والطقس</button>
+    </section>
+    <section class="set-block sandbox-block">
+      <h3>🧪 وضع التجربة</h3>
+      ${state.sandbox
+        ? `<p class="muted small-text">إنت هلأ بوضع التجربة. تقدّمك الحقيقي محفوظ وبيرجع لما تطلع.</p>
+           <div class="row wrap"><button class="btn primary" id="sb-refill">🔄 عبّي المفاتيح والمصاري</button><button class="btn" id="sb-leave">↩ ارجع لتقدّمي الحقيقي</button></div>`
+        : `<p class="muted small-text">بيفتحلك كل الأبعاد والأماكن، وبيعطيك <b>🗝 ${E.SANDBOX.keys}</b> مفتاح و<b>🪙 ${E.SANDBOX.gold.toLocaleString('en')}</b>. ما في إشي مترقّي — إنت بترقّي وبتشوف. تقدّمك الحقيقي بينحفظ وبيرجع لما تطلع.</p>
+           <button class="btn primary" id="sb-enter">🧪 افتح كل إشي</button>`}
     </section>`);
+  const swap = (next, msg) => { state = next; C.ensure(state); scheduleSave(); closeModal(); go('world'); render(); FX.toast(msg); };
+  if ($('#sb-enter')) $('#sb-enter').onclick = () => swap(E.enterSandbox(state), '🧪 وضع التجربة: كل إشي مفتوح');
+  if ($('#sb-leave')) $('#sb-leave').onclick = () => ask('ترجع لتقدّمك الحقيقي؟ كل إشي عملته بالتجربة بيروح.', () => swap(E.leaveSandbox(state), '↩ رجعت لتقدّمك الحقيقي'));
+  if ($('#sb-refill')) $('#sb-refill').onclick = () => { E.refillSandbox(state); scheduleSave(); render(); FX.toast('🔄 تعبّوا'); };
   $('#snd-on').onchange = (e) => { SND.set('enabled', e.target.checked); };
   document.querySelectorAll('[data-snd]').forEach((el) => (el.oninput = () => { SND.set(el.dataset.snd, +el.value); el.nextElementSibling.textContent = Math.round(el.value * 100); }));
   document.querySelectorAll('[data-snd-test]').forEach((el) => (el.onclick = () => SND.sfx[el.dataset.sndTest]()));

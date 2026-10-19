@@ -507,6 +507,22 @@ export function mapVisibility(s, region) {
 }
 
 // ---------- Starting data ----------
+// Test mode: everything open, keys and gold to spare, nothing upgraded — the player
+// spends them to see how things change. The real save waits inside and comes back on exit.
+export const SANDBOX = { keys: 99, gold: 99999 };
+export function enterSandbox(real) {
+  const t = newState();
+  for (const c of CHARACTERS) t.characters[c.id] = newCharacter();
+  for (const r of REGIONS) t.regions[r.id] = { level: 1 };
+  t.keys = SANDBOX.keys; t.gold = SANDBOX.gold;
+  t.location = real.location;
+  t.sandbox = { backup: JSON.stringify({ ...real, sandbox: undefined }) };
+  addLog(t, '🧪 وضع التجربة');
+  return t;
+}
+export function refillSandbox(s) { if (s.sandbox) { s.keys = Math.max(s.keys, SANDBOX.keys); s.gold = Math.max(s.gold, SANDBOX.gold); } }
+export function leaveSandbox(s) { return s.sandbox ? migrate(JSON.parse(s.sandbox.backup)) : s; }
+
 export function demoState() {
   const s = newState();
   s.gold = 100;

@@ -285,4 +285,17 @@ t('new dimensions start empty; old saves keep their preset tasks', () => {
   assert.equal(E.activeTasks(E.findCharacter('scholar'), old.characters.scholar).length, 3);
 });
 
+t('test mode opens everything with keys and gold, upgrades nothing, and gives the real save back', () => {
+  const real = E.newState(); real.gold = 7; real.keys = 1;
+  assert.ok(E.setHabit(real, W, 0, null, { title: 'الصلاة', times: 5 }).ok);
+  const t2 = E.enterSandbox(real);
+  assert.equal(t2.keys, E.SANDBOX.keys); assert.equal(t2.gold, E.SANDBOX.gold);
+  assert.ok(Object.keys(t2.characters).length >= 8 && t2.regions.nature && t2.regions.hq);
+  assert.ok(Object.values(t2.characters).every((c) => E.totalLevel(c) === 1), 'every rank starts at Bronze 1');
+  t2.keys = 0; E.refillSandbox(t2); assert.equal(t2.keys, E.SANDBOX.keys);
+  const back = E.leaveSandbox(JSON.parse(JSON.stringify(t2)));
+  assert.equal(back.gold, 7); assert.equal(back.keys, 1); assert.equal(back.sandbox, undefined);
+  assert.equal(E.activeTasks(def(), back.characters[W])[0].title, 'الصلاة');
+});
+
 console.log(`\n${passed} tests passed`);
