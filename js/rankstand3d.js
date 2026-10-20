@@ -1,6 +1,6 @@
 // A small rank stand inside a dimension: a marble pedestal with a gold post, and
 // two medallions floating above it — the current rank (glowing) and the next one
-// (glass). An arrow labelled "15 يوم" with the key counter points from the current
+// (glass). An arrow labelled "7 أيام" with the key counter points from the current
 // rank to the next. View only: tapping it opens the rank ladder.
 import * as THREE from './vendor/three.module.min.js';
 
@@ -25,8 +25,8 @@ function label(lines, { w = 512, h = 160, bg = 'rgba(18,24,30,.78)', fg = '#fff'
   return { sprite, draw };
 }
 
-// ranks: [{ name, color }], current: 0-based index, keyDays / keyEvery: the 15-day counter.
-export function buildRankStand({ ranks, current = 0, keyDays = 0, keyEvery = 15 }) {
+// ranks: [{ name, color }], current: 0-based index, keyDays / keyEvery: the key counter.
+export function buildRankStand({ ranks, current = 0, keyDays = 0, keyEvery = 7 }) {
   const root = new THREE.Group();
   const gold = std(0xd4a53a, { metalness: 0.55, roughness: 0.3, emissive: 0x5a3c08, emissiveIntensity: 0.35 });
   const marble = std(0xf4f0e6, { roughness: 0.3 });
@@ -56,7 +56,7 @@ export function buildRankStand({ ranks, current = 0, keyDays = 0, keyEvery = 15 
   now.disc.material.emissiveIntensity = 0.6;
 
   const arrow = new THREE.Group(); root.add(arrow);
-  const arrowTag = label(['15 يوم', '0/15'], { w: 380, h: 160, scale: 0.36, bg: 'rgba(42,30,10,.85)', fg: '#ffe7a8' });
+  const arrowTag = label(["7 أيام", "0/7"], { w: 380, h: 160, scale: 0.36, bg: 'rgba(42,30,10,.85)', fg: '#ffe7a8' });
   arrowTag.sprite.position.set(0.46, 2.58, 0.3); root.add(arrowTag.sprite);
 
   const setRank = (c, days, every) => {
@@ -80,14 +80,14 @@ export function buildRankStand({ ranks, current = 0, keyDays = 0, keyEvery = 15 
     const head = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.16, 10), new THREE.MeshBasicMaterial({ color: 0xffe7a8, toneMapped: false }));
     head.position.copy(curve.getPoint(1)); head.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), curve.getTangent(1).normalize());
     arrow.add(head);
-    arrowTag.draw([`${every} يوم`, `${days}/${every}`]);
+    arrowTag.draw([`${every} ${every <= 10 ? "أيام" : "يوم"}`, `${days}/${every}`]);
   };
   setRank(current, keyDays, keyEvery);
   root.traverse((m) => { if (m.isMesh) m.castShadow = true; });
 
   return {
     root,
-    update({ current: c, keyDays: d, keyEvery: e = 15 }) { setRank(c, d, e); },
+    update({ current: c, keyDays: d, keyEvery: e = 7 }) { setRank(c, d, e); },
     tick(t) {
       for (const [m, ph] of [[now, 0], [next, 1.7]]) { m.g.position.y = m.base + Math.sin(t * 1.5 + ph) * 0.05; m.disc.rotation.z = Math.sin(t * 0.8 + ph) * 0.2; }
       now.halo.material.opacity = 0.25 + Math.sin(t * 3) * 0.1;

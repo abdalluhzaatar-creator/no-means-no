@@ -3,10 +3,19 @@
 // into effects (gold burst, level-up, unlock).
 import { CHARACTERS, REGIONS, RANKS } from './content.js';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
-export const today = (d = new Date()) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+// The rules of the game, in one place.
+//   keyDays    full days in a row (every habit of a dimension done) → one key
+//   dayEnds    the game day closes at 3 at night, not at midnight
+//   shield     🛡 bought with gold; a day you miss uses one and nothing is lost
+//   dropAfter  failed days in a row (no shield) → the dimension drops one rank
+//   reward / penalty: gold for a habit fully done / taken for each habit left undone
+export const RULES = { keyDays: 7, dayEnds: 3, shieldCost: 150, maxShields: 3, dropAfter: 3, reward: 20, penalty: 10 };
+
+const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+export const today = (d = new Date()) => ymd(new Date(+d - RULES.dayEnds * 3600000));
+const nextDay = (date) => { const d = new Date(date); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
 
 const dayDiff = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
 
@@ -71,13 +80,14 @@ export function shopStatus(state, kind, item) {
 }
 
 // ---------- State ----------
-const newCharacter = () => ({ stage: 0, level: 1, perfectStreak: 0, lastPerfectDate: null, keyDays: 0, levelDays: 0, levelReady: false });
+const newCharacter = () => ({ stage: 0, level: 1, perfectStreak: 0, lastPerfectDate: null, keyDays: 0, levelDays: 0, levelReady: false, strikes: 0 });
 
 export function newState() {
   const s = {
     version: SAVE_VERSION,
     gold: 0,
     keys: 0,
+    shields: 1,
     stats: { goldEarned: 0, goldLost: 0, tasksCompleted: 0, tasksFailed: 0, bestStreak: 0, keysEarned: 0 },
     characters: {},
     regions: {},
@@ -116,6 +126,9 @@ export function migrate(raw) {
   }
   s.planV = 2;
   s.story = { ...base.story, ...(raw.story || {}) };
+  // v4: the ship grows from full days (8 a part), not from single tasks (6 a part).
+  if ((raw.version || 1) < 4) s.story.ship = Math.floor((s.story.ship || 0) / 6) * SHIP.per;
+  s.shields = Math.max(0, Math.min(RULES.maxShields, raw.shields ?? 1));
   if (s.story.speech && (!raw.story?.phase || raw.story.phase === 'none')) s.story.phase = 'march';
   s.version = SAVE_VERSION;
   return s;
@@ -214,7 +227,8 @@ export function setRankPlan(s, id, rankIndex, input) {
       if (times > 1) delete t.prayer; else if (old.prayer) taken.add(old.prayer);
       return t;
     }
-    const t = { id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title, times, reward: 20, penalty: 10 };
+    // `added`: a habit added today is not held against you when this day closes.
+    const t = { id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title, times, reward: RULES.reward, penalty: RULES.penalty, added: today() };
     if (icon) t.icon = icon;
     // A once-a-day line naming one of the five prayers is tied to that prayer's time (once per plan).
     const pr = times === 1 ? prayerIn(title) : undefined;
@@ -277,7 +291,7 @@ export function road(s, id, date = today()) {
   if (!def?.stages || !ch) return null;
   const n = totalLevel(ch), next = RANKS[n];
   return {
-    rank: RANKS[n - 1], next, keyDays: liveProgress(ch, date).keyDays, every: def.keyEveryDays || 15,
+    rank: RANKS[n - 1], next, keyDays: liveProgress(ch, date).keyDays, every: RULES.keyDays, strikes: ch.strikes || 0,
     keys: s.keys || 0, canPromote: !!next && (s.keys || 0) > 0 && activeTasks(def, ch).length > 0, habits: activeTasks(def, ch).length,
   };
 }
@@ -317,11 +331,13 @@ function checkPerfectDay(s, def, ch, date, events) {
   if (!ch.lastPerfectDate || dayDiff(ch.lastPerfectDate, date) > 1) breakChain(ch);
   ch.lastPerfectDate = date;
   ch.perfectStreak++;
+  ch.strikes = 0;
+  if (s.story?.speech) s.story.ship = (s.story.ship || 0) + 1;   // every full day adds to the warriors' ship
   s.stats.bestStreak = Math.max(s.stats.bestStreak, ch.perfectStreak);
   events.push({ type: 'perfectDay', streak: ch.perfectStreak });
-  if (def.keyEveryDays) {
+  {
     ch.keyDays++;
-    if (ch.keyDays >= def.keyEveryDays) {
+    if (ch.keyDays >= RULES.keyDays) {
       ch.keyDays = 0;
       s.keys++;
       s.stats.keysEarned++;
@@ -375,7 +391,9 @@ export function currentStreak(p, date = today()) {
   return dayDiff(d, date) <= 1 ? p.streak || 0 : 0;
 }
 
-export function reportTask(s, charId, taskId, success, { applyPenalty = true, date = today() } = {}) {
+// Success: the habit's gold comes once it is fully done for the day (all its times).
+// Failure is only marked here; what it costs is settled when the day closes (closeDays).
+export function reportTask(s, charId, taskId, success, { date = today() } = {}) {
   const ch = s.characters[charId];
   if (!ch) return fail('الشخصية غير مملوكة');
   const def = findCharacter(charId);
@@ -388,17 +406,15 @@ export function reportTask(s, charId, taskId, success, { applyPenalty = true, da
   p.doneDate = lastDone(p);
   const count = countToday(p, date) + (success ? 1 : 0);
   if (success) {
-    s.stats.tasksCompleted++;
-    gainGold(s, task.reward, `✔ ${task.title}${times > 1 ? ` (${count}/${times})` : ''}`, events);
-    if (count >= times) { p.streak = currentStreak(p, date) + 1; p.doneDate = date; }
-    if (s.story?.speech) s.story.ship = (s.story.ship || 0) + 1;   // every task done adds to the warriors' ship
+    if (count >= times) {
+      s.stats.tasksCompleted++;
+      gainGold(s, task.reward ?? RULES.reward, `✔ ${task.title}`, events);
+      p.streak = currentStreak(p, date) + 1; p.doneDate = date;
+    } else events.push({ type: 'step', count, times });
   } else {
     p.streak = 0;
-    s.stats.tasksFailed++;
-    breakChain(ch); // one missed task breaks the key and level chains
-    ch.defeat = { level: totalLevel(ch), date }; // a crushing defeat at this level (see warStatus)
-    if (applyPenalty && task.penalty > 0) loseGold(s, task.penalty, `✘ ${task.title}`, events);
-    else addLog(s, `✘ ${task.title} (بدون عقوبة)`);
+    addLog(s, `✘ ${task.title} — بتنحسب عليك لما يخلص اليوم`);
+    events.push({ type: 'failMark' });
   }
   p.lastDate = date;
   p.count = count;
@@ -418,7 +434,7 @@ export function revokeTask(s, charId, taskId, date) {
   if (!p || !ch || p.lastDate !== date || p.lastResult !== 'success') return false;
   const task = activeTasks(findCharacter(charId), ch).find((t) => t.id === taskId);
   delete s.tasks[key];
-  const back = Math.min(s.gold, task?.reward || 0);
+  const back = Math.min(s.gold, task?.reward ?? RULES.reward);
   s.gold -= back;
   s.stats.goldEarned = Math.max(0, s.stats.goldEarned - back);
   s.stats.tasksCompleted = Math.max(0, s.stats.tasksCompleted - 1);
@@ -435,25 +451,79 @@ export function revokeTask(s, charId, taskId, date) {
 }
 
 // ---------- End of day ----------
-// Every task must be fully done and logged by the end of its day. When a new day
-// starts, whatever was left unfinished on the last day played counts as missed
-// (no gold penalty), which breaks the chain.
+// When the game day closes (3 at night), every dimension whose habits were not all
+// done that day has lost the day — including days the game was not opened:
+//   • with a shield 🛡: the shield is used and nothing is lost (one shield covers the whole day);
+//   • without: −penalty gold for each undone habit, the key counter restarts, and after
+//     RULES.dropAfter lost days in a row the dimension drops one rank.
+// Returns what happened, for the morning report.
 export function closeDays(s, now = today()) {
   const last = s.lastDay;
   s.lastDay = now;
-  if (!last || last >= now) return [];
-  const missed = [];
-  for (const def of CHARACTERS) {
-    const ch = s.characters[def.id];
-    if (!ch) continue;
-    for (const t of activeTasks(def, ch)) {
-      const p = taskProgress(s, def.id, t.id);
-      if (taskDoneToday(p, last) || (p.lastDate && p.lastDate > last)) continue;
-      reportTask(s, def.id, t.id, false, { applyPenalty: false, date: last });
-      missed.push(t.title);
+  const rep = { days: 0, missed: [], shielded: 0, gold: 0, dropped: [], strikes: [] };
+  if (!last || last >= now) return rep;
+  let d = last;
+  for (let n = 0; d < now && n < 60; n++, d = nextDay(d)) {
+    rep.days++;
+    const lost = [];
+    for (const def of CHARACTERS) {
+      const ch = s.characters[def.id];
+      if (!ch) continue;
+      const undone = activeTasks(def, ch).filter((t) => {
+        const p = taskProgress(s, def.id, t.id);
+        return t.added !== d && !taskComplete(p, d) && !(p.lastDate && p.lastDate > d);
+      });
+      if (undone.length) lost.push({ def, ch, undone });
+    }
+    if (!lost.length) continue;
+    for (const { def, undone } of lost) for (const t of undone) {
+      const k = taskKey(def.id, t.id), p = { ...taskProgress(s, def.id, t.id) };
+      if (!(p.lastDate === d && p.lastResult === 'fail')) s.stats.tasksFailed++;
+      s.tasks[k] = { ...p, lastDate: d, lastResult: 'fail', count: p.lastDate === d ? p.count || 0 : 0, streak: 0 };
+      if (!rep.missed.includes(t.title)) rep.missed.push(t.title);
+    }
+    if ((s.shields || 0) > 0) {
+      s.shields--;
+      rep.shielded++;
+      // The chain carries on over a shielded day (it counts as neither won nor lost).
+      for (const { ch } of lost) if (ch.lastPerfectDate && dayDiff(ch.lastPerfectDate, d) <= 1) ch.lastPerfectDate = d;
+      addLog(s, `🛡 الدرع حماك يوم ${d}`);
+      continue;
+    }
+    for (const { def, ch, undone } of lost) {
+      const fine = Math.min(s.gold, undone.reduce((a, t) => a + (t.penalty ?? RULES.penalty), 0));
+      s.gold -= fine; s.stats.goldLost += fine; rep.gold += fine;
+      addLog(s, `✘ ${def.name}: ${undone.length} مهام ما خلصت`, -fine);
+      breakChain(ch);
+      ch.defeat = { level: totalLevel(ch), date: d };   // a crushing defeat at this level (see warStatus)
+      ch.strikes = (ch.strikes || 0) + 1;
+      rep.strikes = rep.strikes.filter((x) => x.name !== def.name);   // the latest count per dimension
+      if (ch.strikes >= RULES.dropAfter) {
+        ch.strikes = 0;
+        if (demote(ch)) { rep.dropped.push(`${def.name} ← ${rankName(ch)}`); addLog(s, `⬇ ${def.name} نزل لـ ${rankName(ch)}`); }
+      } else rep.strikes.push({ name: def.name, strikes: ch.strikes });
     }
   }
-  return missed;
+  return rep;
+}
+
+// One rank down (never below Bronze 1). Its habit stays written, and comes back with the next key.
+function demote(ch) {
+  const n = totalLevel(ch) - 1;
+  if (n < 1) return false;
+  ch.stage = Math.floor((n - 1) / 5); ch.level = ((n - 1) % 5) + 1;
+  ch.defeat = null;
+  return true;
+}
+
+// ---------- Shields ----------
+export function buyShield(s) {
+  if ((s.shields || 0) >= RULES.maxShields) return fail(`معك ${RULES.maxShields} دروع، هاد الحد الأقصى`);
+  if (s.gold < RULES.shieldCost) return fail('ذهب غير كافٍ');
+  s.gold -= RULES.shieldCost;
+  s.shields = (s.shields || 0) + 1;
+  addLog(s, '🛡 درع جديد', -RULES.shieldCost);
+  return done(s, [{ type: 'shield' }]);
 }
 
 // ---------- Regions ----------
@@ -530,8 +600,8 @@ export function refillSandbox(s) { if (s.sandbox) { s.keys = Math.max(s.keys, SA
 export function leaveSandbox(s) { return s.sandbox ? migrate(JSON.parse(s.sandbox.backup)) : s; }
 
 // ---------- The story: the speech, Lucifer locked away, the ship ----------
-// The ship to the Island of Leaders grows one part every SHIP.per tasks done after the speech.
-export const SHIP = { parts: 12, per: 6 };
+// The ship to the Island of Leaders grows one part every SHIP.per full days (any dimension) after the speech.
+export const SHIP = { parts: 12, per: 8 };
 export const shipStage = (s) => Math.min(SHIP.parts, Math.floor((s.story?.ship || 0) / SHIP.per));
 // Story phases: none → march (walk the warriors down to the shore) → back (after the
 // spyglass, walk them home) → done (the cage is found locked and empty: Lucifer escaped).

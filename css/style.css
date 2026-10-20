@@ -678,3 +678,8 @@ body.cine .hud, body.cine .move-pad, body.cine .door-btn, body.cine .cell-captio
 .spy-view { position: absolute; inset: 0; z-index: 19; pointer-events: none; background: radial-gradient(circle at 50% 50%, transparent 0, transparent 29vmin, #000 30.5vmin); }
 .spy-view::after { content: ''; position: absolute; left: 50%; top: 50%; width: 61vmin; height: 61vmin; transform: translate(-50%, -50%); border-radius: 50%; box-shadow: inset 0 0 0 6px #6a5020, inset 0 0 40px #000c; }
 .spy-view[hidden] { display: none; }
+
+/* Rules, shields and the lost-days warning */
+.shield-box { cursor: pointer; }
+.road-warn { margin: 4px 0 0; color: #ffb4a8; font-weight: 700; font-size: .9em; }
+.keyuse-list.rules li small { display: block; }

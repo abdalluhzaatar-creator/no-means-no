@@ -77,7 +77,7 @@ export function startChallenge(s, { channel, cupId, partner, pin, now = Date.now
 }
 
 // Rule 4: only the second party (who knows the PIN) decides. Win → stake returns; loss → it's theirs.
-// Winning a cup pays keys at the same rate as the level path: one key per 15 days.
+// Winning a cup pays one key per 15 days of the cup (on top of the keys the days themselves earn).
 export const keyReward = (cup) => Math.floor(cup.days / 15);
 
 export function judge(s, id, pin, won, now = Date.now()) {

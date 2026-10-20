@@ -65,10 +65,11 @@ t('unfinished tasks count as missed when the next day starts', () => {
   const pr = task(s, 'الصلاة');
   E.reportTask(s, W, pr.id, true, { date: day(6) });
   E.reportTask(s, W, pr.id, true, { date: day(6) });
-  assert.deepEqual(E.closeDays(s, day(7)).sort(), ['الصلاة', 'صفحة قرآن'].sort());
+  s.shields = 0;
+  assert.deepEqual(E.closeDays(s, day(7)).missed.sort(), ['الصلاة', 'صفحة قرآن'].sort());
   assert.equal(E.taskProgress(s, W, pr.id).lastResult, 'fail');
   assert.deepEqual(E.liveProgress(s.characters[W], day(7)), { perfectStreak: 0, keyDays: 0, levelDays: 0 });
-  assert.deepEqual(E.closeDays(s, day(7)), [], 'runs once per day');
+  assert.deepEqual(E.closeDays(s, day(7)).missed, [], 'runs once per day');
 });
 
 t('the end-of-day sweep never overwrites progress already logged today', () => {
@@ -93,29 +94,99 @@ t('times per day can be written as "× 5" and edited later keeping the task', ()
 t('an empty task list never counts as a perfect day', () => {
   const s = E.newState();
   E.closeDays(s, day(1));
-  assert.deepEqual(E.closeDays(s, day(2)), []);
+  assert.deepEqual(E.closeDays(s, day(2)).missed, []);
   assert.equal(s.characters[W].perfectStreak, 0);
 });
 
-t('15 consecutive perfect days give exactly one key', () => {
+t('7 full days in a row give exactly one key', () => {
   const s = setup();
-  for (let d = 1; d <= 14; d++) perfectDay(s, d);
+  for (let d = 1; d <= 6; d++) perfectDay(s, d);
   assert.equal(s.keys, 0);
-  assert.ok(perfectDay(s, 15).some((e) => e.type === 'key'));
+  assert.ok(perfectDay(s, 7).some((e) => e.type === 'key'));
   assert.equal(s.keys, 1);
-  for (let d = 16; d <= 29; d++) perfectDay(s, d);
-  assert.equal(s.keys, 1, 'no second key before another 15 days');
-  perfectDay(s, 30);
+  for (let d = 8; d <= 13; d++) perfectDay(s, d);
+  assert.equal(s.keys, 1, 'no second key before another 7 days');
+  perfectDay(s, 14);
   assert.equal(s.keys, 2);
 });
 
-t('a missed task resets the key counter', () => {
+t('a lost day (no shield) restarts the key counter and costs gold for every undone habit', () => {
+  const s = setup(); s.shields = 0;
+  for (let d = 1; d <= 5; d++) perfectDay(s, d);
+  E.closeDays(s, day(6));
+  E.reportTask(s, W, task(s, 'الصلاة').id, false, { date: day(6) });
+  const gold = s.gold;
+  const rep = E.closeDays(s, day(7));
+  assert.equal(rep.gold, 20, 'two habits undone × 10');
+  assert.equal(s.gold, gold - 20);
+  assert.deepEqual(E.liveProgress(s.characters[W], day(7)), { perfectStreak: 0, keyDays: 0, levelDays: 0 });
+  for (let d = 7; d <= 12; d++) perfectDay(s, d);
+  assert.equal(s.keys, 0, 'only 6 days since the miss');
+});
+
+t('a shield covers a lost day: no gold lost and the chain goes on', () => {
   const s = setup();
-  for (let d = 1; d <= 10; d++) perfectDay(s, d);
-  E.reportTask(s, W, task(s, 'الصلاة').id, false, { date: day(11), applyPenalty: false });
-  assert.deepEqual(E.liveProgress(s.characters[W], day(11)), { perfectStreak: 0, keyDays: 0, levelDays: 0 });
-  for (let d = 12; d <= 25; d++) perfectDay(s, d);
-  assert.equal(s.keys, 0, 'only 14 days since the miss');
+  assert.equal(s.shields, 1, 'every player starts with one shield');
+  for (let d = 1; d <= 4; d++) perfectDay(s, d);
+  E.closeDays(s, day(5));
+  const gold = s.gold;
+  const rep = E.closeDays(s, day(6));   // day 5 was not played
+  assert.equal(rep.shielded, 1); assert.equal(s.shields, 0); assert.equal(s.gold, gold);
+  for (let d = 6; d <= 8; d++) perfectDay(s, d);
+  assert.equal(s.keys, 1, '4 + 3 full days around the shielded day = a key');
+});
+
+t('three lost days in a row drop the dimension one rank; its habit comes back with a key', () => {
+  const s = setup(); s.shields = 0; s.keys = 1;
+  assert.ok(E.promoteWith(s, W, { title: 'ورد', times: 1 }).ok);
+  assert.equal(E.rankName(s.characters[W]), 'برونز 2');
+  E.closeDays(s, day(1));
+  const rep = E.closeDays(s, day(3));
+  assert.equal(s.characters[W].strikes, 2); assert.equal(rep.dropped.length, 0);
+  const rep2 = E.closeDays(s, day(4));
+  assert.equal(rep2.dropped.length, 1);
+  assert.equal(E.rankName(s.characters[W]), 'برونز 1');
+  assert.equal(s.characters[W].strikes, 0);
+  assert.deepEqual(E.activeTasks(def(), s.characters[W]).map((x) => x.title), ['الصلاة', 'صفحة قرآن']);
+  E.closeDays(s, day(5)); E.closeDays(s, day(6)); E.closeDays(s, day(7));
+  assert.equal(E.rankName(s.characters[W]), 'برونز 1', 'never below Bronze 1');
+});
+
+t('a full day clears the strikes', () => {
+  const s = setup(); s.shields = 0;
+  E.closeDays(s, day(1)); E.closeDays(s, day(3));
+  assert.equal(s.characters[W].strikes, 2);
+  perfectDay(s, 3);
+  assert.equal(s.characters[W].strikes, 0);
+});
+
+t('shields are bought with gold, three at most', () => {
+  const s = E.newState(); s.gold = 1000;
+  assert.ok(E.buyShield(s).ok); assert.ok(E.buyShield(s).ok);
+  assert.equal(s.shields, 3); assert.equal(s.gold, 1000 - 2 * E.RULES.shieldCost);
+  assert.equal(E.buyShield(s).ok, false);
+});
+
+t('gold comes once per habit, however many times a day it is needed', () => {
+  const s = setup();
+  for (let k = 0; k < 4; k++) E.reportTask(s, W, task(s, 'الصلاة').id, true, { date: day(1) });
+  assert.equal(s.gold, 0);
+  E.reportTask(s, W, task(s, 'الصلاة').id, true, { date: day(1) });
+  assert.equal(s.gold, 20);
+});
+
+t('the game day closes at 3 at night, not at midnight', () => {
+  assert.equal(E.today(new Date(2026, 9, 21, 1, 30)), '2026-10-20');
+  assert.equal(E.today(new Date(2026, 9, 21, 3, 5)), '2026-10-21');
+});
+
+t('a habit added today is not held against you when the day closes', () => {
+  const s = E.newState(); s.shields = 0;
+  assert.ok(E.setHabit(s, W, 0, null, { title: 'ورد', times: 1 }).ok);
+  s.lastDay = E.today();
+  const d = new Date(); d.setDate(d.getDate() + 2);
+  const rep = E.closeDays(s, E.today(d));
+  assert.equal(rep.days, 2); assert.equal(s.characters[W].strikes, 1, 'only the day after counts');
 });
 
 t('a skipped day also resets the chain', () => {
@@ -130,7 +201,7 @@ t('you start at Bronze 1; a key raises you to the next rank and adds its tasks',
   assert.equal(E.rankName(s.characters[W]), 'برونز 1');
   assert.ok(E.setRankPlan(s, W, 1, 'أذكار الصباح').ok);
   assert.equal(E.levelUpCharacter(s, W).ok, false, 'no key yet');
-  for (let d = 1; d <= 15; d++) perfectDay(s, d);
+  for (let d = 1; d <= 7; d++) perfectDay(s, d);
   assert.equal(E.rankName(s.characters[W]), 'برونز 1', 'no automatic promotion');
   const up = E.levelUpCharacter(s, W);
   assert.ok(up.events.some((e) => e.type === 'rank' && e.rank === 'برونز 2'));
@@ -164,14 +235,13 @@ t('headquarters and the trophy island are visible from the start', () => {
   assert.equal(E.mapVisibility(s, E.findRegion('trophies')), 'owned');
 });
 
-t('failure penalty is optional and never below zero', () => {
-  const s = setup();
-  s.gold = 5;
+t('the penalty is never optional and never takes gold below zero', () => {
+  const s = setup(); s.shields = 0;
+  E.closeDays(s, day(1));
   E.reportTask(s, W, task(s, 'الصلاة').id, false, { date: day(1) });
+  s.gold = 5;
+  E.closeDays(s, day(2));
   assert.equal(s.gold, 0);
-  s.gold = 30;
-  E.reportTask(s, W, task(s, 'صفحة قرآن').id, false, { applyPenalty: false, date: day(1) });
-  assert.equal(s.gold, 30);
 });
 
 t('cannot report a task that is not unlocked yet', () => {
@@ -238,7 +308,7 @@ t('war status: coming → ongoing → crushed on a miss → fierce after one mor
   const lib = E.findRegion('library'), san = E.findRegion('sanctuary');
   assert.equal(E.warStatus(s, lib).id, 'coming');
   assert.equal(E.warStatus(s, san).id, 'ongoing');
-  E.reportTask(s, W, task(s, 'الصلاة').id, false, { date: day(1) });
+  s.shields = 0; E.closeDays(s, day(1)); E.closeDays(s, day(2));
   const st = E.warStatus(s, san);
   assert.equal(st.id, 'crushed'); assert.equal(st.need, 2);
   s.keys = 1;
@@ -300,7 +370,7 @@ t('test mode opens everything with keys and gold, upgrades nothing, and gives th
   assert.equal(E.activeTasks(def(), back.characters[W])[0].title, 'الصلاة');
 });
 
-t('the story: after the speech Lucifer is jailed, the island shows (closed) and tasks build the ship', () => {
+t('the story: after the speech Lucifer is jailed, the island shows (closed) and full days build the ship', () => {
   const s = setup();
   const isle = E.findRegion('leaders');
   assert.equal(E.mapVisibility(s, isle), 'hidden');
@@ -314,10 +384,11 @@ t('the story: after the speech Lucifer is jailed, the island shows (closed) and 
   E.storyStep(s, 'done');
   assert.equal(s.story.jailed, false, 'he escaped');
   assert.equal(E.buy(s, 'region', 'leaders').ok, false, 'the island is reached by ship only');
-  for (let i = 0; i < 5; i++) E.reportTask(s, W, task(s, 'الصلاة').id, true, { date: day(2) });
-  E.reportTask(s, W, task(s, 'صفحة قرآن').id, true, { date: day(2) });
-  assert.equal(s.story.ship, 6, 'every task done adds to the ship');
-  assert.equal(E.shipStage(s), 1);
+  perfectDay(s, 2);
+  assert.equal(s.story.ship, 1, 'every full day adds to the ship');
+  for (let d = 3; d <= 9; d++) perfectDay(s, d);
+  assert.equal(E.shipStage(s), 1, `${E.SHIP.per} full days = one part`);
+  assert.equal(E.migrate({ version: 3, story: { speech: true, ship: 13 } }).story.ship, 2 * E.SHIP.per, 'old saves keep their parts');
   assert.equal(E.enterSandbox(s).regions.leaders, undefined);
 });
 

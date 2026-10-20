@@ -62,6 +62,8 @@ async function loadGame() {
   // Keep following the clock: close finished days and refresh the prayer windows.
   setInterval(() => { closeDays(); autoMissPrayers(); if ($('#modal').hidden) render(); }, 30000);
   if (!raw) setTimeout(() => FX.banner('أهلًا بك', 'ادخل إلى البعد الروحي من العالم وحدّد مهامك اليومية.'), 400);
+  // The rules changed (v4): show them once.
+  if (!state.seenRules) { state.seenRules = 4; scheduleSave(); setTimeout(() => { if ($('#modal').hidden) showRules(); }, raw ? 900 : 4200); }
 }
 
 function showLogin() {
@@ -120,6 +122,7 @@ function render() {
   syncSound();
   $('#gold').textContent = state.gold;
   $('#keys').textContent = state.keys;
+  $('#shields').textContent = state.shields || 0;
   const navScreen = screen === 'character' ? 'world' : screen;
   document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.screen === navScreen));
   document.body.classList.toggle('in-scene', (screen === 'character' && sceneFor(currentChar)) || screen === 'trophies' || screen === 'hq');
@@ -162,18 +165,62 @@ function render() {
 // ---------- Prayer times ----------
 // Prayers belong to the calendar day: they can be logged any time until midnight.
 const noonOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12);
-const prayerNow = () => (state.location ? prayerDay(noonOf(new Date()), state.location) : null);
+// The game day closes at 3 at night, so the prayers shown are the game day's.
+const prayerNow = () => (state.location ? prayerDay(noonOf(new Date(Date.now() - E.RULES.dayEnds * 3600000)), state.location) : null);
 const dayFor = () => E.today();
 
-// Every task has to be fully done by midnight: when a new day starts, what was left
-// unfinished counts as missed (no gold penalty) and the 15-day counter restarts.
+// When the game day closes (3 at night) the engine settles every lost day: a shield
+// covers it, or the player pays (gold, the key counter, and a rank after 3 days in a row).
 function closeDays() {
   const before = state.lastDay;
-  const missed = E.closeDays(state);
+  const rep = E.closeDays(state);
   if (state.lastDay !== before) scheduleSave();
-  if (missed.length) {
-    FX.banner('مهام الأمس ما اكتملت', `${missed.join('، ')} — حُسبت فائتة وبدأ العدّ من جديد`, '⏳');
+  if (!rep.missed.length) return;
+  if (!rep.gold && !rep.dropped.length && !rep.strikes.length) {
+    FX.banner('🛡 الدرع حماك', `فاتك ${rep.shielded > 1 ? rep.shielded + ' أيام' : 'يوم'} — ما خسرت إشي. ضايل معك ${state.shields || 0} 🛡`, '🛡');
+    return;
   }
+  setTimeout(() => showNightReport(rep), 600);
+}
+function showNightReport(rep) {
+  modal(`<div class="keyuse">
+    <div class="keyuse-icon">🌙</div>
+    <h2>تقرير الليلة</h2>
+    <p class="muted">ما خلصت: ${esc(rep.missed.join('، '))}</p>
+    <ul class="keyuse-list">
+      ${rep.shielded ? `<li><span>🛡</span><div><b>الدرع حماك ${rep.shielded > 1 ? rep.shielded + ' أيام' : 'يوم'}</b></div></li>` : ''}
+      ${rep.gold ? `<li><span>🪙</span><div><b>خسرت ${rep.gold} ذهب</b><small>عدّاد المفتاح رجع صفر.</small></div></li>` : ''}
+      ${rep.strikes.map((x) => `<li><span>⚠</span><div><b>${esc(x.name)}: ${x.strikes} من ${E.RULES.dropAfter} أيام خسارة ورا بعض</b><small>${x.strikes === E.RULES.dropAfter - 1 ? 'يوم خسارة كمان وبتنزل رتبة!' : 'يوم كامل بيصفّرها.'}</small></div></li>`).join('')}
+      ${rep.dropped.map((x) => `<li><span>⬇</span><div><b>نزلت رتبة: ${esc(x)}</b><small>العادة الأخيرة رجعت تستناك — مفتاح واحد ورجعتها.</small></div></li>`).join('')}
+    </ul>
+    <p class="muted">🛡 الدرع بيحميك بالأيام اللي بتنشغل فيها — اشتريه بـ ${E.RULES.shieldCost} 🪙.</p>
+    <div class="row wrap"><button class="btn primary" id="nr-ok">ماشي</button><button class="btn ghost" id="nr-rules">📜 القوانين</button></div>
+  </div>`);
+  $('#nr-ok').onclick = closeModal;
+  $('#nr-rules').onclick = showRules;
+}
+
+// The rules of the game, short and plain. Shields are bought here.
+function showRules() {
+  const R = E.RULES, full = (state.shields || 0) >= R.maxShields;
+  modal(`<div class="keyuse">
+    <div class="keyuse-icon">📜</div>
+    <h2>قوانين اللعبة</h2>
+    <ul class="keyuse-list rules">
+      <li><span>✔</span><div><b>خلّصت عادة = +${R.reward} 🪙</b><small>مرة وحدة للعادة، حتى لو بدها أكثر من مرة باليوم.</small></div></li>
+      <li><span>🌙</span><div><b>اليوم بيخلص الساعة ${R.dayEnds} بالليل</b><small>مش الساعة 12 — إلك وقت تسجّل حتى لو سهرت.</small></div></li>
+      <li><span>🗝</span><div><b>${R.keyDays} أيام كاملة ورا بعض = مفتاح</b><small>يوم كامل = كل عادات البُعد خلصت. بالمفتاح بتفتح بُعد جديد أو بترقّي رتبة.</small></div></li>
+      <li><span>✘</span><div><b>يوم ما خلّصت فيه = −${R.penalty} 🪙 لكل عادة</b><small>وعدّاد المفتاح بيرجع صفر. سجّلت "ما عملتها" أو نسيت تسجّل — نفس الإشي.</small></div></li>
+      <li><span>⬇</span><div><b>${R.dropAfter} أيام خسارة ورا بعض = بتنزل رتبة</b><small>وبترجعها بمفتاح.</small></div></li>
+      <li><span>🛡</span><div><b>الدرع بيحميك</b><small>نايم، مسافر، مريض؟ إذا خسرت يوم الدرع بينصرف لحاله وما بتخسر إشي. معك ${R.maxShields} بالأكثر.</small></div></li>
+      <li><span>🫡</span><div><b>كل ${KEYS_PER_RANK} مفاتيح بتجمعها = القائد بيترقّى</b></div></li>
+      <li><span>🚢</span><div><b>بعد الخطاب: كل ${E.SHIP.per} أيام كاملة = قطعة بالسفينة</b></div></li>
+      <li><span>🌱</span><div><b>عادة جديدة؟</b><small>ما بتنحسب عليك إلا من بكرا.</small></div></li>
+    </ul>
+    <p>معك <b>🛡 ${state.shields || 0}</b> من ${R.maxShields}.</p>
+    <button class="btn primary big" id="buy-shield" ${full || state.gold < R.shieldCost ? 'disabled' : ''}>${full ? '🛡 الدروع مليانة' : `🛡 اشتري درع — ${R.shieldCost} 🪙`}</button>
+  </div>`);
+  $('#buy-shield').onclick = (e) => { const r = act(E.buyShield(state), e.currentTarget); if (r.ok) { FX.toast('🛡 صار معك درع جديد'); showRules(); } };
 }
 
 // A task tied to a prayer time can't count before that prayer's time begins.
@@ -205,7 +252,7 @@ function pickLocation() {
   const cur = state.location;
   modal(`
     <h2>أوقات الصلاة</h2>
-    <p class="muted">اختر مدينتك لتعرف اللعبة أوقات الصلاة. تُسجَّل الصلاة بعد دخول وقتها، ولك حتى الساعة 12 بالليل لتسجيلها؛ بعدها تُحسب فائتة.</p>
+    <p class="muted">اختر مدينتك لتعرف اللعبة أوقات الصلاة. تُسجَّل الصلاة بعد دخول وقتها، ولك حتى الساعة ${E.RULES.dayEnds} بالليل لتسجيلها؛ بعدها تُحسب فائتة.</p>
     <div class="chips">${CITIES.map((c, i) => `<button class="chip ${cur?.name === c.name ? 'on' : ''}" data-city="${i}">${c.name}</button>`).join('')}</div>
     <p><button class="btn ghost small" id="geo">📍 استخدم موقعي الحالي</button></p>
     <label class="form">طريقة الحساب
@@ -248,7 +295,7 @@ function taskRow(charId, t) {
       <strong><span class="t-ic">${taskIcon(charId, t)}</span> ${esc(t.title)}${times > 1 ? ` <small class="muted">× ${times} باليوم</small>` : ''}${E.findCharacter(charId)?.stages ? ` <button class="edit-task" data-edit-task="${charId}:${t.id}" title="عدّل" aria-label="عدّل">✎</button>` : ''}</strong>
       ${dots}
       ${timeInfo}
-      <small class="muted"><bdi>+${t.reward}</bdi>${times > 1 ? ' لكل مرة' : ''} / <bdi>−${t.penalty}</bdi> · 🔥 ${E.currentStreak(p, date)}</small>
+      <small class="muted"><bdi>+${t.reward}</bdi> / <bdi>−${t.penalty}</bdi> · 🔥 ${E.currentStreak(p, date)}</small>
     </div>
     <div class="task-actions">${actions}</div>
   </li>`;
@@ -303,7 +350,7 @@ function openSpot(id) {
   if (def.kind === 'leaders') {
     const st = E.shipStage(state);
     modal(`<div class="keyuse"><div class="keyuse-icon">🏝</div><h2>${def.name}</h2><p class="muted">${def.desc}</p>
-      <h3 class="keyuse-title">🚢 السفينة: ${st} من ${E.SHIP.parts}</h3>${bar(st, E.SHIP.parts, 'كل ' + E.SHIP.per + ' مهام بتنجزها = قطعة جديدة')}
+      <h3 class="keyuse-title">🚢 السفينة: ${st} من ${E.SHIP.parts}</h3>${bar(st, E.SHIP.parts, 'كل ' + E.SHIP.per + ' أيام كاملة = قطعة جديدة')}
       <p class="muted">السفينة على الشط تحت قاعة المحاربين. ${st >= E.SHIP.parts ? 'السفينة جاهزة… الإبحار قريبًا.' : 'أكملوا بناءها.'}</p></div>`);
     return;
   }
@@ -317,7 +364,7 @@ function openSpot(id) {
     <p>لفتح هذا المكان تحتاج <b>${E.costText(def.cost)}</b>${c ? ` — وستنضم إليك شخصية <b>${c.name}</b>.` : '.'}</p>
     ${st.conditions.length ? `<ul class="conds">${st.conditions.map((x) => `<li class="${x.met ? 'met' : ''}">${x.met ? '✔' : '○'} ${esc(x.label)} <small>(${x.current}/${x.target})</small></li>`).join('')}</ul>` : ''}
     <button class="btn primary" id="open-place" ${st.canBuy ? '' : 'disabled'}>
-      ${st.canBuy ? `افتح المكان — ${E.costText(def.cost)}` : !st.conditionsMet ? 'الشروط غير مكتملة' : def.cost?.keys ? 'تحتاج مفتاحًا — أكمل مهامك 15 يومًا ورا بعض' : 'ذهب غير كافٍ'}</button>`);
+      ${st.canBuy ? `افتح المكان — ${E.costText(def.cost)}` : !st.conditionsMet ? 'الشروط غير مكتملة' : def.cost?.keys ? `تحتاج مفتاحًا — أكمل مهامك ${E.RULES.keyDays} أيام ورا بعض` : 'ذهب غير كافٍ'}</button>`);
   $('#open-place').onclick = (e) => { const r = act(E.buy(state, 'region', id), e.currentTarget); if (r.ok) closeModal(); };
 }
 
@@ -349,8 +396,8 @@ function progressionPanel(c, ch) {
         ? `<button class="btn small ${state.keys ? 'primary' : ''}" data-promote="${c.id}" ${state.keys ? '' : 'disabled'} title="يحتاج مفتاحًا">🗝 1 افتح</button>` : '';
       return `<li class="${cls}" style="--rank:${r.color}"><b class="rk">${esc(r.name)}</b><span>${esc(what)}</span>${unlock}</li>`;
     }).join('')}</ol>
-    ${c.keyEveryDays ? bar(live.keyDays, c.keyEveryDays, 'أيام كاملة متتالية نحو المفتاح التالي 🗝') : ''}
-    <p class="muted small-text">كل ${c.keyEveryDays} يومًا كاملًا متتاليًا تكسب مفتاحًا 🗝، وبالمفتاح ترفع رتبتك أو تفتح منطقة. اليوم الكامل = إنجاز كل مهام اليوم، وأي مهمة فائتة تُصفّر العدّاد.</p>
+    ${bar(live.keyDays, E.RULES.keyDays, 'أيام كاملة متتالية نحو المفتاح التالي 🗝')}
+    <p class="muted small-text">كل ${E.RULES.keyDays} أيام كاملة ورا بعض تكسب مفتاحًا 🗝، وبالمفتاح ترفع رتبتك أو تفتح منطقة. اليوم الكامل = إنجاز كل مهام اليوم، وأي يوم ناقص يُصفّر العدّاد (إلا إذا معك 🛡).</p>
   </section>`;
 }
 
@@ -382,7 +429,7 @@ function pickHabit(id, { mode = 'first', taskId = null } = {}) {
   const rankIndex = mode === 'promote' ? E.totalLevel(ch) : mode === 'edit' ? plan.findIndex((r) => r.some((t) => t.id === taskId)) : E.totalLevel(ch) - 1;
   const have = new Set(E.activeTasks(c, ch).map((t) => t.title).filter((t) => t !== editing?.title));
   const ideas = (SUGGEST[id] || []).filter(([, t]) => !have.has(t));
-  const every = rd?.every || 15;
+  const every = rd?.every || E.RULES.keyDays;
   // What is being built: { from: suggestion title | 'own', title, icon, times }
   const cur = editing
     ? { from: ideas.some(([, t]) => t === editing.title) ? editing.title : 'own', title: editing.title, icon: taskIcon(id, editing), times: E.timesOf(editing) }
@@ -437,7 +484,7 @@ function pickHabit(id, { mode = 'first', taskId = null } = {}) {
     document.querySelector('[data-step="-1"]').disabled = cur.times <= (five ? 5 : 1);
     ok.disabled = !t || (mode === 'promote' && !state.keys);
     sum.innerHTML = t
-      ? `<p><span>📅</span>كل يوم: <b>${esc(cur.icon || '⭐')} ${esc(t)}${cur.times > 1 ? ` × ${cur.times}` : ''}</b> — تسجّلها قبل 12 بالليل.</p>
+      ? `<p><span>📅</span>كل يوم: <b>${esc(cur.icon || '⭐')} ${esc(t)}${cur.times > 1 ? ` × ${cur.times}` : ''}</b> — تسجّلها قبل الساعة ${E.RULES.dayEnds} بالليل.</p>
          ${five ? '<p><span>🕌</span>الصلاة خمس صلوات باليوم — لا أقل ولا أكثر.</p>' : ''}
          <p><span>🗝</span>${every} يوم ورا بعض بدون ما تفوّت = <b>مفتاح</b>${rd?.next && mode !== 'promote' ? ` ← بتترقّى لـ <b>${esc(rd.next.name)}</b> وبتختار عادة جديدة.` : '.'}</p>
          ${cur.times > 10 && !five ? '<p class="warn"><span>⚠</span>رقم كبير. ابدأ أقل وزيد مع الوقت.</p>' : ''}`
@@ -468,7 +515,7 @@ function pickHabit(id, { mode = 'first', taskId = null } = {}) {
   draw();
 }
 
-// Shown after the first task is set: stay with it 15 days for a key, and what a key does.
+// Shown after the first task is set: stay with it RULES.keyDays days for a key, and what a key does.
 function showKeyUses(id) {
   const c = E.findCharacter(id), ch = state.characters[id];
   const nextRank = RANKS[E.totalLevel(ch)]?.name || 'الرتبة الجاية';
@@ -476,8 +523,8 @@ function showKeyUses(id) {
   modal(`
     <div class="keyuse">
       <div class="keyuse-icon">🗝</div>
-      <h2>خليك مستمر 15 يوم عشان تاخذ مفتاح</h2>
-      <p class="muted">كل يوم بتخلّص فيه مهمتك وبتسجّلها بينحسب. إذا فات يوم، العدّاد بيرجع من الصفر.</p>
+      <h2>خليك مستمر ${E.RULES.keyDays} أيام عشان تاخذ مفتاح</h2>
+      <p class="muted">كل يوم بتخلّص فيه مهمتك وبتسجّلها بينحسب. إذا فات يوم، العدّاد بيرجع من الصفر — إلا إذا معك درع 🛡.</p>
       <h3 class="keyuse-title">استخدامات المفتاح</h3>
       <ul class="keyuse-list">
         <li><span>⬆</span><div><b>ترقية الشخصية لـ${esc(nextRank)}</b><small>عشان تقدر تربّي عادة جديدة فوق عادتك — من عند القائد بمقر القيادة.</small></div></li>
@@ -517,7 +564,7 @@ const placeState = () => {
 // What the rank tree shows: every rank, the current one, and the 15-day counter.
 const rankState = (c, ch) => c.stages ? {
   ranks: RANKS, current: E.totalLevel(ch) - 1,
-  keyDays: E.liveProgress(ch, dayFor(c.id)).keyDays, keyEvery: c.keyEveryDays || 15,
+  keyDays: E.liveProgress(ch, dayFor(c.id)).keyDays, keyEvery: E.RULES.keyDays,
 } : null;
 
 async function bindPlace() {
@@ -694,6 +741,7 @@ function roadLine(id) {
   return `<div class="road">
     <div class="road-bar"><i style="width:${Math.round((rd.keyDays / rd.every) * 100)}%"></i></div>
     <p>🗝 <b><bdi>${rd.keyDays}/${rd.every}</bdi></b> يوم — ${left ? `باقي ${left} يوم للمفتاح` : 'مفتاح!'}${rd.next ? ` · بعدها <b>${esc(rd.next.name)}</b> + عادة جديدة` : ''}</p>
+    ${rd.strikes ? `<p class="road-warn">⚠ ${rd.strikes} من ${E.RULES.dropAfter} أيام خسارة ورا بعض${rd.strikes === E.RULES.dropAfter - 1 ? ' — يوم كمان وبتنزل رتبة!' : ''}</p>` : ''}
     ${rd.canPromote ? '<p class="road-ready">🗝 معك مفتاح! روح للقائد بمقر القيادة ← 🎖 رتب الأبعاد وترقّى.</p>' : ''}
   </div>`;
 }
@@ -920,7 +968,7 @@ function showFront(id) {
       <h2>${r.name}</h2>
       <div class="front-status">${w.name}</div>
       <p>${why}</p>
-      ${ch ? `<div class="meter dark"><span class="meter-label">🗝 أيام نحو المفتاح التالي</span><b><bdi>${E.liveProgress(ch, dayFor(c.id)).keyDays}/${c.keyEveryDays || 15}</bdi></b><div class="xp"><span style="width:${Math.round((E.liveProgress(ch, dayFor(c.id)).keyDays / (c.keyEveryDays || 15)) * 100)}%"></span></div></div>` : ''}
+      ${ch ? `<div class="meter dark"><span class="meter-label">🗝 أيام نحو المفتاح التالي</span><b><bdi>${E.liveProgress(ch, dayFor(c.id)).keyDays}/${E.RULES.keyDays}</bdi></b><div class="xp"><span style="width:${Math.round((E.liveProgress(ch, dayFor(c.id)).keyDays / E.RULES.keyDays) * 100)}%"></span></div></div>` : ''}
       <div class="row wrap">
         <button class="btn ghost" id="back-map">← الخريطة</button>
         ${ch ? `<button class="btn primary" id="go-front">اذهب إلى الجبهة</button>` : `<button class="btn primary" id="go-front">المتجر</button>`}
@@ -1234,18 +1282,20 @@ function showCupHistory() {
     ${list.length ? `<ul class="wallet-log">${list.map((x) => `<li><span>${cupIcon(C.findCup(x.cupId), 26)} ${C.findCup(x.cupId).name} · ${esc(C.regionName(x.channel))} · ${esc(x.partner)}</span><b class="${x.status === 'won' ? 'plus' : x.status === 'lost' ? 'minus' : ''}">${label[x.status]}</b></li>`).join('')}</ul>` : '<p class="muted">لا يوجد تحديات بعد.</p>'}`);
 }
 
-// Failure: the player chooses whether to apply the penalty on themselves.
-function failDialog(title, penalty, onChoose) {
+// Failure: no choosing the punishment — say plainly what it will cost when the day closes.
+function failDialog(title, penalty, onYes) {
+  const sh = state.shields || 0;
   modal(`
-    <h2>لا بأس، البداية من جديد</h2>
+    <h2>ما عملتها؟</h2>
     <p><b>${esc(title)}</b></p>
-    <p class="muted">الصدق مع نفسك هو أول خطوة. هل تطبّق العقوبة على نفسك؟</p>
+    <p class="muted">الصدق مع نفسك أول خطوة. لما يخلص اليوم (الساعة ${E.RULES.dayEnds} بالليل):
+      ${sh ? `رح ينصرف <b>درع 🛡</b> (معك ${sh}) وما بتخسر إشي.` : `رح تخسر <b>${penalty} 🪙</b> عن كل عادة ما خلصت، وعدّاد المفتاح بيرجع صفر.`}</p>
     <div class="row wrap">
-      <button class="btn bad" id="pen-yes">طبّق العقوبة (−${penalty} 🪙)</button>
-      <button class="btn ghost" id="pen-no">سجّل الفشل بدون عقوبة</button>
+      <button class="btn bad" id="pen-yes">ما عملتها</button>
+      <button class="btn ghost" id="pen-no">رجوع</button>
     </div>`);
-  $('#pen-yes').onclick = () => { closeModal(); onChoose(true); };
-  $('#pen-no').onclick = () => { closeModal(); onChoose(false); };
+  $('#pen-yes').onclick = () => { closeModal(); onYes(); };
+  $('#pen-no').onclick = closeModal;
 }
 
 // ---------- Events ----------
@@ -1295,7 +1345,7 @@ function bind() {
   on('data-task-fail', (v) => {
     const [c, t] = v.split(':');
     const def = E.activeTasks(E.findCharacter(c), state.characters[c]).find((x) => x.id === t);
-    failDialog(def.title, def.penalty, (pen) => { const r = act(() => E.reportTask(state, c, t, false, { applyPenalty: pen, date: dayFor(c) })); if (r.ok && oasis?.char === c) oasis.scene.react?.('fail'); });
+    failDialog(def.title, def.penalty ?? E.RULES.penalty, () => { const r = act(() => E.reportTask(state, c, t, false, { date: dayFor(c) })); if (r.ok && oasis?.char === c) oasis.scene.react?.('fail'); });
   });
   on('data-cmd-ranks', showCommandRanks);
   on('data-level', (id, el) => act(E.levelUpCharacter(state, id), el));
@@ -1348,5 +1398,8 @@ document.getElementById('keys-box')?.addEventListener('click', () => {
     <p>معك <b>${state.keys}</b> ${state.keys === 1 ? 'مفتاح' : 'مفاتيح'}.</p>
     <p>بالمفتاح <b>تفتح منطقة جديدة</b> على الخريطة، أو <b>ترفع رتبة</b> شخصية (مثل برونز 1 → برونز 2 فتنضاف مهام الرتبة اللي كتبتها).</p>
     <p>وكل ${KEYS_PER_RANK} مفاتيح تجمعها يترقّى القائد تلقائيًا 🫡.</p>
-    <p class="muted">تكسب مفتاحًا كل 15 يومًا كاملًا متتاليًا.</p>`);
+    <p class="muted">تكسب مفتاحًا كل ${E.RULES.keyDays} أيام كاملة ورا بعض.</p>
+    <button class="btn ghost" id="keys-rules">📜 كل القوانين</button>`);
+  $('#keys-rules').onclick = showRules;
 });
+document.getElementById('shield-box')?.addEventListener('click', () => { if (state) showRules(); });
