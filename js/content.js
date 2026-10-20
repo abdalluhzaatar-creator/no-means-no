@@ -386,3 +386,9 @@ export const COMMAND_RANKS = [
   [1, 'جندي'], [3, 'عريف'], [5, 'رقيب'], [8, 'ملازم'], [11, 'نقيب'],
   [15, 'رائد'], [20, 'عقيد'], [26, 'عميد'], [33, 'لواء'], [41, 'فريق'],
 ];
+
+// The dark king each dimension fights every week (Lucifer leads them all).
+export const KINGS = {
+  sanctuary: 'ملك الفراغ', library: 'ملك الضباب', body: 'ملك التسويف', heart: 'ملك الجرح',
+  social: 'ملك العزلة', career: 'ملك الكسل', wealth: 'ملك الهدر', nature: 'ملك الفوضى',
+};

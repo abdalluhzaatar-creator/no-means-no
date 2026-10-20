@@ -1,5 +1,5 @@
 // UI layer: renders screens from state, calls engine actions, saves, plays effects.
-import { CHARACTERS, REGIONS, CUPS, JOD_TO_USD, RANKS, COMMAND_RANKS, SUGGEST } from './content.js';
+import { CHARACTERS, REGIONS, CUPS, JOD_TO_USD, RANKS, COMMAND_RANKS, SUGGEST, KINGS } from './content.js';
 import * as C from './cups.js';
 import { commander, KEYS_PER_RANK } from './hq.js';
 import { warMapSVG, WAR } from './warmap.js';
@@ -63,7 +63,8 @@ async function loadGame() {
   setInterval(() => { closeDays(); autoMissPrayers(); if ($('#modal').hidden) render(); }, 30000);
   if (!raw) setTimeout(() => FX.banner('أهلًا بك', 'ادخل إلى البعد الروحي من العالم وحدّد مهامك اليومية.'), 400);
   // The rules changed (v4): show them once.
-  if (!state.seenRules) { state.seenRules = 4; scheduleSave(); setTimeout(() => { if ($('#modal').hidden) showRules(); }, raw ? 900 : 4200); }
+  // The rules changed (v5: stars and weekly wars): show them once to players who knew the old ones.
+  if (raw && (state.seenRules || 0) < 5) { state.seenRules = 5; scheduleSave(); rulesPending = true; setTimeout(() => { if ($('#modal').hidden && rulesPending) { rulesPending = false; showRules(); } }, 900); }
 }
 
 function showLogin() {
@@ -121,8 +122,12 @@ function render() {
   checkCommander();
   syncSound();
   $('#gold').textContent = state.gold;
-  $('#keys').textContent = state.keys;
+  $('#keys').textContent = state.keys + (state.keyHalves ? '½' : '');
   $('#shields').textContent = state.shields || 0;
+  const lg = E.leagueOf(state.medals), mb = $('#medals-box');
+  mb.hidden = !warsBegun();   // the league shows once the first war has begun
+  $('#medals').innerHTML = `${state.medals || 0}<span class="lg-name"> · ${esc(lg.name)}</span>`;
+  mb.style.setProperty('--lg', lg.color);
   const navScreen = screen === 'character' ? 'world' : screen;
   document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.screen === navScreen));
   document.body.classList.toggle('in-scene', (screen === 'character' && sceneFor(currentChar)) || screen === 'trophies' || screen === 'hq');
@@ -169,58 +174,91 @@ const noonOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12);
 const prayerNow = () => (state.location ? prayerDay(noonOf(new Date(Date.now() - E.RULES.dayEnds * 3600000)), state.location) : null);
 const dayFor = () => E.today();
 
-// When the game day closes (3 at night) the engine settles every lost day: a shield
-// covers it, or the player pays (gold, the key counter, and a rank after 3 days in a row).
+// Any war fought or under way (the league and the war map show from then on).
+const warsBegun = () => Object.values(state.characters || {}).some((ch) => ch.war || ch.wars > 0);
+const starTxt = (n) => (n ? '⭐'.repeat(n) : '✖');
+
+// When the game day closes (3 at night) every dimension banks its stars into its
+// war; a zero day uses a shield or brings Lucifer's raid; Friday ends the wars.
 function closeDays() {
   const before = state.lastDay;
   const rep = E.closeDays(state);
   if (state.lastDay !== before) scheduleSave();
-  if (!rep.missed.length) return;
-  if (!rep.gold && !rep.dropped.length && !rep.strikes.length) {
-    FX.banner('🛡 الدرع حماك', `فاتك ${rep.shielded > 1 ? rep.shielded + ' أيام' : 'يوم'} — ما خسرت إشي. ضايل معك ${state.shields || 0} 🛡`, '🛡');
-    return;
-  }
-  setTimeout(() => showNightReport(rep), 600);
+  if (!rep.days) return;
+  const big = rep.wars.length || rep.raids.length || rep.fallen.length || rep.dropped.length || rep.restored.length || rep.season || rep.started.length;
+  if (big) { setTimeout(() => showNightReport(rep), 600); return; }
+  const last = rep.stars.filter((x) => x.date === rep.stars.at(-1)?.date);
+  if (last.length) FX.banner('نجوم مبارح', last.map((x) => `${x.name} ${starTxt(x.stars)}`).join(' · '), '⭐');
 }
 function showNightReport(rep) {
+  const lastDate = rep.stars.at(-1)?.date;
+  const last = rep.stars.filter((x) => x.date === lastDate);
+  const raid = rep.raids.reduce((a, x) => ({ gold: a.gold + x.gold, medals: a.medals + x.medals }), { gold: 0, medals: 0 });
+  const li = (ic, b, sm = '') => `<li><span>${ic}</span><div><b>${b}</b>${sm ? `<small>${sm}</small>` : ''}</div></li>`;
   modal(`<div class="keyuse">
     <div class="keyuse-icon">🌙</div>
     <h2>تقرير الليلة</h2>
-    <p class="muted">ما خلصت: ${esc(rep.missed.join('، '))}</p>
+    ${last.length ? `<p class="night-stars">${last.map((x) => `<span>${esc(x.name)} <b>${starTxt(x.stars)}</b></span>`).join('')}</p>` : ''}
     <ul class="keyuse-list">
-      ${rep.shielded ? `<li><span>🛡</span><div><b>الدرع حماك ${rep.shielded > 1 ? rep.shielded + ' أيام' : 'يوم'}</b></div></li>` : ''}
-      ${rep.gold ? `<li><span>🪙</span><div><b>خسرت ${rep.gold} ذهب</b><small>عدّاد المفتاح رجع صفر.</small></div></li>` : ''}
-      ${rep.strikes.map((x) => `<li><span>⚠</span><div><b>${esc(x.name)}: ${x.strikes} من ${E.RULES.dropAfter} أيام خسارة ورا بعض</b><small>${x.strikes === E.RULES.dropAfter - 1 ? 'يوم خسارة كمان وبتنزل رتبة!' : 'يوم كامل بيصفّرها.'}</small></div></li>`).join('')}
-      ${rep.dropped.map((x) => `<li><span>⬇</span><div><b>نزلت رتبة: ${esc(x)}</b><small>العادة الأخيرة رجعت تستناك — مفتاح واحد ورجعتها.</small></div></li>`).join('')}
+      ${rep.started.map((x) => li('⚔', `${esc(x.name)}: بلّشت أول حرب ضد ${esc(x.king)}`, `من السبت للجمعة. ${E.RULES.firstWarWin} نجوم وبتربح مفتاح 🗝.`)).join('')}
+      ${rep.wars.map((w) => w.won
+        ? li('🏆', `${esc(w.name)}: انتصرت على ${esc(w.king)} — ${w.total}/${w.need} ⭐`, `🗝 مفتاح + ${w.loot} 🪙${state.story?.speech ? ' + قطعة بالسفينة 🚢' : ''}`)
+        : li(w.fallen ? '⚫' : '🏳', `${esc(w.name)}: خسرت أمام ${esc(w.king)} — ${w.total}/${w.need} ⭐`, w.key ? 'قرّبت كثير: أخذت نص مفتاح 🗝½.' : w.fallen ? 'الجبهة سقطت بعد 3 أيام صفر.' : 'الأسبوع الجاي حرب جديدة.')).join('')}
+      ${rep.restored.map((x) => li('⬆', `رجعت الرتبة: ${esc(x)}`, 'الفوز رجّعلك رتبتك وعادتها.')).join('')}
+      ${rep.dropped.map((x) => li('⬇', `نزلت رتبة: ${esc(x)}`, `${E.RULES.dropAfter} حروب خسارة ورا بعض. أول حرب بتربحها بترجّعها.`)).join('')}
+      ${rep.fallen.map((x) => li('⚫', `سقطت جبهة ${esc(x)}`, '3 أيام صفر ورا بعض — حرب هالأسبوع خسرانة.')).join('')}
+      ${rep.shielded ? li('🛡', `الدرع حوّل ${rep.shielded > 1 ? rep.shielded + ' أيام صفر' : 'يوم صفر'} لنجمة`, `ضايل معك ${state.shields || 0} 🛡`) : ''}
+      ${raid.gold || raid.medals ? li('😈', `غارة لوسيفر: −${raid.gold} 🪙 و −${raid.medals} 🎖`, 'يوم بصفر نجوم بيفتحله الباب.') : ''}
+      ${rep.season ? li('🏆', `جائزة الموسم — دوري ${esc(rep.season.league)}`, `+${rep.season.gold} 🪙`) : ''}
     </ul>
-    <p class="muted">🛡 الدرع بيحميك بالأيام اللي بتنشغل فيها — اشتريه بـ ${E.RULES.shieldCost} 🪙.</p>
+    ${rep.wars.length ? '<p class="luci-quote">😈 «أنا ما بخاف إنك تخسر حرب… بخاف إنك تكذب على حالك وتسمّيها انتصار.»</p>' : ''}
     <div class="row wrap"><button class="btn primary" id="nr-ok">ماشي</button><button class="btn ghost" id="nr-rules">📜 القوانين</button></div>
   </div>`);
-  $('#nr-ok').onclick = closeModal;
-  $('#nr-rules').onclick = showRules;
+  $('#nr-ok').onclick = () => { closeModal(); if (rulesPending) { rulesPending = false; showRules(); } };
+  $('#nr-rules').onclick = () => { rulesPending = false; showRules(); };
 }
+let rulesPending = false;   // the new rules wait for the night report to close
 
 // The rules of the game, short and plain. Shields are bought here.
 function showRules() {
   const R = E.RULES, full = (state.shields || 0) >= R.maxShields;
+  const li = (ic, b, sm = '') => `<li><span>${ic}</span><div><b>${b}</b>${sm ? `<small>${sm}</small>` : ''}</div></li>`;
   modal(`<div class="keyuse">
     <div class="keyuse-icon">📜</div>
     <h2>قوانين اللعبة</h2>
+    <p class="muted">كل يوم هجوم، كل أسبوع حرب، كل شهر دوري.</p>
     <ul class="keyuse-list rules">
-      <li><span>✔</span><div><b>خلّصت عادة = +${R.reward} 🪙</b><small>مرة وحدة للعادة، حتى لو بدها أكثر من مرة باليوم.</small></div></li>
-      <li><span>🌙</span><div><b>اليوم بيخلص الساعة ${R.dayEnds} بالليل</b><small>مش الساعة 12 — إلك وقت تسجّل حتى لو سهرت.</small></div></li>
-      <li><span>🗝</span><div><b>${R.keyDays} أيام كاملة ورا بعض = مفتاح</b><small>يوم كامل = كل عادات البُعد خلصت. بالمفتاح بتفتح بُعد جديد أو بترقّي رتبة.</small></div></li>
-      <li><span>✘</span><div><b>يوم ما خلّصت فيه = −${R.penalty} 🪙 لكل عادة</b><small>وعدّاد المفتاح بيرجع صفر. سجّلت "ما عملتها" أو نسيت تسجّل — نفس الإشي.</small></div></li>
-      <li><span>⬇</span><div><b>${R.dropAfter} أيام خسارة ورا بعض = بتنزل رتبة</b><small>وبترجعها بمفتاح.</small></div></li>
-      <li><span>🛡</span><div><b>الدرع بيحميك</b><small>نايم، مسافر، مريض؟ إذا خسرت يوم الدرع بينصرف لحاله وما بتخسر إشي. معك ${R.maxShields} بالأكثر.</small></div></li>
-      <li><span>🫡</span><div><b>كل ${KEYS_PER_RANK} مفاتيح بتجمعها = القائد بيترقّى</b></div></li>
-      <li><span>🚢</span><div><b>بعد الخطاب: كل ${E.SHIP.per} أيام كاملة = قطعة بالسفينة</b></div></li>
-      <li><span>🌱</span><div><b>عادة جديدة؟</b><small>ما بتنحسب عليك إلا من بكرا.</small></div></li>
+      ${li('⭐', 'كل يوم كل بُعد بيهاجم ملكه', 'ثلث عاداتك = ⭐ · ثلثينها = ⭐⭐ · كلها = ⭐⭐⭐. العادة اللي بتتكرر بتنحسب بقديش خلصت منها (الصلاة 4 من 5 = 80%).')}
+      ${li('✔', `خلّصت عادة = +${R.reward} 🪙`)}
+      ${li('🌙', `اليوم بيخلص الساعة ${R.dayEnds} بالليل`, 'مش الساعة 12.')}
+      ${li('⚔', 'كل أسبوع حرب: من السبت للجمعة', `كل بُعد ضد ملكه لحاله. ${R.warWin} من 21 نجمة = فوز (أول حرب ${R.firstWarWin}): 🗝 مفتاح + غنيمة ذهب.`)}
+      ${li('½', 'قرّبت؟ نص مفتاح 🗝', 'إذا جبت ثلاث أرباع النجوم المطلوبة. نصّين = مفتاح.')}
+      ${li('😈', 'يوم بصفر نجوم = غارة لوسيفر', `${Math.round(R.raidPct * 100)}% من ذهبك (${R.raidMax} بالأكثر) و${R.raidMedals} 🎖. غارة وحدة باليوم.`)}
+      ${li('🛡', 'الدرع بيحوّل يوم الصفر لنجمة', `مرة بالأسبوع لكل بُعد، وبينصرف لحاله. سعره ${R.shieldCost} 🪙، ومعك ${R.maxShields} بالأكثر.`)}
+      ${li('⚫', `${R.fallAfter} أيام صفر ورا بعض = الجبهة بتسقط`, 'حرب هاد البُعد هالأسبوع بتنحسب خسارة.')}
+      ${li('⬇', `${R.dropAfter} حروب خسارة ورا بعض = البُعد بينزل رتبة`, 'وأول حرب بتربحها بترجّعلك الرتبة وعادتها. ما في نزول تحت برونز 1.')}
+      ${li('🫡', `كل ${KEYS_PER_RANK} مفاتيح = القائد بيترقّى`, 'ورتبة القائد ما بتنزل أبدًا.')}
+      ${li('🎖', 'الأوسمة والدوري', `كل نجمة بالحرب = ${R.medalsPerStar} 🎖. الدوري الأعلى بيزيد غنيمة الحروب، وكل شهر في جائزة موسم.`)}
+      ${li('🌱', 'بُعد جديد بيتدرّب لأول سبت', 'نجوم بس — بلا حرب ولا غارات. والعادة الجديدة بتنحسب من بكرا.')}
+      ${li('🚢', 'بعد الخطاب: كل حرب بتربحها = قطعة بالسفينة')}
+      ${li('🤍', 'الصدق', 'سجّل فشلك بصدق. النجوم ما إلها قيمة إذا ما كانت حقيقية.')}
     </ul>
     <p>معك <b>🛡 ${state.shields || 0}</b> من ${R.maxShields}.</p>
     <button class="btn primary big" id="buy-shield" ${full || state.gold < R.shieldCost ? 'disabled' : ''}>${full ? '🛡 الدروع مليانة' : `🛡 اشتري درع — ${R.shieldCost} 🪙`}</button>
   </div>`);
   $('#buy-shield').onclick = (e) => { const r = act(E.buyShield(state), e.currentTarget); if (r.ok) { FX.toast('🛡 صار معك درع جديد'); showRules(); } };
+}
+
+// The league: medals, the ladder and the season prize.
+function showLeague() {
+  const lg = E.leagueOf(state.medals);
+  modal(`<div class="keyuse">
+    <div class="keyuse-icon">🎖</div>
+    <h2>دوري ${esc(lg.name)}</h2>
+    <p>معك <b>${state.medals || 0} 🎖</b>${lg.next ? ` — باقي <b>${lg.next.min - (state.medals || 0)}</b> لدوري ${esc(lg.next.name)}` : ' — أعلى دوري 🏆'}.</p>
+    <ol class="path">${E.LEAGUES.map((l, i) => `<li class="${i < lg.index ? 'done' : i === lg.index ? 'current' : ''}" style="--rank:${l.color}"><b class="rk">${esc(l.name)}</b><span>${l.min} 🎖 · غنيمة +${i * 10}% · موسم ${100 * (i + 1)} 🪙</span></li>`).join('')}</ol>
+    <p class="muted">كل نجمة بالحرب = ${E.RULES.medalsPerStar} 🎖، وغارة لوسيفر بتاخذ ${E.RULES.raidMedals}. جائزة الموسم بتنزل أول كل شهر.</p>
+  </div>`);
 }
 
 // A task tied to a prayer time can't count before that prayer's time begins.
@@ -295,7 +333,7 @@ function taskRow(charId, t) {
       <strong><span class="t-ic">${taskIcon(charId, t)}</span> ${esc(t.title)}${times > 1 ? ` <small class="muted">× ${times} باليوم</small>` : ''}${E.findCharacter(charId)?.stages ? ` <button class="edit-task" data-edit-task="${charId}:${t.id}" title="عدّل" aria-label="عدّل">✎</button>` : ''}</strong>
       ${dots}
       ${timeInfo}
-      <small class="muted"><bdi>+${t.reward}</bdi> / <bdi>−${t.penalty}</bdi> · 🔥 ${E.currentStreak(p, date)}</small>
+      <small class="muted"><bdi>+${t.reward ?? E.RULES.reward}</bdi> 🪙 · 🔥 ${E.currentStreak(p, date)}</small>
     </div>
     <div class="task-actions">${actions}</div>
   </li>`;
@@ -364,7 +402,7 @@ function openSpot(id) {
     <p>لفتح هذا المكان تحتاج <b>${E.costText(def.cost)}</b>${c ? ` — وستنضم إليك شخصية <b>${c.name}</b>.` : '.'}</p>
     ${st.conditions.length ? `<ul class="conds">${st.conditions.map((x) => `<li class="${x.met ? 'met' : ''}">${x.met ? '✔' : '○'} ${esc(x.label)} <small>(${x.current}/${x.target})</small></li>`).join('')}</ul>` : ''}
     <button class="btn primary" id="open-place" ${st.canBuy ? '' : 'disabled'}>
-      ${st.canBuy ? `افتح المكان — ${E.costText(def.cost)}` : !st.conditionsMet ? 'الشروط غير مكتملة' : def.cost?.keys ? `تحتاج مفتاحًا — أكمل مهامك ${E.RULES.keyDays} أيام ورا بعض` : 'ذهب غير كافٍ'}</button>`);
+      ${st.canBuy ? `افتح المكان — ${E.costText(def.cost)}` : !st.conditionsMet ? 'الشروط غير مكتملة' : def.cost?.keys ? 'تحتاج مفتاحًا — اربح حرب أسبوعية ⚔' : 'ذهب غير كافٍ'}</button>`);
   $('#open-place').onclick = (e) => { const r = act(E.buy(state, 'region', id), e.currentTarget); if (r.ok) closeModal(); };
 }
 
@@ -382,7 +420,6 @@ function rankLadder(c) {
 }
 function progressionPanel(c, ch) {
   if (!c.stages) return '';
-  const live = E.liveProgress(ch, dayFor(c.id));
   const cur = E.totalLevel(ch);
   const ladder = rankLadder(c);
   return `
@@ -396,8 +433,8 @@ function progressionPanel(c, ch) {
         ? `<button class="btn small ${state.keys ? 'primary' : ''}" data-promote="${c.id}" ${state.keys ? '' : 'disabled'} title="يحتاج مفتاحًا">🗝 1 افتح</button>` : '';
       return `<li class="${cls}" style="--rank:${r.color}"><b class="rk">${esc(r.name)}</b><span>${esc(what)}</span>${unlock}</li>`;
     }).join('')}</ol>
-    ${bar(live.keyDays, E.RULES.keyDays, 'أيام كاملة متتالية نحو المفتاح التالي 🗝')}
-    <p class="muted small-text">كل ${E.RULES.keyDays} أيام كاملة ورا بعض تكسب مفتاحًا 🗝، وبالمفتاح ترفع رتبتك أو تفتح منطقة. اليوم الكامل = إنجاز كل مهام اليوم، وأي يوم ناقص يُصفّر العدّاد (إلا إذا معك 🛡).</p>
+    ${warLine(c.id)}
+    <p class="muted small-text">كل أسبوع حرب: ${E.RULES.warWin} نجمة من 21 = مفتاح 🗝، وبالمفتاح ترفع رتبتك أو تفتح بُعد.</p>
   </section>`;
 }
 
@@ -429,7 +466,6 @@ function pickHabit(id, { mode = 'first', taskId = null } = {}) {
   const rankIndex = mode === 'promote' ? E.totalLevel(ch) : mode === 'edit' ? plan.findIndex((r) => r.some((t) => t.id === taskId)) : E.totalLevel(ch) - 1;
   const have = new Set(E.activeTasks(c, ch).map((t) => t.title).filter((t) => t !== editing?.title));
   const ideas = (SUGGEST[id] || []).filter(([, t]) => !have.has(t));
-  const every = rd?.every || E.RULES.keyDays;
   // What is being built: { from: suggestion title | 'own', title, icon, times }
   const cur = editing
     ? { from: ideas.some(([, t]) => t === editing.title) ? editing.title : 'own', title: editing.title, icon: taskIcon(id, editing), times: E.timesOf(editing) }
@@ -486,7 +522,7 @@ function pickHabit(id, { mode = 'first', taskId = null } = {}) {
     sum.innerHTML = t
       ? `<p><span>📅</span>كل يوم: <b>${esc(cur.icon || '⭐')} ${esc(t)}${cur.times > 1 ? ` × ${cur.times}` : ''}</b> — تسجّلها قبل الساعة ${E.RULES.dayEnds} بالليل.</p>
          ${five ? '<p><span>🕌</span>الصلاة خمس صلوات باليوم — لا أقل ولا أكثر.</p>' : ''}
-         <p><span>🗝</span>${every} يوم ورا بعض بدون ما تفوّت = <b>مفتاح</b>${rd?.next && mode !== 'promote' ? ` ← بتترقّى لـ <b>${esc(rd.next.name)}</b> وبتختار عادة جديدة.` : '.'}</p>
+         <p><span>⭐</span>كل يوم بتاخذ نجوم حسب قديش خلّصت، وكل أسبوع حرب: ${E.RULES.warWin} نجمة = <b>مفتاح</b>${rd?.next && mode !== 'promote' ? ` ← بتترقّى لـ <b>${esc(rd.next.name)}</b> وبتختار عادة جديدة.` : '.'}</p>
          ${cur.times > 10 && !five ? '<p class="warn"><span>⚠</span>رقم كبير. ابدأ أقل وزيد مع الوقت.</p>' : ''}`
       : '<p class="muted">اكتب اسم المهمة 👆</p>';
   };
@@ -515,7 +551,7 @@ function pickHabit(id, { mode = 'first', taskId = null } = {}) {
   draw();
 }
 
-// Shown after the first task is set: stay with it RULES.keyDays days for a key, and what a key does.
+// Shown after the first task is set: stars every day, a war every week, and what a key does.
 function showKeyUses(id) {
   const c = E.findCharacter(id), ch = state.characters[id];
   const nextRank = RANKS[E.totalLevel(ch)]?.name || 'الرتبة الجاية';
@@ -523,8 +559,8 @@ function showKeyUses(id) {
   modal(`
     <div class="keyuse">
       <div class="keyuse-icon">🗝</div>
-      <h2>خليك مستمر ${E.RULES.keyDays} أيام عشان تاخذ مفتاح</h2>
-      <p class="muted">كل يوم بتخلّص فيه مهمتك وبتسجّلها بينحسب. إذا فات يوم، العدّاد بيرجع من الصفر — إلا إذا معك درع 🛡.</p>
+      <h2>كل يوم نجوم ⭐ — وكل أسبوع حرب ⚔</h2>
+      <p class="muted">خلّص عادتك = ⭐⭐⭐. أول سبت بتبلّش حربك ضد ${esc(E.road(state, id)?.war?.king || 'الملك')}: اجمع ${E.RULES.firstWarWin} نجوم لحد الجمعة وبتربح مفتاح.</p>
       <h3 class="keyuse-title">استخدامات المفتاح</h3>
       <ul class="keyuse-list">
         <li><span>⬆</span><div><b>ترقية الشخصية لـ${esc(nextRank)}</b><small>عشان تقدر تربّي عادة جديدة فوق عادتك — من عند القائد بمقر القيادة.</small></div></li>
@@ -561,11 +597,12 @@ const placeState = () => {
   const c = E.findCharacter(currentChar), ch = state.characters[c.id];
   return { features: E.regionFeatures(state, c.regionId), level: artLevel(ch), rank: rankState(c, ch) };
 };
-// What the rank tree shows: every rank, the current one, and the 15-day counter.
-const rankState = (c, ch) => c.stages ? {
-  ranks: RANKS, current: E.totalLevel(ch) - 1,
-  keyDays: E.liveProgress(ch, dayFor(c.id)).keyDays, keyEvery: E.RULES.keyDays,
-} : null;
+// What the rank stand shows: every rank, the current one, and this week's war stars.
+const rankState = (c, ch) => {
+  if (!c.stages) return null;
+  const w = E.warView(state, c.id);
+  return { ranks: RANKS, current: E.totalLevel(ch) - 1, keyDays: w && !w.training ? Math.min(w.total, w.need) : 0, keyEvery: w && !w.training ? w.need : E.RULES.firstWarWin };
+};
 
 async function bindPlace() {
   const v = $('#place-view');
@@ -733,18 +770,27 @@ function prayerNowLine() {
   return next ? `<div class="hud-chip">⏳ ${PRAYER_NAMES[next[0]]} ${fmtTime(next[1].start)}</div>` : '';
 }
 
-// The road under today's tasks: days to the next key, and what the key gives.
-function roadLine(id) {
-  const rd = E.road(state, id);
-  if (!rd) return '';
-  const left = Math.max(0, rd.every - rd.keyDays);
+// This week's war of one dimension, in a few lines (under today's tasks and in the panels).
+function warLine(id) {
+  const rd = E.road(state, id), w = rd?.war;
+  if (!w) return '';
+  if (w.training) return `<div class="road">
+    <p>🌱 <b>تدريب</b> — اليوم ${starTxt(w.today)}. أول حرب ضد <b>${esc(w.king)}</b> بتبلّش ${w.inDays === 1 ? 'بكرا السبت' : `بعد ${w.inDays} أيام (السبت)`}.</p></div>`;
+  const pct = Math.min(100, Math.round((w.total / w.need) * 100));
+  const state_ = w.fallen ? '<p class="road-warn">⚫ الجبهة سقطت — حرب هالأسبوع خسرانة. الأسبوع الجاي حرب جديدة.</p>'
+    : w.won ? '<p class="road-ready">🏆 جمعت النجوم! الفوز بيتسجّل يوم الجمعة.</p>'
+    : w.lost ? '<p class="road-warn">🏳 ما بتلحق هالأسبوع — جمّع نجوم لنص المفتاح.</p>'
+    : w.zeroRun === E.RULES.fallAfter - 1 && !w.today ? '<p class="road-warn">⚠ يومين صفر ورا بعض — صفر كمان والجبهة بتسقط!</p>' : '';
   return `<div class="road">
-    <div class="road-bar"><i style="width:${Math.round((rd.keyDays / rd.every) * 100)}%"></i></div>
-    <p>🗝 <b><bdi>${rd.keyDays}/${rd.every}</bdi></b> يوم — ${left ? `باقي ${left} يوم للمفتاح` : 'مفتاح!'}${rd.next ? ` · بعدها <b>${esc(rd.next.name)}</b> + عادة جديدة` : ''}</p>
-    ${rd.strikes ? `<p class="road-warn">⚠ ${rd.strikes} من ${E.RULES.dropAfter} أيام خسارة ورا بعض${rd.strikes === E.RULES.dropAfter - 1 ? ' — يوم كمان وبتنزل رتبة!' : ''}</p>` : ''}
+    <div class="road-bar"><i style="width:${pct}%"></i></div>
+    <p>⚔ ضد <b>${esc(w.king)}</b>: <b><bdi>${w.total}/${w.need}</bdi></b> ⭐ · اليوم ${starTxt(w.today)} · ${w.left ? `باقي ${w.left} ${w.left > 2 ? 'أيام' : 'يوم'}` : 'آخر يوم!'}</p>
+    ${state_}
+    ${w.losses ? `<p class="road-warn">🏳 ${w.losses} من ${E.RULES.dropAfter} حروب خسارة ورا بعض${w.losses === E.RULES.dropAfter - 1 ? ' — خسارة كمان وبتنزل رتبة!' : ''}</p>` : ''}
+    ${w.restore ? '<p class="road-ready">⬆ اربح هالحرب وبترجعلك رتبتك.</p>' : ''}
     ${rd.canPromote ? '<p class="road-ready">🗝 معك مفتاح! روح للقائد بمقر القيادة ← 🎖 رتب الأبعاد وترقّى.</p>' : ''}
   </div>`;
 }
+const roadLine = warLine;
 
 function placeHUD() {
   const c = E.findCharacter(currentChar);
@@ -754,7 +800,6 @@ function placeHUD() {
   const tasks = E.activeTasks(c, ch);
   const date = dayFor(c.id);
   const done = tasks.filter((t) => E.taskComplete(E.taskProgress(state, c.id, t.id), date)).length;
-  const live = c.stages ? E.liveProgress(ch, date) : null;
   const best = Math.max(0, ...tasks.map((t) => E.currentStreak(E.taskProgress(state, c.id, t.id), date)));
   const next = E.nextRegionUpgrade(state, r.id);
   return `
@@ -802,8 +847,8 @@ function showUpgrades() {
 }
 
 
-// Commander's ranks desk (HQ): every opened dimension, its rank, its habits and the
-// 15-day road to the next key. Ranks are granted here: one key = next rank + a new habit.
+// Commander's ranks desk (HQ): every opened dimension, its rank, its habits and its
+// war this week. Ranks are granted here: one key = next rank + a new habit.
 function showDimRanks() {
   const list = CHARACTERS.filter((c) => c.stages && state.characters[c.id]);
   modal(`
@@ -817,7 +862,7 @@ function showDimRanks() {
       return `<li>
         <div class="dr-head"><b>${esc(c.name)}</b><span class="rank" style="--rank:${rd.rank.color}">${esc(rd.rank.name)}</span></div>
         <div class="dr-habits">${tasks.length ? tasks.map((t) => `<span>${taskIcon(c.id, t)} ${esc(t.title)}${E.timesOf(t) > 1 ? ` ×${E.timesOf(t)}` : ''}</span>`).join('') : '<span class="muted">ما في مهام لسا</span>'}</div>
-        ${bar(rd.keyDays, rd.every, '🗝 أيام نحو المفتاح')}
+        ${warLine(c.id)}
         <div class="row wrap">${btn}</div>
       </li>`;
     }).join('')}</ul>`);
@@ -937,17 +982,18 @@ function checkCommander() {
 // The eight dimensions with their war status.
 const warPlaces = () => REGIONS.filter((r) => r.characterId).map((r) => {
   const w = E.warStatus(state, r);
-  return { id: r.id, name: r.name, map: r.map, status: w.id, level: w.level, info: w };
+  return { id: r.id, name: r.name, map: r.map, status: w.id, level: w.level, war: w.war, info: w };
 });
 
 function showWarMap() {
   if ($('#modal').hidden) SND.sfx.paper();
   const places = warPlaces();
   const count = (id) => places.filter((p) => p.status === id).length;
+  const W0 = E.warStart(dayFor()), left = 6 - Math.round((new Date(dayFor()) - new Date(W0)) / 86400000);
   modal(`
     <div class="war-wrap">${warMapSVG(places, E.findRegion('hq').map)}</div>
     <div class="war-legend">${Object.entries(WAR).map(([id, w]) => `<span style="--c:${w.color}">${w.icon} ${w.name} <b>${count(id)}</b></span>`).join('')}</div>
-    <p class="muted small-text">اضغط على أي جبهة لترى حالتها · <kbd>E</kbd> للخروج</p>`);
+    <p class="muted small-text">⚔ حرب الأسبوع بتخلص ${left ? `بعد ${left} ${left > 2 ? 'أيام' : 'يوم'} (الجمعة)` : 'الليلة'} · اضغط على أي جبهة لترى حالتها · <kbd>E</kbd> للخروج</p>`);
   $('#modal').classList.add('wide');
   modalRefresh = showWarMap;
   document.querySelectorAll('.war-map [data-war]').forEach((el) => (el.onclick = () => showFront(el.dataset.war)));
@@ -957,10 +1003,11 @@ function showFront(id) {
   const r = E.findRegion(id), p = warPlaces().find((x) => x.id === id), w = WAR[p.status];
   const c = E.findCharacter(r.characterId), ch = state.characters[c.id];
   const why = {
-    coming: `افتح ${r.name} من المتجر (🗝 ${r.cost?.keys || 0}) لتبدأ هذه الحرب.`,
-    ongoing: `${c.name} يقاتل في المستوى ${p.level} دون هزيمة. حافظ على العدّاد.`,
-    fierce: `هُزمت عند المستوى ${p.info.defeatLevel}، ثم نهضت ووصلت المستوى ${p.level}. القتال شرس — لا تتراجع.`,
-    crushed: `انكسر العدّاد إلى الصفر عند المستوى ${p.info.defeatLevel}. لتعود إلى حرب طاحنة يجب أن تصل المستوى ${p.info.need}.`,
+    coming: ch ? `اختار أول عادة لـ${c.name} عشان يبلّش يتدرّب.` : `افتح ${r.name} (🗝 ${r.cost?.keys || 0}) لتبدأ هذه الحرب ضد ${KINGS[r.id]}.`,
+    training: `بيتدرّب لحد السبت — بعدها أول حرب ضد ${KINGS[r.id]}.`,
+    ahead: `متقدّم على ${KINGS[r.id]} — كمّل هيك وبتربح.`,
+    behind: `${KINGS[r.id]} متقدّم عليك — بدك نجوم أكثر بالأيام الجاية.`,
+    fallen: `الجبهة سقطت بعد ${E.RULES.fallAfter} أيام صفر — حرب هالأسبوع خسرانة.`,
   }[p.status];
   modal(`
     <div class="front" style="--c:${w.color}">
@@ -968,7 +1015,7 @@ function showFront(id) {
       <h2>${r.name}</h2>
       <div class="front-status">${w.name}</div>
       <p>${why}</p>
-      ${ch ? `<div class="meter dark"><span class="meter-label">🗝 أيام نحو المفتاح التالي</span><b><bdi>${E.liveProgress(ch, dayFor(c.id)).keyDays}/${E.RULES.keyDays}</bdi></b><div class="xp"><span style="width:${Math.round((E.liveProgress(ch, dayFor(c.id)).keyDays / E.RULES.keyDays) * 100)}%"></span></div></div>` : ''}
+      ${ch ? warLine(c.id) : ''}
       <div class="row wrap">
         <button class="btn ghost" id="back-map">← الخريطة</button>
         ${ch ? `<button class="btn primary" id="go-front">اذهب إلى الجبهة</button>` : `<button class="btn primary" id="go-front">المتجر</button>`}
@@ -983,20 +1030,20 @@ let reportOpen = false;
 
 // The two prisoners of the dungeon (0..1).
 // Future self: grows with every character level and every opened place, rewarded
-// for fierce wars won back, held back by crushed defeats.
+// for fronts ahead in this week's war, held back by fallen ones.
 // Inner child: grows with self-respect in action — won challenge cups (keeping your
-// word to yourself), recovering from defeats, and the commander's rank.
+// word to yourself), fronts held, and the commander's rank.
 function innerState() {
   const places = warPlaces();
-  const crushed = places.filter((p) => p.status === 'crushed').length;
-  const fierce = places.filter((p) => p.status === 'fierce').length;
+  const fallen = places.filter((p) => p.status === 'fallen').length;
+  const ahead = places.filter((p) => p.status === 'ahead').length;
   const levels = CHARACTERS.reduce((a, c) => { const ch = state.characters[c.id]; return a + (ch ? E.totalLevel(ch) - 1 : 0); }, 0);
-  const opened = places.filter((p) => p.status !== 'coming').length;
+  const opened = places.filter((p) => state.regions[p.id]).length;
   const cups = C.wonCups(state).length;
   const clamp = (x) => Math.max(0, Math.min(1, x));
   return {
-    future: clamp((levels * 2 + (opened - 1) * 3 + fierce * 3 - crushed * 4) / 60),
-    child: clamp((cups * 8 + fierce * 3 + commander(state).rankIndex * 3 - crushed * 5) / 60),
+    future: clamp((levels * 2 + (opened - 1) * 3 + ahead * 3 - fallen * 4) / 60),
+    child: clamp((cups * 8 + ahead * 3 + commander(state).rankIndex * 3 - fallen * 5) / 60),
   };
 }
 function hqHUD() {
@@ -1117,6 +1164,15 @@ function trophyHUD() {
       <div class="cc-meta">💰 ${act.stakeJod} دينار (${usd(act.stakeUsd)}) · مؤمَّن عند <b>${esc(act.partner)}</b></div>
       ${complete ? '<div class="cc-note">✨ اكتملت المدة — بانتظار حكم الطرف الثاني</div>' : ''}
       <button class="store-btn buy" data-judge="${act.id}">⚖️ حكم الطرف الثاني</button>
+    </div>`;
+  } else if (!C.cupsOpen(state)) {
+    const n = state.stats?.activeDays || 0;
+    card = `
+    <div class="challenge-card empty">
+      <b>🔒 الكؤوس بتنفتح بعد ${C.CUP_DAYS} يوم</b>
+      <small>تحدّي المصاري الحقيقية بس للي أثبت التزامه: ${C.CUP_DAYS} يوم فيهم نجمة على الأقل.</small>
+      <div class="xp big"><span style="width:${Math.round((n / C.CUP_DAYS) * 100)}%"></span></div>
+      <small><bdi>${n} / ${C.CUP_DAYS}</bdi></small>
     </div>`;
   } else {
     card = `
@@ -1288,8 +1344,8 @@ function failDialog(title, penalty, onYes) {
   modal(`
     <h2>ما عملتها؟</h2>
     <p><b>${esc(title)}</b></p>
-    <p class="muted">الصدق مع نفسك أول خطوة. لما يخلص اليوم (الساعة ${E.RULES.dayEnds} بالليل):
-      ${sh ? `رح ينصرف <b>درع 🛡</b> (معك ${sh}) وما بتخسر إشي.` : `رح تخسر <b>${penalty} 🪙</b> عن كل عادة ما خلصت، وعدّاد المفتاح بيرجع صفر.`}</p>
+    <p class="muted">الصدق مع نفسك أول خطوة — والنجوم ما إلها قيمة إذا ما كانت حقيقية. هالعادة ما رح تنحسب بنجوم اليوم.
+      ${sh ? `إذا البُعد خلص اليوم بصفر نجوم، الدرع 🛡 بيحوّله لنجمة.` : `إذا البُعد خلص اليوم بصفر نجوم، لوسيفر بيغير عليك.`}</p>
     <div class="row wrap">
       <button class="btn bad" id="pen-yes">ما عملتها</button>
       <button class="btn ghost" id="pen-no">رجوع</button>
@@ -1345,7 +1401,7 @@ function bind() {
   on('data-task-fail', (v) => {
     const [c, t] = v.split(':');
     const def = E.activeTasks(E.findCharacter(c), state.characters[c]).find((x) => x.id === t);
-    failDialog(def.title, def.penalty ?? E.RULES.penalty, () => { const r = act(() => E.reportTask(state, c, t, false, { date: dayFor(c) })); if (r.ok && oasis?.char === c) oasis.scene.react?.('fail'); });
+    failDialog(def.title, 0, () => { const r = act(() => E.reportTask(state, c, t, false, { date: dayFor(c) })); if (r.ok && oasis?.char === c) oasis.scene.react?.('fail'); });
   });
   on('data-cmd-ranks', showCommandRanks);
   on('data-level', (id, el) => act(E.levelUpCharacter(state, id), el));
@@ -1395,11 +1451,12 @@ document.getElementById('keys-box')?.addEventListener('click', () => {
   if (!state) return;
   modal(`
     <h2>🗝 المفاتيح</h2>
-    <p>معك <b>${state.keys}</b> ${state.keys === 1 ? 'مفتاح' : 'مفاتيح'}.</p>
+    <p>معك <b>${state.keys}${state.keyHalves ? ' ونص' : ''}</b> ${state.keys === 1 ? 'مفتاح' : 'مفاتيح'}.</p>
     <p>بالمفتاح <b>تفتح منطقة جديدة</b> على الخريطة، أو <b>ترفع رتبة</b> شخصية (مثل برونز 1 → برونز 2 فتنضاف مهام الرتبة اللي كتبتها).</p>
     <p>وكل ${KEYS_PER_RANK} مفاتيح تجمعها يترقّى القائد تلقائيًا 🫡.</p>
-    <p class="muted">تكسب مفتاحًا كل ${E.RULES.keyDays} أيام كاملة ورا بعض.</p>
+    <p class="muted">بتكسب مفتاح لما تربح حرب الأسبوع (${E.RULES.warWin} نجمة من 21)، ونص مفتاح إذا قرّبت.</p>
     <button class="btn ghost" id="keys-rules">📜 كل القوانين</button>`);
   $('#keys-rules').onclick = showRules;
 });
 document.getElementById('shield-box')?.addEventListener('click', () => { if (state) showRules(); });
+document.getElementById('medals-box')?.addEventListener('click', () => { if (state) showLeague(); });

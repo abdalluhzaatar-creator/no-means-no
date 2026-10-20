@@ -1,21 +1,40 @@
 // Pure game logic. No DOM, no storage. Every action takes the state and
 // returns { ok, events } after mutating state in place; the UI turns events
 // into effects (gold burst, level-up, unlock).
-import { CHARACTERS, REGIONS, RANKS } from './content.js';
+import { CHARACTERS, REGIONS, RANKS, KINGS } from './content.js';
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
-// The rules of the game, in one place.
-//   keyDays    full days in a row (every habit of a dimension done) → one key
-//   dayEnds    the game day closes at 3 at night, not at midnight
-//   shield     🛡 bought with gold; a day you miss uses one and nothing is lost
-//   dropAfter  failed days in a row (no shield) → the dimension drops one rank
-//   reward / penalty: gold for a habit fully done / taken for each habit left undone
-export const RULES = { keyDays: 7, dayEnds: 3, shieldCost: 150, maxShields: 3, dropAfter: 3, reward: 20, penalty: 10 };
+// The rules of the game, in one place (a Clash of Clans–style loop):
+//   every day      each dimension attacks its dark king: ⭐ ⅓ of its habits done, ⭐⭐ ⅔, ⭐⭐⭐ all
+//   dayEnds        the game day closes at 3 at night, not at midnight
+//   every week     Saturday → Friday, each dimension fights its own war: warWin of 21 stars wins a key
+//                  (its first war needs firstWarWin). Until its first Saturday a dimension trains: stars only.
+//   a strong loss  ¾ of the stars needed = half a key
+//   0 stars a day  a shield 🛡 (if one is left) turns it into ⭐ — once a week per dimension;
+//                  otherwise Lucifer raids: one raid a day, raidPct of the gold (at most raidMax) and raidMedals 🎖
+//   fallAfter      zero days in a row in one dimension → its front falls: its war this week is lost
+//   dropAfter      lost wars in a row → that dimension drops one rank (never below Bronze 1);
+//                  its next war won brings the rank back. The commander's rank never drops.
+//   reward         gold for a habit fully done; medalsPerStar 🎖 for every star in a war (they climb the leagues)
+export const RULES = {
+  dayEnds: 3, reward: 20, warWin: 12, firstWarWin: 9, raidPct: 0.05, raidMax: 300, raidMedals: 30, medalsPerStar: 10,
+  fallAfter: 3, dropAfter: 3, shieldCost: 150, maxShields: 3, warLoot: 100, lootPerStar: 10,
+};
+// Leagues by medals 🎖: a higher league adds to every war's loot and to the month's season prize.
+export const LEAGUES = [
+  { name: 'برونز', min: 0, color: '#b0743f' }, { name: 'فضة', min: 600, color: '#9aa4ad' }, { name: 'ذهب', min: 1600, color: '#d4a72c' },
+  { name: 'كريستال', min: 3200, color: '#b77be0' }, { name: 'ماستر', min: 5600, color: '#4c5d6b' }, { name: 'بطل', min: 9000, color: '#c0392b' },
+  { name: 'تيتان', min: 14000, color: '#3a7bd5' }, { name: 'أسطورة', min: 20000, color: '#9b59d0' },
+];
+export const leagueOf = (medals = 0) => { let i = 0; LEAGUES.forEach((l, k) => { if (medals >= l.min) i = k; }); return { ...LEAGUES[i], index: i, next: LEAGUES[i + 1] || null, season: 100 * (i + 1) }; };
 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 export const today = (d = new Date()) => ymd(new Date(+d - RULES.dayEnds * 3600000));
-const nextDay = (date) => { const d = new Date(date); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
+const addDays = (date, n) => { const d = new Date(date + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+const nextDay = (date) => addDays(date, 1);
+const weekday = (date) => new Date(date + 'T00:00:00Z').getUTCDay();   // 5 = Friday, 6 = Saturday
+export const warStart = (date) => addDays(date, -((weekday(date) + 1) % 7));   // the Saturday a war began
 
 const dayDiff = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
 
@@ -80,7 +99,7 @@ export function shopStatus(state, kind, item) {
 }
 
 // ---------- State ----------
-const newCharacter = () => ({ stage: 0, level: 1, perfectStreak: 0, lastPerfectDate: null, keyDays: 0, levelDays: 0, levelReady: false, strikes: 0 });
+const newCharacter = () => ({ stage: 0, level: 1, perfectStreak: 0, lastPerfectDate: null, levelDays: 0, levelReady: false, war: null, wars: 0, losses: 0, zeroRun: 0, restore: null });
 
 export function newState() {
   const s = {
@@ -88,6 +107,8 @@ export function newState() {
     gold: 0,
     keys: 0,
     shields: 1,
+    medals: 0,
+    keyHalves: 0,
     stats: { goldEarned: 0, goldLost: 0, tasksCompleted: 0, tasksFailed: 0, bestStreak: 0, keysEarned: 0 },
     characters: {},
     regions: {},
@@ -126,8 +147,10 @@ export function migrate(raw) {
   }
   s.planV = 2;
   s.story = { ...base.story, ...(raw.story || {}) };
-  // v4: the ship grows from full days (8 a part), not from single tasks (6 a part).
+  // The ship's parts carry over: v3 counted 6 tasks a part, v4 8 full days a part, v5 one war won a part.
   if ((raw.version || 1) < 4) s.story.ship = Math.floor((s.story.ship || 0) / 6) * SHIP.per;
+  else if (raw.version < 5) s.story.ship = Math.floor((s.story.ship || 0) / 8) * SHIP.per;
+  s.medals = Math.max(0, +raw.medals || 0); s.keyHalves = +raw.keyHalves || 0;
   s.shields = Math.max(0, Math.min(RULES.maxShields, raw.shields ?? 1));
   if (s.story.speech && (!raw.story?.phase || raw.story.phase === 'none')) s.story.phase = 'march';
   s.version = SAVE_VERSION;
@@ -228,7 +251,7 @@ export function setRankPlan(s, id, rankIndex, input) {
       return t;
     }
     // `added`: a habit added today is not held against you when this day closes.
-    const t = { id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title, times, reward: RULES.reward, penalty: RULES.penalty, added: today() };
+    const t = { id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title, times, reward: RULES.reward, added: today() };
     if (icon) t.icon = icon;
     // A once-a-day line naming one of the five prayers is tied to that prayer's time (once per plan).
     const pr = times === 1 ? prayerIn(title) : undefined;
@@ -285,13 +308,13 @@ export function promoteWith(s, id, habit) {
   return levelUpCharacter(s, id);
 }
 
-// Where a character stands on the key → rank road, in one object for the UI.
+// Where a character stands: rank, keys, and this week's war, in one object for the UI.
 export function road(s, id, date = today()) {
   const def = findCharacter(id), ch = s.characters[id];
   if (!def?.stages || !ch) return null;
   const n = totalLevel(ch), next = RANKS[n];
   return {
-    rank: RANKS[n - 1], next, keyDays: liveProgress(ch, date).keyDays, every: RULES.keyDays, strikes: ch.strikes || 0,
+    rank: RANKS[n - 1], next, war: warView(s, id, date),
     keys: s.keys || 0, canPromote: !!next && (s.keys || 0) > 0 && activeTasks(def, ch).length > 0, habits: activeTasks(def, ch).length,
   };
 }
@@ -309,18 +332,44 @@ export function nextLevel(def, ch) {
   return { stage: Math.floor(n / 5), level: (n % 5) + 1, adds: planOf(def, ch)[n] };
 }
 
-// Streak values shown to the player: they reset silently after a skipped day.
+// Full days in a row (shown as a streak; it no longer gives keys — wars do).
 export function liveProgress(ch, date = today()) {
   const alive = ch.lastPerfectDate && dayDiff(ch.lastPerfectDate, date) <= 1;
-  return alive
-    ? { perfectStreak: ch.perfectStreak, keyDays: ch.keyDays, levelDays: ch.levelDays }
-    : { perfectStreak: 0, keyDays: 0, levelDays: 0 };
+  return { perfectStreak: alive ? ch.perfectStreak : 0 };
 }
 
-function breakChain(ch) {
-  ch.perfectStreak = 0;
-  ch.keyDays = 0;
-  ch.levelDays = 0;
+// ---------- Stars and the weekly war ----------
+// How much of a dimension's day is done (0..1): every habit counts by its share of
+// times (prayer 4/5 = 0.8). Habits added that day don't count. null = nothing to fight with.
+export function dayShare(s, id, date = today()) {
+  const def = findCharacter(id), ch = s.characters[id];
+  if (!def || !ch) return null;
+  const list = activeTasks(def, ch).filter((t) => t.added !== date);
+  if (!list.length) return null;
+  return list.reduce((a, t) => a + Math.min(1, countToday(taskProgress(s, id, t.id), date) / timesOf(t)), 0) / list.length;
+}
+export const starsOf = (share) => (share == null ? null : share >= 0.999 ? 3 : share >= 0.666 ? 2 : share >= 0.333 ? 1 : 0);
+export const starsToday = (s, id, date = today()) => starsOf(dayShare(s, id, date));
+
+// A war always runs Saturday → Friday.
+const newWar = (ch, date) => ({ start: warStart(date), stars: [], first: !(ch.wars > 0), fallen: false, shield: false });
+export const warNeed = (w) => (w.first ? RULES.firstWarWin : RULES.warWin);
+
+// This week's war for the UI: stars banked, today's live stars, what is needed, days left.
+// training: the dimension's first war starts on the coming Saturday (inDays away).
+export function warView(s, id, date = today()) {
+  const ch = s.characters[id];
+  const share = dayShare(s, id, date);
+  if (!ch || share == null) return null;
+  const king = KINGS[findCharacter(id).regionId], now = starsOf(share);
+  // On Saturday the new war is already on (it is stored when Saturday closes).
+  const w = ch.war && ch.war.start === warStart(date) ? ch.war : weekday(date) === 6 ? newWar(ch, date) : null;
+  if (!w) return { training: true, today: now, inDays: 7 - dayDiff(warStart(date), date), king, losses: ch.losses || 0, restore: ch.restore };
+  const banked = w.stars.reduce((a, x) => a + (x || 0), 0), need = warNeed(w);
+  const day = dayDiff(w.start, date), left = 6 - day;   // days after today
+  const pace = Math.ceil((need * (day + 1)) / 7);
+  return { stars: banked, today: now, total: banked + now, need, left, day, days: w.stars, max: banked + now + left * 3, fallen: w.fallen, zeroRun: ch.zeroRun || 0,
+    shieldUsed: w.shield, losses: ch.losses || 0, restore: ch.restore, ahead: !w.fallen && banked + now >= pace, won: banked + now >= need && !w.fallen, lost: w.fallen || banked + now + left * 3 < need, king };
 }
 
 // Called after every task report: if all of today's tasks are done, count a perfect day.
@@ -328,23 +377,11 @@ function checkPerfectDay(s, def, ch, date, events) {
   if (ch.lastPerfectDate === date) return;
   const list = activeTasks(def, ch);
   if (!list.length || !list.every((t) => taskComplete(s.tasks[`${def.id}.${t.id}`], date))) return;
-  if (!ch.lastPerfectDate || dayDiff(ch.lastPerfectDate, date) > 1) breakChain(ch);
+  if (!ch.lastPerfectDate || dayDiff(ch.lastPerfectDate, date) > 1) ch.perfectStreak = 0;
   ch.lastPerfectDate = date;
   ch.perfectStreak++;
-  ch.strikes = 0;
-  if (s.story?.speech) s.story.ship = (s.story.ship || 0) + 1;   // every full day adds to the warriors' ship
   s.stats.bestStreak = Math.max(s.stats.bestStreak, ch.perfectStreak);
   events.push({ type: 'perfectDay', streak: ch.perfectStreak });
-  {
-    ch.keyDays++;
-    if (ch.keyDays >= RULES.keyDays) {
-      ch.keyDays = 0;
-      s.keys++;
-      s.stats.keysEarned++;
-      addLog(s, `🗝 مفتاح جديد من ${def.name}`);
-      events.push({ type: 'key', from: def.name });
-    }
-  }
 }
 
 // Raise to the next rank: costs one key.
@@ -413,7 +450,9 @@ export function reportTask(s, charId, taskId, success, { date = today() } = {}) 
     } else events.push({ type: 'step', count, times });
   } else {
     p.streak = 0;
-    addLog(s, `✘ ${task.title} — بتنحسب عليك لما يخلص اليوم`);
+    // Honesty is its own reward: a symbolic count, never anything that can be spent.
+    s.stats.honest = (s.stats.honest || 0) + 1;
+    addLog(s, `✘ ${task.title} — سجّلتها بصدق`);
     events.push({ type: 'failMark' });
   }
   p.lastDate = date;
@@ -440,8 +479,6 @@ export function revokeTask(s, charId, taskId, date) {
   s.stats.tasksCompleted = Math.max(0, s.stats.tasksCompleted - 1);
   if (ch.lastPerfectDate === date) {
     ch.perfectStreak = Math.max(0, ch.perfectStreak - 1);
-    ch.keyDays = Math.max(0, ch.keyDays - 1);
-    if (!ch.levelReady) ch.levelDays = Math.max(0, ch.levelDays - 1);
     const prev = new Date(date);
     prev.setUTCDate(prev.getUTCDate() - 1);
     ch.lastPerfectDate = ch.perfectStreak ? prev.toISOString().slice(0, 10) : null;
@@ -451,70 +488,107 @@ export function revokeTask(s, charId, taskId, date) {
 }
 
 // ---------- End of day ----------
-// When the game day closes (3 at night), every dimension whose habits were not all
-// done that day has lost the day — including days the game was not opened:
-//   • with a shield 🛡: the shield is used and nothing is lost (one shield covers the whole day);
-//   • without: −penalty gold for each undone habit, the key counter restarts, and after
-//     RULES.dropAfter lost days in a row the dimension drops one rank.
+// When the game day closes (3 at night) every dimension banks its stars into this
+// week's war — days the game was not opened count as 0 stars. A 0-star day uses a
+// shield or brings Lucifer's raid (one a day). Friday's close ends the war.
 // Returns what happened, for the morning report.
 export function closeDays(s, now = today()) {
   const last = s.lastDay;
   s.lastDay = now;
-  const rep = { days: 0, missed: [], shielded: 0, gold: 0, dropped: [], strikes: [] };
+  const rep = { days: 0, missed: [], stars: [], raids: [], shielded: 0, wars: [], started: [], dropped: [], restored: [], fallen: [], season: null };
   if (!last || last >= now) return rep;
   let d = last;
   for (let n = 0; d < now && n < 60; n++, d = nextDay(d)) {
     rep.days++;
-    const lost = [];
+    const month = d.slice(0, 7);
+    if (!s.season) s.season = month;
+    else if (s.season !== month) {   // a new month: the season prize for the league reached
+      const lg = leagueOf(s.medals);
+      s.gold += lg.season; s.stats.goldEarned += lg.season; s.season = month;
+      addLog(s, `🏆 جائزة الموسم — دوري ${lg.name}`, lg.season);
+      rep.season = { league: lg.name, gold: lg.season };
+    }
+    let raid = false, active = false;
     for (const def of CHARACTERS) {
       const ch = s.characters[def.id];
-      if (!ch) continue;
-      const undone = activeTasks(def, ch).filter((t) => {
-        const p = taskProgress(s, def.id, t.id);
-        return t.added !== d && !taskComplete(p, d) && !(p.lastDate && p.lastDate > d);
-      });
-      if (undone.length) lost.push({ def, ch, undone });
+      const share = ch && dayShare(s, def.id, d);
+      if (share == null) continue;
+      // Habits left undone that day are marked missed (for the task list).
+      for (const t of activeTasks(def, ch)) {
+        const k = taskKey(def.id, t.id), p = taskProgress(s, def.id, t.id);
+        if (t.added === d || taskComplete(p, d) || (p.lastDate && p.lastDate > d)) continue;
+        if (!(p.lastDate === d && p.lastResult === 'fail')) s.stats.tasksFailed++;
+        s.tasks[k] = { ...p, lastDate: d, lastResult: 'fail', count: p.lastDate === d ? p.count || 0 : 0, streak: 0 };
+        if (!rep.missed.includes(t.title)) rep.missed.push(t.title);
+      }
+      let st = starsOf(share);
+      if (st > 0) active = true;
+      if (ch.war && ch.war.start !== warStart(d)) { settleWar(s, def, ch, rep); ch.war = null; }   // a war left open by an absence
+      if (!ch.war && weekday(d) === 6) { ch.war = newWar(ch, d); if (ch.war.first) rep.started.push({ name: def.name, king: KINGS[def.regionId] }); }   // wars begin on Saturday
+      if (!ch.war) { rep.stars.push({ name: def.name, date: d, stars: st, training: true }); continue; }
+      if (st === 0 && !ch.war.shield && (s.shields || 0) > 0) {   // the shield: a zero day becomes ⭐ (once a week per dimension)
+        s.shields--; ch.war.shield = true; st = 1; rep.shielded++;
+        addLog(s, `🛡 الدرع حمى ${def.name} (${d})`);
+      }
+      ch.war.stars[dayDiff(ch.war.start, d)] = st;
+      s.medals = (s.medals || 0) + st * RULES.medalsPerStar;
+      rep.stars.push({ name: def.name, date: d, stars: st });
+      if (st === 0) {
+        raid = true;
+        ch.zeroRun = (ch.zeroRun || 0) + 1;
+        if (ch.zeroRun >= RULES.fallAfter && !ch.war.fallen) { ch.war.fallen = true; rep.fallen.push(def.name); addLog(s, `⚫ سقطت جبهة ${def.name}`); }
+      } else ch.zeroRun = 0;
+      if (weekday(d) === 5) { settleWar(s, def, ch, rep); ch.war = null; }   // Friday: the war ends
     }
-    if (!lost.length) continue;
-    for (const { def, undone } of lost) for (const t of undone) {
-      const k = taskKey(def.id, t.id), p = { ...taskProgress(s, def.id, t.id) };
-      if (!(p.lastDate === d && p.lastResult === 'fail')) s.stats.tasksFailed++;
-      s.tasks[k] = { ...p, lastDate: d, lastResult: 'fail', count: p.lastDate === d ? p.count || 0 : 0, streak: 0 };
-      if (!rep.missed.includes(t.title)) rep.missed.push(t.title);
-    }
-    if ((s.shields || 0) > 0) {
-      s.shields--;
-      rep.shielded++;
-      // The chain carries on over a shielded day (it counts as neither won nor lost).
-      for (const { ch } of lost) if (ch.lastPerfectDate && dayDiff(ch.lastPerfectDate, d) <= 1) ch.lastPerfectDate = d;
-      addLog(s, `🛡 الدرع حماك يوم ${d}`);
-      continue;
-    }
-    for (const { def, ch, undone } of lost) {
-      const fine = Math.min(s.gold, undone.reduce((a, t) => a + (t.penalty ?? RULES.penalty), 0));
-      s.gold -= fine; s.stats.goldLost += fine; rep.gold += fine;
-      addLog(s, `✘ ${def.name}: ${undone.length} مهام ما خلصت`, -fine);
-      breakChain(ch);
-      ch.defeat = { level: totalLevel(ch), date: d };   // a crushing defeat at this level (see warStatus)
-      ch.strikes = (ch.strikes || 0) + 1;
-      rep.strikes = rep.strikes.filter((x) => x.name !== def.name);   // the latest count per dimension
-      if (ch.strikes >= RULES.dropAfter) {
-        ch.strikes = 0;
-        if (demote(ch)) { rep.dropped.push(`${def.name} ← ${rankName(ch)}`); addLog(s, `⬇ ${def.name} نزل لـ ${rankName(ch)}`); }
-      } else rep.strikes.push({ name: def.name, strikes: ch.strikes });
+    if (active) s.stats.activeDays = (s.stats.activeDays || 0) + 1;   // days with at least one star (cups open at CUP_DAYS)
+    if (raid) {   // one raid a day, however many fronts had nothing
+      const gold = Math.min(RULES.raidMax, Math.floor(s.gold * RULES.raidPct)), medals = Math.min(s.medals, RULES.raidMedals);
+      s.gold -= gold; s.stats.goldLost += gold; s.medals -= medals;
+      rep.raids.push({ date: d, gold, medals });
+      addLog(s, `😈 غارة لوسيفر`, -gold);
     }
   }
   return rep;
 }
 
-// One rank down (never below Bronze 1). Its habit stays written, and comes back with the next key.
-function demote(ch) {
-  const n = totalLevel(ch) - 1;
-  if (n < 1) return false;
-  ch.stage = Math.floor((n - 1) / 5); ch.level = ((n - 1) % 5) + 1;
-  ch.defeat = null;
-  return true;
+// The end of a dimension's war: win → a key, loot and a ship part; lose → maybe half a key,
+// and after RULES.dropAfter lost wars in a row the dimension drops a rank (the next win brings it back).
+function settleWar(s, def, ch, rep) {
+  const w = ch.war, total = w.stars.reduce((a, x) => a + (x || 0), 0), need = warNeed(w);
+  const won = !w.fallen && total >= need;
+  ch.wars = (ch.wars || 0) + 1;
+  const res = { name: def.name, king: KINGS[def.regionId], won, total, need, key: 0, loot: 0, fallen: w.fallen };
+  if (won) {
+    giveKeys(s, 2);
+    res.key = 1;
+    res.loot = Math.round((RULES.warLoot + RULES.lootPerStar * total) * (1 + leagueOf(s.medals).index * 0.1));
+    s.gold += res.loot; s.stats.goldEarned += res.loot;
+    if (s.story?.speech) s.story.ship = (s.story.ship || 0) + 1;   // every war won adds a part to the warriors' ship
+    ch.losses = 0;
+    if (ch.restore && totalLevel(ch) < ch.restore) { setLevel(ch, ch.restore); rep.restored.push(`${def.name} ← ${rankName(ch)}`); }
+    ch.restore = null;
+    addLog(s, `⚔ فوز على ${res.king}: ${total}/${need} ⭐`, res.loot);
+  } else {
+    if (!w.fallen && total >= Math.ceil(need * 0.75)) { giveKeys(s, 1); res.key = 0.5; }
+    ch.losses = (ch.losses || 0) + 1;
+    addLog(s, `⚔ خسارة أمام ${res.king}: ${total}/${need} ⭐`);
+    if (ch.losses >= RULES.dropAfter) {
+      ch.losses = 0;
+      const was = totalLevel(ch);
+      if (was > 1) { setLevel(ch, was - 1); ch.restore = Math.max(ch.restore || 0, was); rep.dropped.push(`${def.name} ← ${rankName(ch)}`); addLog(s, `⬇ ${def.name} نزل لـ ${rankName(ch)}`); }
+    }
+  }
+  rep.wars.push(res);
 }
+
+// Keys come in halves: two halves make a key.
+function giveKeys(s, halves) {
+  s.keyHalves = (s.keyHalves || 0) + halves;
+  while (s.keyHalves >= 2) { s.keyHalves -= 2; s.keys++; s.stats.keysEarned++; }
+}
+
+// Set the overall level (1 = Bronze 1). A rank lost keeps its habit written, and it comes back with it.
+function setLevel(ch, n) { ch.stage = Math.floor((n - 1) / 5); ch.level = ((n - 1) % 5) + 1; }
 
 // ---------- Shields ----------
 export function buyShield(s) {
@@ -600,8 +674,8 @@ export function refillSandbox(s) { if (s.sandbox) { s.keys = Math.max(s.keys, SA
 export function leaveSandbox(s) { return s.sandbox ? migrate(JSON.parse(s.sandbox.backup)) : s; }
 
 // ---------- The story: the speech, Lucifer locked away, the ship ----------
-// The ship to the Island of Leaders grows one part every SHIP.per full days (any dimension) after the speech.
-export const SHIP = { parts: 12, per: 8 };
+// The ship to the Island of Leaders grows one part for every war won after the speech.
+export const SHIP = { parts: 12, per: 1 };
 export const shipStage = (s) => Math.min(SHIP.parts, Math.floor((s.story?.ship || 0) / SHIP.per));
 // Story phases: none → march (walk the warriors down to the shore) → back (after the
 // spyglass, walk them home) → done (the cage is found locked and empty: Lucifer escaped).
@@ -634,16 +708,14 @@ export const totalLevel = (ch) => (ch.stage || 0) * 5 + (ch.level || 1);
 export const rankName = (ch) => RANKS[totalLevel(ch) - 1]?.name || `مستوى ${totalLevel(ch)}`;
 export const rankColor = (ch) => RANKS[totalLevel(ch) - 1]?.color || '#3f7d6e';
 
-// coming  — the place is not opened yet (حرب قادمة)
-// ongoing — opened, no defeat recorded (حرب مستمرة)
-// crushed — a missed task zeroed the counter at level L, and the character is still at ≤ L (هزيمة ساحقة)
-// fierce  — recovered from a defeat by reaching level L + 1 (حرب طاحنة)
-export function warStatus(s, region) {
+// The front of each dimension on the war map:
+//   coming — not opened yet / no habits · training — its first war starts on Saturday
+//   ahead — on pace to win this week's war · behind — behind the pace
+//   fallen — 3 zero days in a row, this week's war is lost
+export function warStatus(s, region, date = today()) {
   if (!s.regions[region.id]) return { id: 'coming' };
   const ch = region.characterId && s.characters[region.characterId];
-  if (!ch) return { id: 'coming' };
-  const lvl = totalLevel(ch);
-  if (!ch.defeat) return { id: 'ongoing', level: lvl };
-  if (lvl <= ch.defeat.level) return { id: 'crushed', level: lvl, defeatLevel: ch.defeat.level, need: ch.defeat.level + 1 };
-  return { id: 'fierce', level: lvl, defeatLevel: ch.defeat.level };
+  const v = ch && warView(s, region.characterId, date);
+  if (!v) return { id: 'coming' };
+  return { id: v.training ? 'training' : v.fallen ? 'fallen' : v.ahead ? 'ahead' : 'behind', level: totalLevel(ch), war: v };
 }

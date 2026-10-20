@@ -2,6 +2,10 @@
 // Money here is real money the player tracks by hand in dollars (state.cups.wallet).
 import { CUPS, CHANNEL_UNLOCK_CUP, JOD_TO_USD, REGIONS } from './content.js';
 
+// Real money only after a proven start: this many days with at least one star, and one cup at a time.
+export const CUP_DAYS = 30;
+export const cupsOpen = (s) => (s.stats?.activeDays || 0) >= CUP_DAYS;
+
 export const findCup = (id) => CUPS.find((c) => c.id === id);
 export const stakeJod = (cup) => cup.days;                       // rule 7: dinars = days
 export const stakeUsd = (cup) => Math.round(cup.days * JOD_TO_USD * 100) / 100;
@@ -60,6 +64,8 @@ export function startChallenge(s, { channel, cupId, partner, pin, now = Date.now
   const c = ensure(s);
   const cup = findCup(cupId);
   channel = (channel || '').trim(); partner = (partner || '').trim(); pin = String(pin || '').trim();
+  if (!cupsOpen(s)) return fail(`الكؤوس بتنفتح بعد ${CUP_DAYS} يوم فيهم نجمة على الأقل (معك ${s.stats?.activeDays || 0})`);
+  if (active(s).length) return fail('في كأس شغّالة — كأس وحدة بس بنفس الوقت');
   if (!cup) return fail('اختر كأسًا');
   if (!channel) return fail('اختر المكان');
   if (!partner) return fail('اكتب اسم الطرف الثاني');
@@ -77,7 +83,7 @@ export function startChallenge(s, { channel, cupId, partner, pin, now = Date.now
 }
 
 // Rule 4: only the second party (who knows the PIN) decides. Win → stake returns; loss → it's theirs.
-// Winning a cup pays one key per 15 days of the cup (on top of the keys the days themselves earn).
+// Winning a cup pays one key per 15 days of the cup (on top of the keys the wars earn).
 export const keyReward = (cup) => Math.floor(cup.days / 15);
 
 export function judge(s, id, pin, won, now = Date.now()) {

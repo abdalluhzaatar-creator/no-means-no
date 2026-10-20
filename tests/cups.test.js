@@ -4,7 +4,7 @@ import * as C from '../js/cups.js';
 let passed = 0;
 const t = (name, fn) => { fn(); passed++; console.log('✓', name); };
 const DAY = 86400000;
-const fresh = () => { const s = { keys: 0, regions: { sanctuary: { level: 1 }, library: { level: 1 } } }; C.ensure(s); return s; };
+const fresh = () => { const s = { keys: 0, stats: { activeDays: C.CUP_DAYS }, regions: { sanctuary: { level: 1 }, library: { level: 1 } } }; C.ensure(s); return s; };
 
 t('stake is days in dinars, deducted from the wallet in dollars', () => {
   const s = fresh();
@@ -20,6 +20,16 @@ t('cannot start without enough money or with a bad PIN', () => {
   assert.equal(C.startChallenge(s, { channel: 'sanctuary', cupId: 'stone', partner: 'a', pin: '1234' }).ok, false);
   C.adjustWallet(s, 100);
   assert.equal(C.startChallenge(s, { channel: 'sanctuary', cupId: 'stone', partner: 'a', pin: '12' }).ok, false);
+});
+
+t('cups open only after 30 days with a star, and one cup runs at a time', () => {
+  const s = fresh(); C.adjustWallet(s, 500); s.stats.activeDays = 29;
+  assert.equal(C.startChallenge(s, { channel: 'sanctuary', cupId: 'stone', partner: 'a', pin: '1111', now: 0 }).ok, false);
+  s.stats.activeDays = 30;
+  assert.ok(C.startChallenge(s, { channel: 'sanctuary', cupId: 'stone', partner: 'a', pin: '1111', now: 0 }).ok);
+  s.cups.challenges[0].channel = 'sanctuary';
+  assert.equal(C.canOpenChannel(s, 'sanctuary').ok, true);
+  assert.equal(C.startChallenge(s, { channel: 'library', cupId: 'stone', partner: 'a', pin: '1111', now: 1 }).ok, false, 'one cup at a time');
 });
 
 t('only one active challenge per channel', () => {

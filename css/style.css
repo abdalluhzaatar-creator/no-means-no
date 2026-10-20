@@ -683,3 +683,8 @@ body.cine .hud, body.cine .move-pad, body.cine .door-btn, body.cine .cell-captio
 .shield-box { cursor: pointer; }
 .road-warn { margin: 4px 0 0; color: #ffb4a8; font-weight: 700; font-size: .9em; }
 .keyuse-list.rules li small { display: block; }
+.medals-box { cursor: pointer; border-color: var(--lg, #b0743f); color: var(--lg, #b0743f); }
+.night-stars { display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: center; margin: 4px 0 10px; }
+.night-stars span { white-space: nowrap; }
+.luci-quote { margin: 10px 0 4px; padding: 8px 12px; border-radius: 10px; background: #2a1016; color: #ffb4a8; font-size: .92em; }
+@media (max-width: 480px) { .medals-box .lg-name { display: none; } }
