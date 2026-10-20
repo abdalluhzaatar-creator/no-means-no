@@ -41,8 +41,8 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     let [x, z] = toWorld(s.def.map);
     // Headquarters stands off the coast on its own islet (as on the war map), joined by a bridge.
     if (s.def.kind === 'hq') { const f = HQ_SEA_D / Math.hypot((x / SIZE) * 1.1, (z / DEPTH) * 1.25); x *= f; z *= f; }
-    // The Island of Leaders lies far out at sea, on the side opposite the castle.
-    if (s.def.kind === 'leaders') { const hq = spots.find((o) => o.def.kind === 'hq'); const [hx, hz] = hq ? toWorld(hq.def.map) : [-1, 1]; const l = Math.hypot(hx, hz) || 1; x = (-hx / l) * LEADERS.dist; z = (-hz / l) * LEADERS.dist; }
+    // The Island of Leaders lies far out at sea, in front of the castle.
+    if (s.def.kind === 'leaders') { const hq = spots.find((o) => o.def.kind === 'hq'); const [hx, hz] = hq ? toWorld(hq.def.map) : [-1, 1]; const l = Math.hypot(hx, hz) || 1; x = (hx / l) * LEADERS.dist; z = (hz / l) * LEADERS.dist; }   // out at sea beyond the castle, facing it
     return { ...s, x, z };
   });
   const owned = shown.filter((s) => s.vis === 'owned');
@@ -166,15 +166,18 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   let leadersTop = 0;
   if (leadersSpot) {
     const ang = Math.atan2(leadersSpot.x, leadersSpot.z);
+    // Broad lowlands and plains, several mountain ranges, hills and valleys; a plateau for the citadel.
+    let isd = 77; const ir = () => ((isd = (isd * 16807) % 2147483647) / 2147483647);
+    const peaks = Array.from({ length: 9 }, () => { const a = ir() * Math.PI * 2, r = 0.25 + ir() * 0.32; return { x: Math.cos(a) * r * LEADERS.rx, z: Math.sin(a) * r * LEADERS.rz, h: 18 + ir() * 26, w: 22 + ir() * 30 }; });
     const hIsl = (lx, lz) => {
       const d = Math.hypot(lx / LEADERS.rx, lz / LEADERS.rz);
-      let h = noise(lx * 0.006 + 40, lz * 0.006 - 20) * 34 + 12;
-      const ridge = 1 - Math.abs(noise(lx * 0.004 - 9, lz * 0.004 + 3, 4));
-      h += Math.pow(ridge, 4) * 70 * Math.max(0, 0.8 - d);
-      h += 55 * Math.exp(-d * d * 7);                                   // a central mountain
-      h -= Math.pow(Math.max(0, d - 0.62), 1.5) * 420;
-      const k = Math.exp(-(lx * lx + lz * lz) / 900);                  // a plateau for the citadel
-      h = h * (1 - k) + 52 * k;
+      let h = 7 + noise(lx * 0.008 + 40, lz * 0.008 - 20) * 8 + noise(lx * 0.03, lz * 0.03, 2) * 2.5;   // rolling lowlands
+      for (const p of peaks) { const q = Math.hypot(lx - p.x, lz - p.z) / p.w; h += p.h * Math.exp(-q * q) * (0.75 + 0.25 * noise(lx * 0.05, lz * 0.05, 2)); }
+      const ridge = 1 - Math.abs(noise(lx * 0.006 - 9, lz * 0.006 + 3, 4));
+      h += Math.pow(ridge, 6) * 16 * Math.max(0, 0.7 - d);
+      h -= Math.pow(Math.max(0, d - 0.6), 1.5) * 420;
+      const k = Math.exp(-(lx * lx + lz * lz) / 1600);            // a gentle rise for the citadel
+      h = h * (1 - k) + 14 * k;
       if (h < 1.5) h = h - (1.5 - h) * 2 - 1.5;
       return h;
     };
@@ -186,9 +189,9 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
       const v = noise(lx * 0.05, lz * 0.05, 2) * 0.5 + 0.5;
       if (h < SEA + 1.2) c.copy(seabed).lerp(sand, THREE.MathUtils.clamp((h + 6) / 7, 0, 1));
       else if (h < 5) c.copy(sand).lerp(grass, (h - 1.2) / 3.8);
-      else if (h < 30) c.copy(grass).lerp(dark, v);
-      else if (h < 60) c.copy(dark).lerp(rock, (h - 30) / 30);
-      else c.copy(rock).lerp(gold, THREE.MathUtils.clamp((h - 60) / 20, 0, 0.6));
+      else if (h < 18) c.copy(grass).lerp(dark, v * 0.6);
+      else if (h < 32) c.copy(dark).lerp(rock, (h - 18) / 14);
+      else c.copy(rock).lerp(snow, THREE.MathUtils.clamp((h - 36) / 10, 0, 0.8));
       icol.set([c.r, c.g, c.b], i * 3);
     }
     ig.setAttribute('color', new THREE.BufferAttribute(icol, 3)); ig.computeVertexNormals();
@@ -201,7 +204,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     let n = 0;
     for (let i = 0; i < 4000 && n < 900; i++) {
       const lx = (Math.random() - 0.5) * LEADERS.rx * 1.8, lz = (Math.random() - 0.5) * LEADERS.rz * 1.8, h = hIsl(lx, lz);
-      if (h < 4 || h > 55 || Math.hypot(lx, lz) < 40) continue;
+      if (h < 4 || h > 30 || Math.hypot(lx, lz) < 40) continue;
       const wx = leadersSpot.x + lx * Math.cos(ang) + lz * Math.sin(ang), wz = leadersSpot.z - lx * Math.sin(ang) + lz * Math.cos(ang);
       q4.setFromAxisAngle(up, Math.random() * 6); const sc = 0.7 + Math.random() * 0.8;
       m4.compose(new THREE.Vector3(wx, h - 0.5, wz), q4, new THREE.Vector3(sc, sc, sc)); forest.setMatrixAt(n++, m4);

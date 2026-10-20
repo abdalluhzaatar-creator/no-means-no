@@ -111,34 +111,53 @@ const WEATHER = {
   fog: { dim: 0.45, rain: 0, snow: 0, fog: 1 }, rain: { dim: 0.6, rain: 1, snow: 0, fog: 0.35 }, storm: { dim: 0.75, rain: 1.4, snow: 0, fog: 0.45 }, snow: { dim: 0.4, rain: 0, snow: 1, fog: 0.4 },
 };
 
-// Armour, weapon and cape for a warrior (in the model's local units).
-export function arm(hero, pal, ghost) {
-  const metal = std(ghost ? 0xcfe6ff : 0xd8c27a, { metalness: 0.9, roughness: 0.25 });
+// Armour, weapon and cape for a warrior (in the model's local units). The armour
+// grows with his rank (tier 0 = Bronze 1 … 11 = Platinum 3):
+//   Bronze: bronze helm and shoulders · Silver: + a breastplate, longer cape ·
+//   Gold: + a gold plume, gauntlets, trimmed cape · Platinum: glowing armour and a halo.
+// Within a metal, 1–3 stars on the helm and shield mark the level.
+const TIER_METAL = [0xb87a42, 0xd6dce4, 0xf0c04a, 0xa8f0f8];
+export function arm(hero, pal, ghost, tier = 0) {
+  const grade = Math.min(3, Math.floor(tier / 3)), stars = (tier % 3) + 1;
+  const metal = std(ghost ? 0xcfe6ff : TIER_METAL[grade], { metalness: 0.9, roughness: grade === 3 ? 0.15 : 0.25, emissive: !ghost && grade === 3 ? 0x3ad8ff : 0x000000, emissiveIntensity: grade === 3 ? 0.35 : 0 });
   const accent = std(pal.accent, { metalness: 0.4, roughness: 0.4 });
   const glow = new THREE.Color(pal.glow);
+  const neck = hero.head.parent, upper = hero.root.children[1];
   // Helmet with a crest in the dimension colour.
   const helm = new THREE.Mesh(new THREE.SphereGeometry(0.178, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), metal);
-  helm.position.y = 0.17; hero.head.parent.add(helm);
-  const crest = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.12, 0.3), std(pal.robe, { emissive: glow, emissiveIntensity: 0.4 }));
-  crest.position.set(0, 0.36, -0.02); hero.head.parent.add(crest);
+  helm.position.y = 0.17; neck.add(helm);
+  const crest = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.12 + grade * 0.05, 0.3 + grade * 0.04), std(grade >= 2 ? 0xffd04a : pal.robe, { emissive: grade >= 2 ? 0xffa020 : glow, emissiveIntensity: 0.4 }));
+  crest.position.set(0, 0.36 + grade * 0.025, -0.02); neck.add(crest);
+  const starM = std(0xffffff, { metalness: 1, roughness: 0.2, emissive: glow, emissiveIntensity: 0.9 });
+  for (let k = 0; k < stars; k++) { const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.03), starM); st.scale.z = 0.4; st.position.set((k - (stars - 1) / 2) * 0.07, 0.29, 0.15); neck.add(st); }
   // Spear on the right, shield on the left.
   const spear = new THREE.Group(); spear.position.set(-0.46, 0, 0.12); hero.root.add(spear);
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 2.5, 8), std(0x4a3420, { roughness: 0.7 })); shaft.position.y = 1.25; spear.add(shaft);
-  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.32, 8), std(0xffffff, { metalness: 1, roughness: 0.15, emissive: glow, emissiveIntensity: 0.6 })); tip.position.y = 2.66; spear.add(tip);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 2.5, 8), std(grade >= 2 ? 0x2a1a10 : 0x4a3420, { roughness: 0.7 })); shaft.position.y = 1.25; spear.add(shaft);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.06 + grade * 0.01, 0.32 + grade * 0.06, 8), std(0xffffff, { metalness: 1, roughness: 0.15, emissive: glow, emissiveIntensity: 0.6 + grade * 0.2 })); tip.position.y = 2.66 + grade * 0.03; spear.add(tip);
   const shield = new THREE.Group(); shield.position.set(0.42, 0.95, 0.12); shield.rotation.y = -0.25; hero.root.add(shield);
-  const face = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 32), accent); face.rotation.x = Math.PI / 2; shield.add(face);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.03, 8, 32), metal); shield.add(rim);
+  const face = new THREE.Mesh(new THREE.CylinderGeometry(0.3 + grade * 0.02, 0.3 + grade * 0.02, 0.05, 32), accent); face.rotation.x = Math.PI / 2; shield.add(face);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.3 + grade * 0.02, 0.03 + grade * 0.008, 8, 32), metal); shield.add(rim);
   const boss = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 8), std(0xffffff, { metalness: 0.8, emissive: glow, emissiveIntensity: 0.8 })); boss.position.z = 0.04; shield.add(boss);
-  // Shoulder plates and a cape.
-  for (const sx of [-1, 1]) { const pl = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), metal); pl.position.set(sx * 0.3, 1.55, 0); hero.root.add(pl); }
-  const capeGeo = new THREE.PlaneGeometry(0.62, 1.35, 6, 8);
-  const cp = capeGeo.attributes.position; for (let i = 0; i < cp.count; i++) { const y = cp.getY(i); cp.setZ(i, -Math.pow(Math.max(0, (0.675 - y) / 1.35), 1.6) * 0.18 + Math.abs(cp.getX(i)) * -0.12); }
+  for (let k = 0; k < stars; k++) { const a = Math.PI / 2 + (k - (stars - 1) / 2) * 0.5; const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.035), starM); st.scale.z = 0.4; st.position.set(Math.cos(a) * 0.2, Math.sin(a) * 0.2, 0.04); shield.add(st); }
+  // Shoulder plates (bigger with rank).
+  for (const sx of [-1, 1]) { const pl = new THREE.Mesh(new THREE.SphereGeometry(0.13 + grade * 0.025, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), metal); pl.position.set(sx * 0.3, 1.55, 0); hero.root.add(pl); }
+  // Silver and up: a breastplate.
+  if (grade >= 1) { const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.27, 0.5, 24, 1, true), metal); plate.position.y = 0.32; upper.add(plate); const belt = new THREE.Mesh(new THREE.TorusGeometry(0.275, 0.03, 6, 24), std(0x3a2a1a)); belt.rotation.x = Math.PI / 2; belt.position.y = 0.08; upper.add(belt); }
+  // Gold and up: gauntlets.
+  if (grade >= 2) for (const a of hero.arms) { const g2 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.075, 0.16, 12), metal); g2.position.y = -0.24; a.el.add(g2); }
+  // Cape: longer, and trimmed with gold from Gold rank.
+  const len = 1.35 + grade * 0.12;
+  const capeGeo = new THREE.PlaneGeometry(0.62 + grade * 0.04, len, 6, 8);
+  const cp = capeGeo.attributes.position; for (let i = 0; i < cp.count; i++) { const y = cp.getY(i); cp.setZ(i, -Math.pow(Math.max(0, (len / 2 - y) / len), 1.6) * 0.18 + Math.abs(cp.getX(i)) * -0.12); }
   capeGeo.computeVertexNormals();
-  const cape = new THREE.Mesh(capeGeo, std(pal.robe, { side: THREE.DoubleSide, roughness: 0.7 })); cape.position.set(0, 0.95, -0.28); hero.root.add(cape);
+  const cape = new THREE.Mesh(capeGeo, std(pal.robe, { side: THREE.DoubleSide, roughness: 0.7 })); cape.position.set(0, 1.62 - len / 2, -0.28); hero.root.add(cape);
+  if (grade >= 2) { const trimM = std(0xf0c04a, { metalness: 1, roughness: 0.3 }); const tr = new THREE.Mesh(new THREE.BoxGeometry(0.66 + grade * 0.04, 0.05, 0.02), trimM); tr.position.set(0, -len / 2 + 0.03, -0.03); cape.add(tr); }
+  // Platinum: a halo of light.
+  if (grade === 3 && !ghost) { const halo = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.015, 8, 32), new THREE.MeshBasicMaterial({ color: 0xbff4ff, toneMapped: false })); halo.rotation.x = Math.PI / 2; halo.position.y = 0.52; neck.add(halo); }
   return cape;
 }
 
-export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {} } = {}) {
+export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {}, tiers = {} } = {}) {
   const g = new THREE.Group(); g.position.x = HX; scene.add(g);
   const puff = puffTexture();
   const gold = std(0xe1b44c, { metalness: 1, roughness: 0.22, emissive: 0x4a3000, emissiveIntensity: 0.25 });
@@ -245,7 +264,7 @@ export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {} }
   const warriors = slots.map(({ c, x, z, face }) => {
     const ghost = !owned.has(c.id);
     const hero = buildWorshipper(c.palette);
-    const cape = arm(hero, c.palette, ghost);
+    const cape = arm(hero, c.palette, ghost, tiers[c.id] || 0);
     hero.root.position.set(x, 0, z); hero.root.rotation.y = face; g.add(hero.root);
     if (ghost) hero.root.traverse((m) => {
       if (!m.isMesh) return;
@@ -289,10 +308,20 @@ export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {} }
   const platTop = (x, z) => { const r = Math.hypot(x, z - HEAVEN.seal.z); return stage >= 3 && r < 1.8 ? 0.9 : stage >= 2 && r < 2.4 ? 0.6 : stage >= 1 && r < 3.0 ? 0.3 : 0; };
 
   // ---- the new gate on the east side: closed until the speech, then the way down to the shore ----
+  const GW = 3.4, GH = 12;
   const gate = new THREE.Group(); gate.position.set(23.6, 0, 0); gate.rotation.y = -Math.PI / 2; g.add(gate);
-  for (const sx of [-1, 1]) { const p2 = mk(new THREE.BoxGeometry(1.2, 9, 1.2), marble, sx * 2.7, 4.5, 0); gate.add(p2); const c2 = mk(new THREE.BoxGeometry(1.5, 0.5, 1.5), gold, sx * 2.7, 9.2, 0); gate.add(c2); }
-  { const t3 = mk(new THREE.TorusGeometry(2.7, 0.55, 12, 48, Math.PI), marble, 0, 9, 0); gate.add(t3); }
-  const leaves = [-1, 1].map((sx) => { const hinge = new THREE.Group(); hinge.position.set(sx * 2.1, 0, 0); gate.add(hinge); const leaf = mk(new THREE.BoxGeometry(2.1, 8, 0.25), std(0x5a3a1a, { roughness: 0.6 }), -sx * 1.05, 4, 0); hinge.add(leaf); for (let y = 1; y < 8; y += 1.6) { const band = mk(new THREE.BoxGeometry(2.1, 0.14, 0.3), gold, -sx * 1.05, y, 0); hinge.add(band); } return hinge; });
+  for (const sx of [-1, 1]) {
+    gate.add(mk(new THREE.BoxGeometry(2.2, GH + 2, 2.2), marble, sx * (GW + 1.1), (GH + 2) / 2, 0));
+    gate.add(mk(new THREE.BoxGeometry(2.8, 0.7, 2.8), gold, sx * (GW + 1.1), GH + 2.3, 0));
+    gate.add(mk(new THREE.BoxGeometry(2.6, 0.5, 2.6), gold, sx * (GW + 1.1), 0.25, 0));
+    const tl = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.1, 8), new THREE.MeshBasicMaterial({ color: 0xffa040, toneMapped: false })); tl.position.set(sx * (GW + 0.2), 7.5, -1.3); gate.add(tl);
+  }
+  { const t3 = mk(new THREE.TorusGeometry(GW, 0.8, 12, 48, Math.PI), marble, 0, GH - GW * 0.4, 0); t3.scale.y = 0.75; gate.add(t3); const t4 = mk(new THREE.TorusGeometry(GW, 0.3, 10, 48, Math.PI), gold, 0, GH - GW * 0.4, -1.0); t4.scale.y = 0.75; gate.add(t4); }
+  gate.add(mk(new THREE.BoxGeometry(GW * 2 + 4.4, 1.4, 2.4), marble, 0, GH + 3.3, 0));
+  { const sign = new THREE.Mesh(new THREE.PlaneGeometry(GW * 1.6, 0.9), new THREE.MeshBasicMaterial({ map: (() => { const cv = document.createElement('canvas'); cv.width = 512; cv.height = 96; const c2 = cv.getContext('2d'); c2.fillStyle = '#2a1c0c'; c2.fillRect(0, 0, 512, 96); c2.strokeStyle = '#e1b44c'; c2.lineWidth = 6; c2.strokeRect(4, 4, 504, 88); c2.fillStyle = '#ffd36b'; c2.font = 'bold 52px Tajawal, serif'; c2.textAlign = 'center'; c2.direction = 'rtl'; c2.fillText('باب البحر', 256, 66); const t5 = new THREE.CanvasTexture(cv); t5.colorSpace = THREE.SRGBColorSpace; return t5; })() })); sign.position.set(0, GH + 3.3, -1.25); sign.rotation.y = Math.PI; gate.add(sign); }
+  const leaves = [-1, 1].map((sx) => { const hinge = new THREE.Group(); hinge.position.set(sx * GW, 0, 0); gate.add(hinge); hinge.add(mk(new THREE.BoxGeometry(GW, GH - 0.6, 0.35), std(0x5a3a1a, { roughness: 0.6 }), -sx * GW / 2, (GH - 0.6) / 2, 0)); for (let y = 1; y < GH - 1; y += 1.8) hinge.add(mk(new THREE.BoxGeometry(GW, 0.18, 0.42), gold, -sx * GW / 2, y, 0)); return hinge; });
+  // light from the sea pouring in through the open gate
+  const seaLight = new THREE.Mesh(new THREE.PlaneGeometry(GW * 2, GH), new THREE.MeshBasicMaterial({ color: 0xfff2d0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); seaLight.position.set(0, GH / 2, 0.6); gate.add(seaLight);
   // steps leading out and down through the clouds
   for (let k = 0; k < 14; k++) { const st = mk(new THREE.BoxGeometry(3.6, 0.4, 1.2), lightStone, 25.2 + k * 1.1, -0.2 - k * 0.7, 0); g.add(st); }
   // ---- the golden cage where Lucifer is locked after the speech ----
@@ -332,10 +361,10 @@ export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {} }
 
   const blocked = (x, z) => {
     x -= HX;
-    if (gateOpen && x > 18 && Math.abs(z) < 1.9) return x > 27;                       // out through the open gate
+    if (gateOpen && x > 18 && Math.abs(z) < GW - 0.7) return x > 27;                  // out through the open gate
     if (Math.hypot(x, z) > HEAVEN.r) return true;
     if (z < -18.6) return true;                                                     // the arch
-    if (!following) for (const w of warriors) if (Math.hypot(x - w.x, z - w.z) < 1.3) return true;
+    if (!following) for (const w of warriors) { const p = w.hero.root.position; if (Math.hypot(x - p.x, z - p.z) < (scripted.has(w) ? 0.9 : 1.3)) return true; }
     for (const [cx, cz] of cols) if (Math.hypot(x - cx, z - cz) < 1.4) return true;
     for (const b of braziers) if (Math.hypot(x - b.x, z - b.z) < 1.1) return true;
     if (Math.hypot(x - CAGE.x, z - CAGE.z) < 2.1) return true;
@@ -361,7 +390,7 @@ export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {} }
     for (let i = 0; i < N; i++) { let y = mp[i * 3 + 1] + dt * ms[i] * 0.8; if (y > 22) y = 0; mp[i * 3 + 1] = y; mp[i * 3] += Math.sin(t * 0.7 + i) * dt * 0.08; }
     motes.geometry.attributes.position.needsUpdate = true;
     gateK += ((gateOpen ? 1 : 0) - gateK) * Math.min(1, dt * 1.2);
-    leaves.forEach((h, i) => (h.rotation.y = (i ? -1 : 1) * gateK * 1.6));
+    leaves.forEach((h, i) => (h.rotation.y = (i ? -1 : 1) * gateK * 1.6)); seaLight.material.opacity = gateK * 0.12;
     if (stage >= 8) { crown.rotation.z = t * 0.6; crown.position.y = 6.6 + Math.sin(t * 1.5) * 0.12; platBeam.material.opacity = 0.06 + Math.sin(t * 2) * 0.02; crest.rotation.z = Math.sin(t * 0.5) * 0.05; }
     const local = tmp.copy(cmdPos); local.x -= HX;
     const onSeal = false;
@@ -383,7 +412,14 @@ export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {} }
         w.cape.rotation.x = 0.1 + Math.min(0.4, d * 0.1);
       });
     }
+    for (const w of warriors) if (w.going) {
+      w.goT = Math.min(1, w.goT + dt / 3.2); const k = w.goT * w.goT * (3 - 2 * w.goT), p = w.hero.root.position;
+      const nx = w.going.x + (w.home.x - w.going.x) * k, nz = w.going.z + (w.home.z - w.going.z) * k;
+      if (w.goT < 1) w.yaw = Math.atan2(nx - p.x, nz - p.z) || w.yaw; else { w.yaw = w.base; w.going = null; }
+      p.set(nx, 0, nz); w.hero.root.rotation.y = w.yaw; w.hero.update(t, dt, w.going ? 1 : 0, false);
+    }
     for (const w of warriors) {
+      if (w.going) continue;
       if (following && !w.ghost && !scripted.has(w)) continue;
       if (scripted.has(w)) { w.hero.update(t, dt, w.walk || 0, false); continue; }
       if (focus) { const want = Math.atan2(focus.x - w.x, focus.z - w.z); let d = want - w.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); w.yaw += d * Math.min(1, dt * 3); w.hero.root.rotation.y = w.yaw; w.hero.update(t, dt, 0, false); continue; }
@@ -446,7 +482,7 @@ export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {} }
     groundAt: (x, z) => platTop(x - HX, z),
     platform: new THREE.Vector3(HX, 0.9, HEAVEN.seal.z),
     gateOut: new THREE.Vector3(HX + 22, 0, 0),
-    atGate: (p) => gateOpen && p.x - HX > 24.5 && Math.abs(p.z) < 2,
+    atGate: (p) => gateOpen && p.x - HX > 24.5 && Math.abs(p.z) < GW,
     openGate() { gateOpen = true; },
     setFocus(v) { focus = v ? new THREE.Vector3(v.x - HX, 0, v.z) : null; },
     script(w, on) { if (on) scripted.add(w); else { scripted.delete(w); w.walk = 0; } },
@@ -454,6 +490,7 @@ export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {} }
     setCageOpen(v) { cageOpen = v; },
     follow(on) { following = on; },
     arrange(at, skip) { let i = 0; warriors.forEach((w) => { if (w.ghost || w === skip) return; const v = at(i++); w.hero.root.position.copy(v); w.yaw = Math.atan2(-6.5 - v.x, 4.5 - v.z); w.hero.root.rotation.y = w.yaw; }); },
+    walkHome() { warriors.forEach((w) => { if (!w.ghost) { w.going = w.hero.root.position.clone(); w.goT = 0; } }); },
     sendHome() { warriors.forEach((w) => { w.hero.root.position.copy(w.home); w.yaw = w.base; w.hero.root.rotation.y = w.base; }); },
     local: (v) => new THREE.Vector3(v.x - HX, v.y, v.z),
   };

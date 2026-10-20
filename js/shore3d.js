@@ -12,7 +12,7 @@ const STAIR = { x: 16, w: 2.4, z0: 12, z1: 36, top: 22 };
 
 function canvasTex(w, h, draw, rep) { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; draw(cv.getContext('2d'), w, h); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; if (rep) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rep, rep); } return t; }
 
-export function buildShore(scene, { parts = 12 } = {}) {
+export function buildShore(scene, { parts = 12, tiers = {} } = {}) {
   const g = new THREE.Group(); g.position.z = SZ; scene.add(g);
   const add = (p, geo, m, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; p.add(o); return o; };
   // Sky dome: warm evening over the sea.
@@ -28,21 +28,47 @@ export function buildShore(scene, { parts = 12 } = {}) {
   const seaM = new THREE.MeshPhysicalMaterial({ color: 0x2a7a9a, roughness: 0.1, clearcoat: 1 });
   const sea = add(g, seaGeo, seaM, 0, -0.35, -230); sea.castShadow = false; const seaBase = seaGeo.attributes.position.array.slice();
   const rockM = std(0x8a7a6a, { flatShading: true, roughness: 1 });
-  for (let i = 0; i < 26; i++) { const r = add(g, new THREE.DodecahedronGeometry(7 + Math.random() * 6, 0), rockM, -70 + i * 5.6 + (Math.random() - 0.5) * 3, 6 + Math.random() * 10, 26 + Math.random() * 8); r.rotation.set(Math.random() * 3, Math.random() * 3, 0); }
-  add(g, new THREE.BoxGeometry(160, 26, 14), rockM, 0, 11, 33);
-  // The stair down the cliff, with a landing at the top under an arch.
   const stoneM = std(0xd8cfbe, { roughness: 0.7 });
+  // The cliff, split by a ravine where the stair climbs (so nothing ever passes through rock).
+  const CL = { z0: 24, z1: 48, top: STAIR.top + 2, gap: STAIR.w + 2.2 };
+  const leftW = (STAIR.x - CL.gap) + 90, rightW = 90 - (STAIR.x + CL.gap);
+  add(g, new THREE.BoxGeometry(leftW, CL.top + 2, CL.z1 - CL.z0), rockM, -90 + leftW / 2, CL.top / 2 - 1, (CL.z0 + CL.z1) / 2);
+  add(g, new THREE.BoxGeometry(rightW, CL.top + 2, CL.z1 - CL.z0), rockM, STAIR.x + CL.gap + rightW / 2, CL.top / 2 - 1, (CL.z0 + CL.z1) / 2);
+  for (let i = 0; i < 30; i++) { const x = -86 + i * 6 + (Math.random() - 0.5) * 3; if (Math.abs(x - STAIR.x) < CL.gap + 3) continue; const r = add(g, new THREE.DodecahedronGeometry(5 + Math.random() * 5, 0), rockM, x, 3 + Math.random() * 14, CL.z0 + 1 + Math.random() * 2); r.rotation.set(Math.random() * 3, Math.random() * 3, 0); }
+  for (const sx of [-1, 1]) for (let k = 0; k < 6; k++) { const r = add(g, new THREE.DodecahedronGeometry(2.2 + Math.random() * 1.2, 0), rockM, STAIR.x + sx * (CL.gap + 2.2), 4 + k * 3.4, CL.z0 + 1.5 + Math.random() * 3); r.rotation.set(Math.random() * 3, Math.random() * 3, 0); }
+  // The stair down the ravine.
   const N = 30;
   for (let i = 0; i < N; i++) { const u = i / (N - 1), z = STAIR.z0 + u * (STAIR.z1 - STAIR.z0), y = u * STAIR.top; add(g, new THREE.BoxGeometry(STAIR.w * 2, 0.4 + y, (STAIR.z1 - STAIR.z0) / N + 0.05), stoneM, STAIR.x, (y - 0.4) / 2, z); }
-  add(g, new THREE.BoxGeometry(STAIR.w * 2 + 2, STAIR.top, 6), stoneM, STAIR.x, STAIR.top / 2 - 0.2, STAIR.z1 + 3);
-  // At the top: a doorway cut into the cliff, dark inside, that leads back into the castle.
-  for (const sx of [-1, 1]) add(g, new THREE.BoxGeometry(1.2, 7.5, 1.6), stoneM, STAIR.x + sx * (STAIR.w + 0.4), STAIR.top + 3.75, STAIR.z1 + 5.4);
-  { add(g, new THREE.TorusGeometry(STAIR.w + 0.4, 0.6, 10, 32, Math.PI), stoneM, STAIR.x, STAIR.top + 7.5, STAIR.z1 + 5.4); const dark = new THREE.Mesh(new THREE.PlaneGeometry(STAIR.w * 2, 9.8), new THREE.MeshBasicMaterial({ color: 0x0a0806 })); dark.position.set(STAIR.x, STAIR.top + 4.9, STAIR.z1 + 6.1); dark.rotation.y = Math.PI; g.add(dark); add(g, new THREE.BoxGeometry(STAIR.w * 2 + 6, 14, 3), rockM, STAIR.x, STAIR.top + 7, STAIR.z1 + 7.6); }
+  for (const sx of [-1, 1]) { const pts = []; for (let i = 0; i <= 12; i++) { const u = i / 12; pts.push(new THREE.Vector3(STAIR.x + sx * (STAIR.w - 0.1), u * STAIR.top + 1, STAIR.z0 + u * (STAIR.z1 - STAIR.z0))); } add(g, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.08, 6), std(0x5a4a3a)); for (let i = 0; i <= 12; i += 2) { const u = i / 12; add(g, new THREE.CylinderGeometry(0.07, 0.07, 1, 6), std(0x5a4a3a), STAIR.x + sx * (STAIR.w - 0.1), u * STAIR.top + 0.5, STAIR.z0 + u * (STAIR.z1 - STAIR.z0)); } }
+  // The top landing and the castle's sea gate: a great gate between two towers.
+  add(g, new THREE.BoxGeometry(CL.gap * 2, STAIR.top, 12), stoneM, STAIR.x, STAIR.top / 2 - 0.2, STAIR.z1 + 6);
+  const wallM = std(0xcfc4b0, { roughness: 0.85 }), roofM = std(0x8a2a22, { roughness: 0.6 });
+  const GZ = STAIR.z1 + 8, GW = 3.4, GH = 10;
+  const T = STAIR.top;
+  add(g, new THREE.BoxGeometry(40, 16, 3), wallM, STAIR.x - 20 - GW, T + 8, GZ + 1.5).scale.x = 1;
+  add(g, new THREE.BoxGeometry(40, 16, 3), wallM, STAIR.x + 20 + GW, T + 8, GZ + 1.5);
+  add(g, new THREE.BoxGeometry(GW * 2, 16 - GH, 3), wallM, STAIR.x, T + GH + (16 - GH) / 2, GZ + 1.5);
+  for (let k = -22; k <= 22; k++) if (k % 2 === 0) add(g, new THREE.BoxGeometry(1.2, 1.4, 3.2), wallM, STAIR.x + k * 1.2, T + 16.7, GZ + 1.5);
+  { const archT = add(g, new THREE.TorusGeometry(GW, 0.55, 10, 32, Math.PI), stoneM, STAIR.x, T + GH - GW * 0.15, GZ - 0.1); archT.scale.y = 0.6; }
+  const dark = new THREE.Mesh(new THREE.PlaneGeometry(GW * 2, GH), new THREE.MeshBasicMaterial({ color: 0x120c08 })); dark.position.set(STAIR.x, T + GH / 2, GZ + 2.6); dark.rotation.y = Math.PI; g.add(dark);
+  for (const sx of [-1, 1]) {
+    const tx = STAIR.x + sx * (GW + 2.6);
+    add(g, new THREE.CylinderGeometry(2.6, 2.9, 20, 20), wallM, tx, T + 10, GZ);
+    for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2; add(g, new THREE.BoxGeometry(0.9, 1.3, 0.9), wallM, tx + Math.cos(a) * 2.6, T + 20.6, GZ + Math.sin(a) * 2.6); }
+    add(g, new THREE.ConeGeometry(3.2, 5, 20), roofM, tx, T + 23.6, GZ);
+    const ban = add(g, new THREE.PlaneGeometry(1.6, 6), std(0x8e1b24, { side: THREE.DoubleSide, emissive: 0x2a0606, emissiveIntensity: 0.3 }), tx, T + 12, GZ - 2.95); ban.castShadow = false;
+    const tf = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.9, 8), new THREE.MeshBasicMaterial({ color: 0xffa040, toneMapped: false })); tf.position.set(STAIR.x + sx * (GW + 0.6), T + 6.2, GZ - 0.9); g.add(tf);
+  }
+  // Great timber doors that swing open outwards.
+  const doorM = std(0x5a3a1a, { roughness: 0.6 }), ironM = std(0x2a2a2e, { metalness: 0.7, roughness: 0.4 });
+  const doors = [-1, 1].map((sx) => { const h = new THREE.Group(); h.position.set(STAIR.x + sx * GW, T, GZ - 0.2); g.add(h); add(h, new THREE.BoxGeometry(GW, GH - 0.4, 0.4), doorM, -sx * GW / 2, (GH - 0.4) / 2, 0); for (let y = 1.2; y < GH - 0.6; y += 2) add(h, new THREE.BoxGeometry(GW, 0.22, 0.46), ironM, -sx * GW / 2, y, 0); add(h, new THREE.TorusGeometry(0.3, 0.06, 6, 16), ironM, -sx * (GW - 0.6), GH * 0.45, -0.3); return { h, sx }; });
+  let doorOpen = 0, doorWant = 0;
+
   // At the bottom: a stone arch (مقوّس), then a passage through the rocks onto the beach.
   for (const sx of [-1, 1]) add(g, new THREE.BoxGeometry(1, 6.2, 1.2), stoneM, STAIR.x + sx * (STAIR.w + 0.3), 3.1, 10.6);
   add(g, new THREE.TorusGeometry(STAIR.w + 0.3, 0.5, 10, 32, Math.PI), stoneM, STAIR.x, 6.2, 10.6);
-  for (const sx of [-1, 1]) for (let k = 0; k < 4; k++) { const r = add(g, new THREE.DodecahedronGeometry(2.4 + Math.random(), 0), rockM, STAIR.x + sx * (STAIR.w + 2.4), 1.6 + Math.random(), 3 + k * 1.9); r.rotation.set(Math.random() * 3, Math.random() * 3, 0); }
-  { const rockArch = add(g, new THREE.TorusGeometry(STAIR.w + 1.4, 1.3, 7, 14, Math.PI), rockM, STAIR.x, 4.4, 5); rockArch.scale.set(1, 1.1, 1.4); }
+  for (const sx of [-1, 1]) for (let k = 0; k < 4; k++) { const r = add(g, new THREE.DodecahedronGeometry(2.2 + Math.random() * 0.6, 0), rockM, STAIR.x + sx * (STAIR.w + 3.4), 1.6 + Math.random(), 3 + k * 1.9); r.rotation.set(Math.random() * 3, Math.random() * 3, 0); }
+  { const rockArch = add(g, new THREE.TorusGeometry(STAIR.w + 2, 1.2, 7, 14, Math.PI), rockM, STAIR.x, 4.4, 5); rockArch.scale.set(1, 1.15, 1.4); }
   // Slipway and the ship (built part by part).
   const woodM = std(0x7a5232, { roughness: 0.75 }), darkW = std(0x4a3020, { roughness: 0.7 }), sailM = std(0xf4ead2, { side: THREE.DoubleSide, roughness: 0.9 }), goldM = std(0xe1b44c, { metalness: 1, roughness: 0.25 });
   const SHIP = new THREE.Group(); SHIP.position.set(0, 1.2, -6); g.add(SHIP);
@@ -89,7 +115,7 @@ export function buildShore(scene, { parts = 12 } = {}) {
   // The warriors at work round the ship.
   const chars = CHARACTERS.filter((c) => REGIONS.some((r) => r.characterId === c.id));
   const workers = chars.map((c, i) => {
-    const h = buildWorshipper(c.palette); arm(h, c.palette, false);
+    const h = buildWorshipper(c.palette); arm(h, c.palette, false, tiers[c.id] || 0);
     const side = i % 2 ? -1 : 1, x = -7.5 + Math.floor(i / 2) * 5;
     h.root.position.set(x, 0, -6 + side * 4.6); h.root.rotation.y = side > 0 ? Math.PI : 0; g.add(h.root);
     return { h, next: 1 + Math.random() * 3, home: h.root.position.clone(), homeFace: h.root.rotation.y };
@@ -102,7 +128,10 @@ export function buildShore(scene, { parts = 12 } = {}) {
   { const tower = add(isle, new THREE.CylinderGeometry(4, 5, 50, 12), std(0xe8e0d0), 0, 45, 10); tower.castShadow = false; const crown = add(isle, new THREE.CylinderGeometry(7, 5, 4, 12), goldM, 0, 72, 10); crown.castShadow = false; const shine = new THREE.PointLight(0xffd27a, 0, 300, 1.2); shine.position.set(0, 80, 20); isle.add(shine); }
   // The spyglass and the map handed to the commander.
   const spyglass = new THREE.Group(); g.add(spyglass); spyglass.visible = false;
-  { const brass = std(0xc8a050, { metalness: 0.9, roughness: 0.3 }); for (const [r, l, z] of [[0.05, 0.3, 0], [0.042, 0.25, 0.26], [0.035, 0.2, 0.47]]) { const c = add(spyglass, new THREE.CylinderGeometry(r, r, l, 12), brass, 0, 0, z); c.rotation.x = Math.PI / 2; } const lens = add(spyglass, new THREE.CylinderGeometry(0.052, 0.052, 0.02, 12), std(0x6ab8ff, { metalness: 0.5, roughness: 0.05 }), 0, 0, -0.16); lens.rotation.x = Math.PI / 2; }
+  { // the eyepiece (narrow) at z = 0, widening out to the objective lens in front (+z)
+    const brass = std(0xc8a050, { metalness: 0.9, roughness: 0.3 }), leather = std(0x4a2e18, { roughness: 0.8 });
+    for (const [r0, r1, l, z, m] of [[0.022, 0.026, 0.08, 0.04, brass], [0.03, 0.03, 0.2, 0.18, brass], [0.038, 0.038, 0.22, 0.38, leather], [0.046, 0.046, 0.2, 0.58, brass], [0.054, 0.05, 0.06, 0.71, brass]]) { const c = add(spyglass, new THREE.CylinderGeometry(r1, r0, l, 14), m, 0, 0, z); c.rotation.x = Math.PI / 2; }
+    const lens = add(spyglass, new THREE.CircleGeometry(0.047, 16), std(0x8ac8ff, { metalness: 0.6, roughness: 0.05, emissive: 0x2a4a6a, emissiveIntensity: 0.4 }), 0, 0, 0.745); lens.castShadow = false; }
   const mapTex = canvasTex(256, 180, (c, w, h) => { c.fillStyle = '#e8d6a8'; c.fillRect(0, 0, w, h); c.strokeStyle = '#8a6a3a'; c.lineWidth = 4; c.strokeRect(4, 4, w - 8, h - 8); c.fillStyle = '#7aa0a8'; c.fillRect(10, 10, w - 20, h - 20); c.fillStyle = '#c8b080'; c.beginPath(); c.ellipse(70, 110, 46, 34, 0.3, 0, 7); c.fill(); c.beginPath(); c.ellipse(186, 64, 58, 40, -0.2, 0, 7); c.fill(); c.strokeStyle = '#8a1a1a'; c.setLineDash([6, 6]); c.lineWidth = 3; c.beginPath(); c.moveTo(80, 100); c.quadraticCurveTo(130, 60, 176, 70); c.stroke(); c.fillStyle = '#8a1a1a'; c.font = 'bold 26px serif'; c.fillText('✕', 172, 78); });
   const mapProp = add(g, new THREE.PlaneGeometry(0.9, 0.62), new THREE.MeshStandardMaterial({ map: mapTex, side: THREE.DoubleSide, roughness: 0.9 })); mapProp.visible = false; mapProp.castShadow = false;
 
@@ -118,14 +147,13 @@ export function buildShore(scene, { parts = 12 } = {}) {
   setStage(0);
   const groundAt = (x, z) => {
     z -= SZ;
-    if (Math.abs(x - STAIR.x) < STAIR.w && z > STAIR.z0 - 0.5) return THREE.MathUtils.clamp((z - STAIR.z0) / (STAIR.z1 - STAIR.z0), 0, 1) * STAIR.top;
+    if (Math.abs(x - STAIR.x) < STAIR.w + 2 && z > STAIR.z0 - 0.5) return THREE.MathUtils.clamp((z - STAIR.z0) / (STAIR.z1 - STAIR.z0), 0, 1) * STAIR.top;
     return 0;
   };
   const blocked = (x, z) => {
     z -= SZ;
-    const onStair = Math.abs(x - STAIR.x) < STAIR.w - 0.3;
-    if (z > STAIR.z1 + 5.6) return true;
-    if (z > 11 && !onStair) return true;               // the cliff
+    // The stair itself is walked in a short scene (hq3d), never freely.
+    if (z > 9.6) return true;
     if (z > 1.5 && z <= 11 && Math.abs(x - STAIR.x) > STAIR.w - 0.2 && Math.abs(x - STAIR.x) < STAIR.w + 4.5) return true;   // the rock passage
     if (z < -24 || Math.abs(x) > 40) return true;      // the water's edge
     if (Math.abs(x) < 10.5 && Math.abs(z + 6) < 3.4) return true;   // the ship
@@ -137,6 +165,11 @@ export function buildShore(scene, { parts = 12 } = {}) {
     group: g, lights, setStage, groundAt, blocked, clamp,
     get stage() { return stage; },
     top: new THREE.Vector3(STAIR.x, STAIR.top, SZ + STAIR.z1 + 1.5),
+    // the walk between the sea gate and the beach (shore-local x, z)
+    pathDown: [[STAIR.x, STAIR.z1 + 9.5], [STAIR.x, STAIR.z1 + 0.5], [STAIR.x, STAIR.z0 - 0.5], [STAIR.x, 6], [STAIR.x - 1, 1.5], [STAIR.x - 4, -1.5]],
+    gate: new THREE.Vector3(STAIR.x, STAIR.top + 5, SZ + STAIR.z1 + 8),
+    stairFoot: (p) => p.z - SZ > 8.6 && Math.abs(p.x - STAIR.x) < STAIR.w + 2,
+    openDoors(v = 1) { doorWant = v; },
     beach: new THREE.Vector3(0, 0, SZ + 4),
     atTop: (p) => p.z - SZ > STAIR.z1 + 4.8,
     nearShip: (p) => Math.hypot(p.x, p.z - SZ + 6) < 13,
@@ -147,6 +180,7 @@ export function buildShore(scene, { parts = 12 } = {}) {
       for (let i = 0; i < a.length; i += 3) a[i + 1] = Math.sin(seaBase[i] * 0.06 + t * 0.8) * 0.3 + Math.cos(seaBase[i + 2] * 0.09 + t * 0.6) * 0.22;
       seaGeo.attributes.position.needsUpdate = true;
       fires.forEach((f, i) => (f.scale.y = 0.85 + Math.sin(t * 11 + i) * 0.15));
+      doorOpen += (doorWant - doorOpen) * Math.min(1, dt * 1.5); doors.forEach((d) => (d.h.rotation.y = d.sx * doorOpen * 1.7));
       torchL.intensity = 8 + night * 30;
       sails.forEach((s) => { const p = s.sail.geometry.attributes.position.array; for (let i = 0; i < p.length; i += 3) p[i + 2] = Math.sin(s.base[i] * 0.8 + t * 2) * 0.25 * (0.5 - s.base[i + 1] / 10); s.sail.geometry.attributes.position.needsUpdate = true; });
       if (!this.following) workers.forEach((w) => { w.next -= dt; w.h.update(t, dt, 0, false); if (w.next < 0 && stage < parts) { w.h.salute(); w.next = 1.4 + Math.random() * 2; } });
