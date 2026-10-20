@@ -19,7 +19,7 @@ export function buildShore(scene, { parts = 12 } = {}) {
   const sky = new THREE.Mesh(new THREE.SphereGeometry(320, 32, 16), new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, fog: false, uniforms: { night: { value: 0 } },
     vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
     fragmentShader: 'varying vec3 vP; uniform float night; void main(){ float h = max(vP.y, 0.0); vec3 day = mix(vec3(1.0,0.78,0.55), vec3(0.35,0.55,0.85), pow(h, 0.6)); vec3 nt = mix(vec3(0.12,0.12,0.22), vec3(0.02,0.03,0.08), pow(h,0.5)); gl_FragColor = vec4(mix(day, nt, night), 1.0); }' }));
-  g.add(sky);
+  sky.renderOrder = -1; g.add(sky);
   const sunDisc = new THREE.Mesh(new THREE.CircleGeometry(14, 32), new THREE.MeshBasicMaterial({ color: 0xffe0a0, fog: false })); sunDisc.position.set(-60, 30, -280); g.add(sunDisc);
   // Sand, sea, cliff.
   const sandTex = canvasTex(512, 512, (c, w) => { c.fillStyle = '#e2cc9a'; c.fillRect(0, 0, w, w); for (let i = 0; i < 2600; i++) { c.fillStyle = ['#d4bc88', '#ecd8aa', '#c8ae7a'][i % 3]; c.globalAlpha = 0.4; c.fillRect(Math.random() * w, Math.random() * w, 3, 3); } }, 12);
@@ -35,8 +35,14 @@ export function buildShore(scene, { parts = 12 } = {}) {
   const N = 30;
   for (let i = 0; i < N; i++) { const u = i / (N - 1), z = STAIR.z0 + u * (STAIR.z1 - STAIR.z0), y = u * STAIR.top; add(g, new THREE.BoxGeometry(STAIR.w * 2, 0.4 + y, (STAIR.z1 - STAIR.z0) / N + 0.05), stoneM, STAIR.x, (y - 0.4) / 2, z); }
   add(g, new THREE.BoxGeometry(STAIR.w * 2 + 2, STAIR.top, 6), stoneM, STAIR.x, STAIR.top / 2 - 0.2, STAIR.z1 + 3);
-  for (const sx of [-1, 1]) add(g, new THREE.BoxGeometry(0.8, 7, 0.8), stoneM, STAIR.x + sx * (STAIR.w + 0.5), STAIR.top + 3.5, STAIR.z1 + 3);
-  { const a = add(g, new THREE.TorusGeometry(STAIR.w + 0.5, 0.4, 10, 32, Math.PI), stoneM, STAIR.x, STAIR.top + 7, STAIR.z1 + 3); }
+  // At the top: a doorway cut into the cliff, dark inside, that leads back into the castle.
+  for (const sx of [-1, 1]) add(g, new THREE.BoxGeometry(1.2, 7.5, 1.6), stoneM, STAIR.x + sx * (STAIR.w + 0.4), STAIR.top + 3.75, STAIR.z1 + 5.4);
+  { add(g, new THREE.TorusGeometry(STAIR.w + 0.4, 0.6, 10, 32, Math.PI), stoneM, STAIR.x, STAIR.top + 7.5, STAIR.z1 + 5.4); const dark = new THREE.Mesh(new THREE.PlaneGeometry(STAIR.w * 2, 9.8), new THREE.MeshBasicMaterial({ color: 0x0a0806 })); dark.position.set(STAIR.x, STAIR.top + 4.9, STAIR.z1 + 6.1); dark.rotation.y = Math.PI; g.add(dark); add(g, new THREE.BoxGeometry(STAIR.w * 2 + 6, 14, 3), rockM, STAIR.x, STAIR.top + 7, STAIR.z1 + 7.6); }
+  // At the bottom: a stone arch (مقوّس), then a passage through the rocks onto the beach.
+  for (const sx of [-1, 1]) add(g, new THREE.BoxGeometry(1, 6.2, 1.2), stoneM, STAIR.x + sx * (STAIR.w + 0.3), 3.1, 10.6);
+  add(g, new THREE.TorusGeometry(STAIR.w + 0.3, 0.5, 10, 32, Math.PI), stoneM, STAIR.x, 6.2, 10.6);
+  for (const sx of [-1, 1]) for (let k = 0; k < 4; k++) { const r = add(g, new THREE.DodecahedronGeometry(2.4 + Math.random(), 0), rockM, STAIR.x + sx * (STAIR.w + 2.4), 1.6 + Math.random(), 3 + k * 1.9); r.rotation.set(Math.random() * 3, Math.random() * 3, 0); }
+  { const rockArch = add(g, new THREE.TorusGeometry(STAIR.w + 1.4, 1.3, 7, 14, Math.PI), rockM, STAIR.x, 4.4, 5); rockArch.scale.set(1, 1.1, 1.4); }
   // Slipway and the ship (built part by part).
   const woodM = std(0x7a5232, { roughness: 0.75 }), darkW = std(0x4a3020, { roughness: 0.7 }), sailM = std(0xf4ead2, { side: THREE.DoubleSide, roughness: 0.9 }), goldM = std(0xe1b44c, { metalness: 1, roughness: 0.25 });
   const SHIP = new THREE.Group(); SHIP.position.set(0, 1.2, -6); g.add(SHIP);
@@ -86,8 +92,20 @@ export function buildShore(scene, { parts = 12 } = {}) {
     const h = buildWorshipper(c.palette); arm(h, c.palette, false);
     const side = i % 2 ? -1 : 1, x = -7.5 + Math.floor(i / 2) * 5;
     h.root.position.set(x, 0, -6 + side * 4.6); h.root.rotation.y = side > 0 ? Math.PI : 0; g.add(h.root);
-    return { h, next: 1 + Math.random() * 3 };
+    return { h, next: 1 + Math.random() * 3, home: h.root.position.clone(), homeFace: h.root.rotation.y };
   });
+  // The Island of Leaders on the horizon (seen through the spyglass).
+  const ISLE = new THREE.Vector3(-60, 0, -270);
+  const isle = new THREE.Group(); isle.position.copy(ISLE); g.add(isle);
+  const isleRock = std(0x5a6a48, { flatShading: true, roughness: 1 });
+  for (let k = 0; k < 9; k++) { const m = add(isle, new THREE.ConeGeometry(30 + Math.random() * 30, 30 + Math.random() * 50, 7), k % 3 ? isleRock : std(0x3a5a2a, { flatShading: true }), (k - 4) * 26 + (Math.random() - 0.5) * 10, 10, (Math.random() - 0.5) * 30); m.castShadow = false; }
+  { const tower = add(isle, new THREE.CylinderGeometry(4, 5, 50, 12), std(0xe8e0d0), 0, 45, 10); tower.castShadow = false; const crown = add(isle, new THREE.CylinderGeometry(7, 5, 4, 12), goldM, 0, 72, 10); crown.castShadow = false; const shine = new THREE.PointLight(0xffd27a, 0, 300, 1.2); shine.position.set(0, 80, 20); isle.add(shine); }
+  // The spyglass and the map handed to the commander.
+  const spyglass = new THREE.Group(); g.add(spyglass); spyglass.visible = false;
+  { const brass = std(0xc8a050, { metalness: 0.9, roughness: 0.3 }); for (const [r, l, z] of [[0.05, 0.3, 0], [0.042, 0.25, 0.26], [0.035, 0.2, 0.47]]) { const c = add(spyglass, new THREE.CylinderGeometry(r, r, l, 12), brass, 0, 0, z); c.rotation.x = Math.PI / 2; } const lens = add(spyglass, new THREE.CylinderGeometry(0.052, 0.052, 0.02, 12), std(0x6ab8ff, { metalness: 0.5, roughness: 0.05 }), 0, 0, -0.16); lens.rotation.x = Math.PI / 2; }
+  const mapTex = canvasTex(256, 180, (c, w, h) => { c.fillStyle = '#e8d6a8'; c.fillRect(0, 0, w, h); c.strokeStyle = '#8a6a3a'; c.lineWidth = 4; c.strokeRect(4, 4, w - 8, h - 8); c.fillStyle = '#7aa0a8'; c.fillRect(10, 10, w - 20, h - 20); c.fillStyle = '#c8b080'; c.beginPath(); c.ellipse(70, 110, 46, 34, 0.3, 0, 7); c.fill(); c.beginPath(); c.ellipse(186, 64, 58, 40, -0.2, 0, 7); c.fill(); c.strokeStyle = '#8a1a1a'; c.setLineDash([6, 6]); c.lineWidth = 3; c.beginPath(); c.moveTo(80, 100); c.quadraticCurveTo(130, 60, 176, 70); c.stroke(); c.fillStyle = '#8a1a1a'; c.font = 'bold 26px serif'; c.fillText('✕', 172, 78); });
+  const mapProp = add(g, new THREE.PlaneGeometry(0.9, 0.62), new THREE.MeshStandardMaterial({ map: mapTex, side: THREE.DoubleSide, roughness: 0.9 })); mapProp.visible = false; mapProp.castShadow = false;
+
   // Lights for this room.
   const lights = new THREE.Group(); g.add(lights);
   const hemi = new THREE.HemisphereLight(0xffe2c0, 0x8a7050, 0.9); lights.add(hemi);
@@ -106,8 +124,9 @@ export function buildShore(scene, { parts = 12 } = {}) {
   const blocked = (x, z) => {
     z -= SZ;
     const onStair = Math.abs(x - STAIR.x) < STAIR.w - 0.3;
-    if (z > STAIR.z1 + 5) return true;
+    if (z > STAIR.z1 + 5.6) return true;
     if (z > 11 && !onStair) return true;               // the cliff
+    if (z > 1.5 && z <= 11 && Math.abs(x - STAIR.x) > STAIR.w - 0.2 && Math.abs(x - STAIR.x) < STAIR.w + 4.5) return true;   // the rock passage
     if (z < -24 || Math.abs(x) > 40) return true;      // the water's edge
     if (Math.abs(x) < 10.5 && Math.abs(z + 6) < 3.4) return true;   // the ship
     for (const w of workers) if (Math.hypot(x - w.h.root.position.x, z - w.h.root.position.z) < 0.7) return true;
@@ -119,7 +138,7 @@ export function buildShore(scene, { parts = 12 } = {}) {
     get stage() { return stage; },
     top: new THREE.Vector3(STAIR.x, STAIR.top, SZ + STAIR.z1 + 1.5),
     beach: new THREE.Vector3(0, 0, SZ + 4),
-    atTop: (p) => p.z - SZ > STAIR.z1 + 2.6,
+    atTop: (p) => p.z - SZ > STAIR.z1 + 4.8,
     nearShip: (p) => Math.hypot(p.x, p.z - SZ + 6) < 13,
     fog: 0xe8c8a0,
     tick(t, dt, night = 0) {
@@ -130,8 +149,25 @@ export function buildShore(scene, { parts = 12 } = {}) {
       fires.forEach((f, i) => (f.scale.y = 0.85 + Math.sin(t * 11 + i) * 0.15));
       torchL.intensity = 8 + night * 30;
       sails.forEach((s) => { const p = s.sail.geometry.attributes.position.array; for (let i = 0; i < p.length; i += 3) p[i + 2] = Math.sin(s.base[i] * 0.8 + t * 2) * 0.25 * (0.5 - s.base[i + 1] / 10); s.sail.geometry.attributes.position.needsUpdate = true; });
-      workers.forEach((w) => { w.next -= dt; w.h.update(t, dt, 0, false); if (w.next < 0 && stage < parts) { w.h.salute(); w.next = 1.4 + Math.random() * 2; } });
+      if (!this.following) workers.forEach((w) => { w.next -= dt; w.h.update(t, dt, 0, false); if (w.next < 0 && stage < parts) { w.h.salute(); w.next = 1.4 + Math.random() * 2; } });
     },
-    workers,
+    workers, spyglass, mapProp,
+    isle: ISLE.clone().add(new THREE.Vector3(0, 40, SZ)),
+    view: new THREE.Vector3(-12, 0, SZ - 17),
+    following: false,
+    placeBehind(p, face) { workers.forEach((w, i) => { const row = Math.floor(i / 2) + 1, side = i % 2 ? -1 : 1; w.h.root.position.set(p.x - Math.sin(face) * 1.8 * row + Math.cos(face) * side * 1.3, 0, p.z - Math.cos(face) * 1.8 * row - Math.sin(face) * side * 1.3); w.h.root.rotation.y = face; }); },
+    followTick(t, dt, p, face) {
+      workers.forEach((w, i) => {
+        if (w.scripted) { w.h.update(t, dt, w.walk || 0, false); return; }
+        const row = Math.floor(i / 2) + 1, side = i % 2 ? -1 : 1;
+        const tx = p.x - Math.sin(face) * 1.8 * row + Math.cos(face) * side * 1.3, tz = p.z - Math.cos(face) * 1.8 * row - Math.sin(face) * side * 1.3;
+        const r = w.h.root, dx = tx - r.position.x, dz = tz - r.position.z, d = Math.hypot(dx, dz);
+        const sp = Math.min(d, dt * Math.min(7, 1.5 + d * 1.5));
+        if (d > 0.3) { r.position.x += (dx / d) * sp; r.position.z += (dz / d) * sp; r.rotation.y = Math.atan2(dx, dz); }
+        r.position.y = groundAt(r.position.x, r.position.z + SZ);
+        w.h.update(t, dt, d > 0.3 ? Math.min(1, d) : 0, false);
+      });
+    },
+    sendToWork() { workers.forEach((w) => { w.h.root.position.copy(w.home); w.h.root.rotation.y = w.homeFace; }); },
   };
 }

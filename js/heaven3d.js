@@ -138,7 +138,7 @@ export function arm(hero, pal, ghost) {
   return cape;
 }
 
-export function buildHeaven(scene, { owned = new Set(), story = {} } = {}) {
+export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {} } = {}) {
   const g = new THREE.Group(); g.position.x = HX; scene.add(g);
   const puff = puffTexture();
   const gold = std(0xe1b44c, { metalness: 1, roughness: 0.22, emissive: 0x4a3000, emissiveIntensity: 0.25 });
@@ -258,11 +258,11 @@ export function buildHeaven(scene, { owned = new Set(), story = {} } = {}) {
     const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.15, 9, 32, 1, true), new THREE.MeshBasicMaterial({ color: ghost ? 0x9fc8ff : c.palette.glow, transparent: true, opacity: ghost ? 0.05 : 0.12, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
     beam.position.set(x, 4.5, z); g.add(beam);
     const region = REGIONS.find((r) => r.characterId === c.id);
-    const tag = label((ghost ? '🔒 ' : '') + (region?.name || c.name), ghost ? '#9fc8ff' : c.palette.glow); tag.position.set(x, 4.4, z); g.add(tag);
+    const tag = label((ghost ? '🔒 ' : '') + (region?.name || c.name) + (!ghost && ranks[c.id] ? ` · ${ranks[c.id]}` : ''), ghost ? '#9fc8ff' : c.palette.glow); tag.position.set(x, 4.4, z); g.add(tag);
     // A banner in the warrior's colour on the nearest column line.
     const ban = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 6), std(c.palette.robe, { side: THREE.DoubleSide, roughness: 0.8, emissive: new THREE.Color(c.palette.glow), emissiveIntensity: ghost ? 0.05 : 0.15, transparent: ghost, opacity: ghost ? 0.4 : 1 }));
     ban.position.set(x + Math.sign(x) * 4.5, 9.5, z); ban.rotation.y = Math.PI / 2; g.add(ban);
-    return { hero, ghost, cape, x, z, face, yaw: face, base: face, last: -99, beam };
+    return { hero, ghost, cape, x, z, face, yaw: face, base: face, last: -99, beam, home: new THREE.Vector3(x, 0, z) };
   });
 
   // ---- the commander's platform: built a little more with every warrior who joins ----
@@ -295,6 +295,18 @@ export function buildHeaven(scene, { owned = new Set(), story = {} } = {}) {
   const leaves = [-1, 1].map((sx) => { const hinge = new THREE.Group(); hinge.position.set(sx * 2.1, 0, 0); gate.add(hinge); const leaf = mk(new THREE.BoxGeometry(2.1, 8, 0.25), std(0x5a3a1a, { roughness: 0.6 }), -sx * 1.05, 4, 0); hinge.add(leaf); for (let y = 1; y < 8; y += 1.6) { const band = mk(new THREE.BoxGeometry(2.1, 0.14, 0.3), gold, -sx * 1.05, y, 0); hinge.add(band); } return hinge; });
   // steps leading out and down through the clouds
   for (let k = 0; k < 14; k++) { const st = mk(new THREE.BoxGeometry(3.6, 0.4, 1.2), lightStone, 25.2 + k * 1.1, -0.2 - k * 0.7, 0); g.add(st); }
+  // ---- the golden cage where Lucifer is locked after the speech ----
+  const CAGE = new THREE.Vector3(-11.5, 0, 2.5);
+  const cageG = new THREE.Group(); cageG.position.copy(CAGE); g.add(cageG);
+  { const base = mk(new THREE.CylinderGeometry(1.8, 1.9, 0.3, 32), gold, 0, 0.15, 0); cageG.add(base); const lid = mk(new THREE.SphereGeometry(1.75, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), gold, 0, 3.8, 0); lid.scale.y = 0.5; cageG.add(lid); const ring = mk(new THREE.TorusGeometry(1.75, 0.07, 6, 40), gold, 0, 3.8, 0); ring.rotation.x = Math.PI / 2; cageG.add(ring); const knob = mk(new THREE.SphereGeometry(0.22, 12, 8), gold, 0, 4.85, 0); cageG.add(knob); }
+  for (let k = 0; k < 18; k++) { const a = (k / 18) * Math.PI * 2; if (a > 0.1 && a < 0.95) continue; cageG.add(mk(new THREE.CylinderGeometry(0.045, 0.045, 3.5, 6), gold, Math.cos(a) * 1.7, 2.05, Math.sin(a) * 1.7)); }
+  const cageDoor = new THREE.Group(); cageDoor.position.set(Math.cos(0.1) * 1.7, 0, Math.sin(0.1) * 1.7); cageG.add(cageDoor);
+  for (let k = 0; k < 4; k++) { const a = 0.1 + (k + 0.5) * 0.21; cageDoor.add(mk(new THREE.CylinderGeometry(0.045, 0.045, 3.5, 6), gold, Math.cos(a) * 1.7 - cageDoor.position.x, 2.05, Math.sin(a) * 1.7 - cageDoor.position.z)); }
+  const lock = mk(new THREE.BoxGeometry(0.3, 0.38, 0.14), std(0x8a6a1a, { metalness: 1, roughness: 0.3 }), Math.cos(0.55) * 1.78, 2, Math.sin(0.55) * 1.78); lock.rotation.y = -0.55; cageG.add(lock);
+  const cageRune = new THREE.Mesh(new THREE.RingGeometry(1.2, 1.6, 48), new THREE.MeshBasicMaterial({ color: 0xffd27a, transparent: true, opacity: 0.4, depthWrite: false, blending: THREE.AdditiveBlending })); cageRune.rotation.x = -Math.PI / 2; cageRune.position.y = 0.32; cageG.add(cageRune);
+  let cageOpen = 0;
+  // Warriors follow the commander (walking him down to the shore and back).
+  let following = false;
   let gateOpen = !!story.speech, gateK = gateOpen ? 1 : 0;
   const scripted = new Set();
   let focus = null;
@@ -323,9 +335,10 @@ export function buildHeaven(scene, { owned = new Set(), story = {} } = {}) {
     if (gateOpen && x > 18 && Math.abs(z) < 1.9) return x > 27;                       // out through the open gate
     if (Math.hypot(x, z) > HEAVEN.r) return true;
     if (z < -18.6) return true;                                                     // the arch
-    for (const w of warriors) if (Math.hypot(x - w.x, z - w.z) < 1.3) return true;
+    if (!following) for (const w of warriors) if (Math.hypot(x - w.x, z - w.z) < 1.3) return true;
     for (const [cx, cz] of cols) if (Math.hypot(x - cx, z - cz) < 1.4) return true;
     for (const b of braziers) if (Math.hypot(x - b.x, z - b.z) < 1.1) return true;
+    if (Math.hypot(x - CAGE.x, z - CAGE.z) < 2.1) return true;
     if (stage >= 5) for (const [px, pz] of PCOLS) if (Math.hypot(x - px, z - HEAVEN.seal.z - pz) < 0.45) return true;
     return false;
   };
@@ -337,7 +350,7 @@ export function buildHeaven(scene, { owned = new Set(), story = {} } = {}) {
 
   let kneeling = false;
   const tmp = new THREE.Vector3();
-  function tick(t, dt, cmdPos) {
+  function tick(t, dt, cmdPos, cmdFace = 0) {
     sky.material.uniforms.t.value = t; veil.material.uniforms.t.value = t;
     halo.rotation.y = t * 0.12; halo.children[1].rotation.z = t * 0.4; crystal.rotation.y = t * 0.6; crystal.position.y = Math.sin(t * 1.2) * 0.4;
     rays.forEach((r, i) => { r.material.opacity = 0.014 + Math.sin(t * 0.8 + i) * 0.007; });
@@ -354,7 +367,24 @@ export function buildHeaven(scene, { owned = new Set(), story = {} } = {}) {
     const onSeal = false;
     if (onSeal && !kneeling) { kneeling = true; warriors.forEach((w, i) => { if (!w.ghost) setTimeout(() => w.hero.kneel(3), i * 120); }); }
     if (!onSeal && Math.hypot(local.x, local.z - HEAVEN.seal.z) > 4) kneeling = false;
+    cageDoor.rotation.y = -cageOpen * 1.6; cageRune.material.opacity = 0.3 + Math.sin(t * 2) * 0.1;
+    if (following) {
+      const cx = cmdPos.x - HX, cz = cmdPos.z, fx = Math.sin(cmdFace), fz = Math.cos(cmdFace);
+      warriors.forEach((w, i) => {
+        if (w.ghost || scripted.has(w)) return;
+        const row = Math.floor(i / 2) + 1, side = i % 2 ? -1 : 1;
+        const tx = cx - fx * (1.8 * row) + fz * side * 1.3, tz = cz - fz * (1.8 * row) - fx * side * 1.3;
+        const p = w.hero.root.position, dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz);
+        const sp = Math.min(d, dt * Math.min(7, 1.5 + d * 1.5));
+        if (d > 0.3) { p.x += (dx / d) * sp; p.z += (dz / d) * sp; w.yaw = Math.atan2(dx, dz); }
+        else w.yaw += Math.atan2(Math.sin(cmdFace - w.yaw), Math.cos(cmdFace - w.yaw)) * Math.min(1, dt * 3);
+        w.hero.root.rotation.y = w.yaw; w.hero.root.position.y = platTop(p.x, p.z);
+        w.hero.update(t, dt, d > 0.3 ? Math.min(1, d) : 0, false);
+        w.cape.rotation.x = 0.1 + Math.min(0.4, d * 0.1);
+      });
+    }
     for (const w of warriors) {
+      if (following && !w.ghost && !scripted.has(w)) continue;
       if (scripted.has(w)) { w.hero.update(t, dt, w.walk || 0, false); continue; }
       if (focus) { const want = Math.atan2(focus.x - w.x, focus.z - w.z); let d = want - w.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); w.yaw += d * Math.min(1, dt * 3); w.hero.root.rotation.y = w.yaw; w.hero.update(t, dt, 0, false); continue; }
       // Face the commander when he is close (or on the seal), else face the aisle.
@@ -420,6 +450,11 @@ export function buildHeaven(scene, { owned = new Set(), story = {} } = {}) {
     openGate() { gateOpen = true; },
     setFocus(v) { focus = v ? new THREE.Vector3(v.x - HX, 0, v.z) : null; },
     script(w, on) { if (on) scripted.add(w); else { scripted.delete(w); w.walk = 0; } },
+    cage: CAGE.clone().add(new THREE.Vector3(HX, 0, 0)), cageLocal: CAGE.clone(),
+    setCageOpen(v) { cageOpen = v; },
+    follow(on) { following = on; },
+    arrange(at, skip) { let i = 0; warriors.forEach((w) => { if (w.ghost || w === skip) return; const v = at(i++); w.hero.root.position.copy(v); w.yaw = Math.atan2(-6.5 - v.x, 4.5 - v.z); w.hero.root.rotation.y = w.yaw; }); },
+    sendHome() { warriors.forEach((w) => { w.hero.root.position.copy(w.home); w.yaw = w.base; w.hero.root.rotation.y = w.base; }); },
     local: (v) => new THREE.Vector3(v.x - HX, v.y, v.z),
   };
 }

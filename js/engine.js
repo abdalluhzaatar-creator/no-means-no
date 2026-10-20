@@ -84,7 +84,7 @@ export function newState() {
     tasks: {}, // progress per task: `${characterId}.${taskId}` -> { streak, lastDate, lastResult }
     log: [],
     planV: 2,
-    story: { speech: false, jailed: false, ship: 0 },
+    story: { speech: false, jailed: false, ship: 0, phase: 'none' },
   };
   for (const c of CHARACTERS.filter((c) => c.starter)) s.characters[c.id] = newCharacter();
   for (const r of REGIONS.filter((r) => r.starter)) s.regions[r.id] = { level: 1 };
@@ -116,6 +116,7 @@ export function migrate(raw) {
   }
   s.planV = 2;
   s.story = { ...base.story, ...(raw.story || {}) };
+  if (s.story.speech && (!raw.story?.phase || raw.story.phase === 'none')) s.story.phase = 'march';
   s.version = SAVE_VERSION;
   return s;
 }
@@ -505,7 +506,7 @@ export function buy(s, kind, id) {
 // Visible: owned places. Teaser: a locked place whose `revealedBy` place is owned.
 // Everything else stays under fog.
 export function mapVisibility(s, region) {
-  if (region.kind === 'leaders') return s.story?.speech ? 'teaser' : 'hidden';   // appears after the commander's speech, closed
+  if (region.kind === 'leaders') return islandSeen(s) ? 'teaser' : 'hidden';   // appears after the commander's speech, closed
   if (s.regions[region.id]) return 'owned';
   const by = region.map?.revealedBy;
   return by && s.regions[by] ? 'teaser' : 'hidden';
@@ -532,11 +533,21 @@ export function leaveSandbox(s) { return s.sandbox ? migrate(JSON.parse(s.sandbo
 // The ship to the Island of Leaders grows one part every SHIP.per tasks done after the speech.
 export const SHIP = { parts: 12, per: 6 };
 export const shipStage = (s) => Math.min(SHIP.parts, Math.floor((s.story?.ship || 0) / SHIP.per));
+// Story phases: none → march (walk the warriors down to the shore) → back (after the
+// spyglass, walk them home) → done (the cage is found locked and empty: Lucifer escaped).
 export function finishSpeech(s) {
-  s.story = { ...(s.story || {}), speech: true, jailed: true, ship: s.story?.ship || 0 };
-  addLog(s, '⛓ لوسيفير محبوس في القبو');
-  return done(s, [{ type: 'unlock' }]);
+  s.story = { ...(s.story || {}), speech: true, jailed: true, ship: s.story?.ship || 0, phase: 'march' };
+  addLog(s, '⛓ لوسيفير محبوس في القفص');
+  return done(s, []);
 }
+export function storyStep(s, phase) {
+  s.story = { ...(s.story || {}), phase };
+  if (phase === 'back') addLog(s, '🔭 القائد شاف جزيرة القادة');
+  if (phase === 'done') { s.story.jailed = false; s.story.escaped = true; addLog(s, '😈 لوسيفير هرب من القفص'); }
+  return done(s, []);
+}
+// The island appears on the map once the commander has seen it through the spyglass.
+export const islandSeen = (s) => ['back', 'done'].includes(s.story?.phase);
 
 export function demoState() {
   const s = newState();

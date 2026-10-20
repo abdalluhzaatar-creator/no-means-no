@@ -11,6 +11,7 @@ const DEPTH = SIZE * 0.75;
 const SEA = 0;                // sea level
 const HQ_SEA_D = 0.8;         // how far out (island falloff units) the headquarters islet sits
 const ISLET = { top: 9, flat: 36, edge: 56 };   // islet plateau height and radii
+const LEADERS = { dist: 620, rx: 400, rz: 300 };  // the Island of Leaders: bigger than the main island
 
 // Region coords (0..1000 × 0..700) → world (x, z).
 const toWorld = ({ x, y }) => [(x / 1000 - 0.5) * SIZE * 0.55, (y / 700 - 0.5) * DEPTH * 0.55];
@@ -40,8 +41,8 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     let [x, z] = toWorld(s.def.map);
     // Headquarters stands off the coast on its own islet (as on the war map), joined by a bridge.
     if (s.def.kind === 'hq') { const f = HQ_SEA_D / Math.hypot((x / SIZE) * 1.1, (z / DEPTH) * 1.25); x *= f; z *= f; }
-    // The Island of Leaders lies far out at sea.
-    if (s.def.kind === 'leaders') { const f = 0.95 / Math.hypot((x / SIZE) * 1.1, (z / DEPTH) * 1.25); x *= f; z *= f; }
+    // The Island of Leaders lies far out at sea, on the side opposite the castle.
+    if (s.def.kind === 'leaders') { const hq = spots.find((o) => o.def.kind === 'hq'); const [hx, hz] = hq ? toWorld(hq.def.map) : [-1, 1]; const l = Math.hypot(hx, hz) || 1; x = (-hx / l) * LEADERS.dist; z = (-hz / l) * LEADERS.dist; }
     return { ...s, x, z };
   });
   const owned = shown.filter((s) => s.vis === 'owned');
@@ -56,7 +57,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     h = h * 26 - Math.pow(Math.max(0, d - 0.28), 1.6) * 260 + 3;
     // Flatten gently around every place so buildings sit on a plateau.
     for (const s of shown) {
-      if (s.def.floating) continue;   // the trophy island floats over open sea
+      if (s.def.floating || s.def.kind === 'leaders') continue;   // the trophy island floats; the leaders' island has its own land
       if (s.def.kind === 'hq') {
         // The fortress sits on a rocky islet out at sea: a flat top with steep sides.
         const d2 = Math.hypot(x - s.x, z - s.z);
@@ -103,6 +104,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(0xbfd4e2, 0.0026);
+  let fogBase = 0.0026;
   const camera = new THREE.PerspectiveCamera(45, 1, 2, 5000);
 
   const sky = new Sky();
@@ -158,6 +160,54 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   const terrain = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: false }));
   terrain.receiveShadow = true; terrain.castShadow = true;
   scene.add(terrain);
+
+  // ---------- the Island of Leaders: its own land, larger than the main island ----------
+  const leadersSpot = shown.find((s) => s.def.kind === 'leaders');
+  let leadersTop = 0;
+  if (leadersSpot) {
+    const ang = Math.atan2(leadersSpot.x, leadersSpot.z);
+    const hIsl = (lx, lz) => {
+      const d = Math.hypot(lx / LEADERS.rx, lz / LEADERS.rz);
+      let h = noise(lx * 0.006 + 40, lz * 0.006 - 20) * 34 + 12;
+      const ridge = 1 - Math.abs(noise(lx * 0.004 - 9, lz * 0.004 + 3, 4));
+      h += Math.pow(ridge, 4) * 70 * Math.max(0, 0.8 - d);
+      h += 55 * Math.exp(-d * d * 7);                                   // a central mountain
+      h -= Math.pow(Math.max(0, d - 0.62), 1.5) * 420;
+      const k = Math.exp(-(lx * lx + lz * lz) / 900);                  // a plateau for the citadel
+      h = h * (1 - k) + 52 * k;
+      if (h < 1.5) h = h - (1.5 - h) * 2 - 1.5;
+      return h;
+    };
+    leadersTop = hIsl(0, 0);
+    const ig = new THREE.PlaneGeometry(LEADERS.rx * 1.6, LEADERS.rz * 1.6, 240, 180); ig.rotateX(-Math.PI / 2);
+    const ip = ig.attributes.position, icol = new Float32Array(ip.count * 3), gold = new THREE.Color(0xc8b070);
+    for (let i = 0; i < ip.count; i++) {
+      const lx = ip.getX(i), lz = ip.getZ(i), h = hIsl(lx, lz); ip.setY(i, h);
+      const v = noise(lx * 0.05, lz * 0.05, 2) * 0.5 + 0.5;
+      if (h < SEA + 1.2) c.copy(seabed).lerp(sand, THREE.MathUtils.clamp((h + 6) / 7, 0, 1));
+      else if (h < 5) c.copy(sand).lerp(grass, (h - 1.2) / 3.8);
+      else if (h < 30) c.copy(grass).lerp(dark, v);
+      else if (h < 60) c.copy(dark).lerp(rock, (h - 30) / 30);
+      else c.copy(rock).lerp(gold, THREE.MathUtils.clamp((h - 60) / 20, 0, 0.6));
+      icol.set([c.r, c.g, c.b], i * 3);
+    }
+    ig.setAttribute('color', new THREE.BufferAttribute(icol, 3)); ig.computeVertexNormals();
+    const land = new THREE.Mesh(ig, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+    land.position.set(leadersSpot.x, 0, leadersSpot.z); land.rotation.y = ang; land.receiveShadow = true; scene.add(land);
+    // forests on its slopes
+    const tGeo = new THREE.ConeGeometry(2.4, 8, 6); tGeo.translate(0, 4, 0);
+    const forest = new THREE.InstancedMesh(tGeo, new THREE.MeshStandardMaterial({ color: 0x2f5a2e, flatShading: true }), 900);
+    const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+    let n = 0;
+    for (let i = 0; i < 4000 && n < 900; i++) {
+      const lx = (Math.random() - 0.5) * LEADERS.rx * 1.8, lz = (Math.random() - 0.5) * LEADERS.rz * 1.8, h = hIsl(lx, lz);
+      if (h < 4 || h > 55 || Math.hypot(lx, lz) < 40) continue;
+      const wx = leadersSpot.x + lx * Math.cos(ang) + lz * Math.sin(ang), wz = leadersSpot.z - lx * Math.sin(ang) + lz * Math.cos(ang);
+      q4.setFromAxisAngle(up, Math.random() * 6); const sc = 0.7 + Math.random() * 0.8;
+      m4.compose(new THREE.Vector3(wx, h - 0.5, wz), q4, new THREE.Vector3(sc, sc, sc)); forest.setMatrixAt(n++, m4);
+    }
+    forest.count = n; forest.castShadow = true; scene.add(forest);
+  }
 
   // ---------- sea ----------
   const waterGeo = new THREE.PlaneGeometry(3000, 3000, 1, 1); waterGeo.rotateX(-Math.PI / 2);
@@ -522,9 +572,9 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   let glow;
   for (const s of shown) {
     const floating = !!s.def.floating;
-    const y = floating ? 26 : height(s.x, s.z);
+    const y = floating ? 26 : s.def.kind === 'leaders' ? leadersTop : height(s.x, s.z);
     const obj = floating ? skyIsland() : s.def.kind === 'leaders' ? leadersIsland() : s.def.kind === 'hq' ? fortress() : s.def.id === 'sanctuary' ? palace() : (DIM_BUILD[s.def.id] || ruin)();
-    obj.scale.setScalar(floating ? 1.1 : s.def.kind === 'hq' ? 1.9 : 1.5);
+    obj.scale.setScalar(floating ? 1.1 : s.def.kind === 'leaders' ? 4 : s.def.kind === 'hq' ? 1.9 : 1.5);
     obj.position.set(s.x, y - 0.2, s.z);
     if (s.def.kind === 'hq' && bridge) obj.rotation.y = Math.atan2(bridge.dir.x, bridge.dir.y);
     if (floating) obj.userData.float = y;
@@ -541,7 +591,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
       : `🔒 ${s.def.name} · ${s.def.cost?.keys ? `🗝 ${s.def.cost.keys}` : `🪙 ${s.def.cost?.gold ?? 0}`}`;
     el.onclick = () => onPick(s.def.id);
     labelLayer.appendChild(el);
-    labels.push({ el, v: new THREE.Vector3(s.x, y + (floating ? 26 : 22), s.z) });
+    labels.push({ el, v: new THREE.Vector3(s.x, y + (floating ? 26 : s.def.kind === 'leaders' ? 90 : 22), s.z) });
   }
 
   // ---------- clouds ----------
@@ -565,6 +615,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   const clearing = (x, z) => {
     let k = 1;
     for (const s of owned) k = Math.min(k, THREE.MathUtils.smoothstep(Math.hypot(s.x - x, s.z - z) - Math.max(0, z - s.z) * 0.8, 40, 80));
+    if (leadersSpot) { const lx = x - leadersSpot.x, lz = z - leadersSpot.z; k = Math.min(k, 0.25 + 0.75 * THREE.MathUtils.smoothstep(Math.hypot(lx / LEADERS.rx, lz / LEADERS.rz), 0.75, 1.05)); }
     for (const s of shown) if (s.vis === 'teaser') k = Math.min(k, 0.35 + 0.65 * THREE.MathUtils.smoothstep(Math.hypot(s.x - x, s.z - z), 14, 36));
     return k;
   };
@@ -593,15 +644,17 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   camera.position.set(focus.x + 40, 80, focus.z + 75);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.copy(focus);
+  if (window.__nmnDebug) window.__worldCam = (x, y, z, tx, tz) => { camera.position.set(x, y, z); controls.target.set(tx, 0, tz); controls.update(); };
   controls.enableDamping = true; controls.dampingFactor = 0.08;
   controls.screenSpacePanning = false;
-  controls.minDistance = 25; controls.maxDistance = 330;
+  controls.minDistance = 25; controls.maxDistance = 700;
   controls.maxPolarAngle = THREE.MathUtils.degToRad(78);
   controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
   controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
-  const bounds = { x: SIZE * 0.62, z: DEPTH * 0.62 };
+  const bounds = { x0: -SIZE * 0.62, x1: SIZE * 0.62, z0: -DEPTH * 0.62, z1: DEPTH * 0.62 };
+  if (leadersSpot) { const r = Math.max(LEADERS.rx, LEADERS.rz) * 0.8; bounds.x0 = Math.min(bounds.x0, leadersSpot.x - r); bounds.x1 = Math.max(bounds.x1, leadersSpot.x + r); bounds.z0 = Math.min(bounds.z0, leadersSpot.z - r); bounds.z1 = Math.max(bounds.z1, leadersSpot.z + r); }
   controls.addEventListener('change', () => {
-    const t = controls.target, dx = THREE.MathUtils.clamp(t.x, -bounds.x, bounds.x) - t.x, dz = THREE.MathUtils.clamp(t.z, -bounds.z, bounds.z) - t.z;
+    const t = controls.target, dx = THREE.MathUtils.clamp(t.x, bounds.x0, bounds.x1) - t.x, dz = THREE.MathUtils.clamp(t.z, bounds.z0, bounds.z1) - t.z;
     if (dx || dz) { t.x += dx; t.z += dz; camera.position.x += dx; camera.position.z += dz; }
   });
 
@@ -713,7 +766,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     const bg = tmpC.set(0xaab6c0).lerp(new THREE.Color(0x070b1c), night);
     scene.background = sky.visible ? null : bg.clone();
     const fogC = new THREE.Color(0xbfd4e2).lerp(new THREE.Color(0xe8b48c), golden * 0.7).lerp(new THREE.Color(0x0b1024), night).lerp(new THREE.Color(0x9aa6b0).multiplyScalar(1 - night * 0.8), WX.dim);
-    scene.fog.color.copy(fogC); scene.fog.density = 0.0026 + WX.fog * 0.006;
+    scene.fog.color.copy(fogC); fogBase = 0.0026 + WX.fog * 0.006;
     cloudMats.forEach((m, i) => m.color.copy(baseCloud[i]).lerp(tmpC.set(0x6f7880), WX.dim).lerp(tmpC.set(0xffb48a), golden * 0.5).lerp(tmpC.set(0x121828), night));
     moon.visible = moonGlow.visible = night > 0.05;
     // Dim the sky reflection at night without swapping it (swapping recompiles every material).
@@ -730,6 +783,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   const tick = () => {
     const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
     controls.update();
+    scene.fog.density = fogBase * Math.min(1, 300 / Math.max(1, camera.position.distanceTo(controls.target)));   // thinner when zoomed out, so far islands show
     waveTex.offset.set(t * 0.004, t * 0.006);
     for (const sp of cloudGroup.children) { sp.position.x += dt * sp.userData.drift; if (sp.position.x > SIZE * 0.85) sp.position.x -= SIZE * 1.7; }
     if (glow) glow.material.opacity = 0.35 + Math.sin(t * 2) * 0.2;

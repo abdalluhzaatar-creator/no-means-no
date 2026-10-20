@@ -308,7 +308,11 @@ t('the story: after the speech Lucifer is jailed, the island shows (closed) and 
   assert.equal(s.story.ship, 0, 'no ship before the speech');
   assert.ok(E.finishSpeech(s).ok);
   assert.equal(s.story.jailed, true);
+  assert.equal(E.mapVisibility(s, isle), 'hidden', 'seen only through the spyglass');
+  E.storyStep(s, 'back');
   assert.equal(E.mapVisibility(s, isle), 'teaser');
+  E.storyStep(s, 'done');
+  assert.equal(s.story.jailed, false, 'he escaped');
   assert.equal(E.buy(s, 'region', 'leaders').ok, false, 'the island is reached by ship only');
   for (let i = 0; i < 5; i++) E.reportTask(s, W, task(s, 'الصلاة').id, true, { date: day(2) });
   E.reportTask(s, W, task(s, 'صفحة قرآن').id, true, { date: day(2) });

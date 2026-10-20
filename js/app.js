@@ -587,7 +587,9 @@ function showSettings() {
       <h3>🧪 وضع التجربة</h3>
       ${state.sandbox
         ? `<p class="muted small-text">إنت هلأ بوضع التجربة. تقدّمك الحقيقي محفوظ وبيرجع لما تطلع.</p>
-           <div class="row wrap"><button class="btn primary" id="sb-refill">🔄 عبّي المفاتيح والمصاري</button><button class="btn" id="sb-leave">↩ ارجع لتقدّمي الحقيقي</button></div>`
+           <div class="row wrap"><button class="btn primary" id="sb-refill">🔄 عبّي المفاتيح والمصاري</button><button class="btn" id="sb-leave">↩ ارجع لتقدّمي الحقيقي</button></div>
+           <p class="muted small-text">جرّب كيف كل إشي مربوط ببعض:</p>
+           <div class="row wrap"><button class="btn" id="sb-cmd">🫡 رقّي القائد</button><button class="btn" id="sb-dims">🎖 رقّي المحاربين</button><button class="btn" id="sb-ship">🚢 كمّل السفينة</button><button class="btn" id="sb-story">📜 القصة من الأول</button></div>`
         : `<p class="muted small-text">بيفتحلك كل الأبعاد والأماكن، وبيعطيك <b>🗝 ${E.SANDBOX.keys}</b> مفتاح و<b>🪙 ${E.SANDBOX.gold.toLocaleString('en')}</b>. ما في إشي مترقّي — إنت بترقّي وبتشوف. تقدّمك الحقيقي بينحفظ وبيرجع لما تطلع.</p>
            <button class="btn primary" id="sb-enter">🧪 افتح كل إشي</button>`}
     </section>`);
@@ -595,6 +597,10 @@ function showSettings() {
   if ($('#sb-enter')) $('#sb-enter').onclick = () => swap(E.enterSandbox(state), '🧪 وضع التجربة: كل إشي مفتوح');
   if ($('#sb-leave')) $('#sb-leave').onclick = () => ask('ترجع لتقدّمك الحقيقي؟ كل إشي عملته بالتجربة بيروح.', () => swap(E.leaveSandbox(state), '↩ رجعت لتقدّمك الحقيقي'));
   if ($('#sb-refill')) $('#sb-refill').onclick = () => { E.refillSandbox(state); scheduleSave(); render(); FX.toast('🔄 تعبّوا'); };
+  if ($('#sb-cmd')) $('#sb-cmd').onclick = () => { state.stats.keysEarned = (state.stats.keysEarned || 0) + KEYS_PER_RANK; scheduleSave(); closeModal(); checkCommander(); render(); hqScene?.update({ rankIndex: commander(state).rankIndex }); FX.toast(`🫡 القائد صار ${commander(state).rank}`); };
+  if ($('#sb-dims')) $('#sb-dims').onclick = () => showDimRanks();
+  if ($('#sb-ship')) $('#sb-ship').onclick = () => { state.story = { ...state.story, ship: E.SHIP.parts * E.SHIP.per }; scheduleSave(); hqScene?.setShip(E.SHIP.parts); closeModal(); render(); FX.toast('🚢 السفينة اكتملت — شوفها عالشط تحت قاعة المحاربين'); };
+  if ($('#sb-story')) $('#sb-story').onclick = () => { state.story = { speech: false, jailed: false, ship: 0, phase: 'none' }; scheduleSave(); closeModal(); go('world'); FX.toast('📜 القصة رجعت من الأول'); };
   $('#snd-on').onchange = (e) => { SND.set('enabled', e.target.checked); };
   document.querySelectorAll('[data-snd]').forEach((el) => (el.oninput = () => { SND.set(el.dataset.snd, +el.value); el.nextElementSibling.textContent = Math.round(el.value * 100); }));
   document.querySelectorAll('[data-snd-test]').forEach((el) => (el.onclick = () => SND.sfx[el.dataset.sndTest]()));
@@ -856,7 +862,8 @@ async function bindHQ() {
     const { mountHQ } = await import('./hq3d.js');
     if (!v.isConnected) return;
     v.querySelector('.w3-loading')?.remove();
-    hqScene = mountHQ(v, { weather: currentWeather(), places: warPlaces(), owned: CHARACTERS.filter((c) => state.characters[c.id]).map((c) => c.id), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, ...innerState(), story: { ...state.story, ship: E.shipStage(state) }, onSpeechDone: () => { act(E.finishSpeech(state)); FX.toast('🏝 ظهرت جزيرة القادة على الخريطة… مسكّرة لحد ما تكمل السفينة'); }, onRoom: (r) => { document.body.classList.toggle('in-dungeon', r === 'dungeon'); document.body.classList.toggle('in-heaven', r === 'heaven' || r === 'shore'); document.body.classList.toggle('in-gallery', r === 'gallery'); }, sky: skyInfo, onTable: showWarMap, onCommander: showCommandRanks });
+    hqScene = mountHQ(v, { weather: currentWeather(), places: warPlaces(), owned: CHARACTERS.filter((c) => state.characters[c.id]).map((c) => c.id), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, ...innerState(), story: { ...state.story, ship: E.shipStage(state) }, ranks: Object.fromEntries(CHARACTERS.filter((c) => state.characters[c.id] && c.stages).map((c) => [c.id, E.rankName(state.characters[c.id])])),
+      onStory: (phase) => { if (phase === 'march') act(E.finishSpeech(state)); else { act(E.storyStep(state, phase)); if (phase === 'back') FX.toast('🏝 جزيرة القادة صارت ظاهرة عالخريطة… مسكّرة لحد ما تكمل السفينة'); } }, onRoom: (r) => { document.body.classList.toggle('in-dungeon', r === 'dungeon'); document.body.classList.toggle('in-heaven', r === 'heaven' || r === 'shore'); document.body.classList.toggle('in-gallery', r === 'gallery'); }, sky: skyInfo, onTable: showWarMap, onCommander: showCommandRanks });
     loadWeather();
   } catch (err) { console.warn('3D HQ unavailable', err); v.innerHTML = ''; }
 }

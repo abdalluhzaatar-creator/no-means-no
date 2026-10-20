@@ -43,7 +43,7 @@ function canvasTex(w, h, draw, repeat) {
   return t;
 }
 
-export function mountHQ(container, { places, owned = [], weather = 'clear', hq, rankIndex, future = 0, child = 0, story = {}, sky: skyInfo, onCommander, onTable, onRoom, onSpeechDone }) {
+export function mountHQ(container, { places, owned = [], weather = 'clear', hq, rankIndex, future = 0, child = 0, story = {}, ranks = {}, sky: skyInfo, onCommander, onTable, onRoom, onStory }) {
   let seed = 9; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -360,7 +360,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
 
   // ---------- walking: the commander moves around the hall ----------
   const dungeon = buildDungeon(scene);
-  const heaven = buildHeaven(scene, { owned: new Set(owned), story });
+  const heaven = buildHeaven(scene, { owned: new Set(owned), story, ranks });
   const shore = buildShore(scene); shore.setStage(story.ship || 0);
   const gallery = buildVestibule(scene);
   dungeon.setFuture(future); dungeon.setChild(child);
@@ -399,7 +399,6 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   };
   const inDungeon = (x, z) => {
     if (mario.blocked(x, z)) return true;
-    if (prison && Math.hypot(x - prison.at.x, z - prison.at.z) < 2.4) return true;
     x -= DX;
     if (Math.abs(x) > D.hw - 1.2 || z > D.hl - 1.5 || z < -D.hl + 10.8) return true;   // walls and cell bars
     for (const sx of [-1, 1]) for (const pz of [-12, 0, 12]) if (Math.abs(x - sx * 15) < 1.6 && Math.abs(z - pz) < 1.6) return true;
@@ -433,130 +432,227 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   const clampDungeon = (p) => { p.x = Math.max(DX - D.hw + 1, Math.min(DX + D.hw - 1, p.x)); p.z = Math.max(-D.hl + 10, Math.min(D.hl - 1, p.z)); p.y = Math.max(mario.holding ? 7.5 : 0.8, Math.min(14, p.y)); };
   walker.setCameraClamp(clampHall);
 
-  // ---------- the story: Lucifer in the hall, his cell in the vault, the speech ----------
-  const storyState = { ...story };
+  // ---------- the story: Lucifer, the speech, the march to the shore, the empty cage ----------
+  const storyState = { phase: 'none', ...story };
   let hallLuci = storyState.jailed ? null : createLucifer(scene, { camera, container, hero: cmd.root, who: 'commander', groundAt: () => 0, first: 12 });
-  let prison = null;
-  const makePrison = () => {
-    if (prison) return;
-    const at = new THREE.Vector3(DX + 10, 0, 4);
-    const grp = new THREE.Group(); grp.position.copy(at); scene.add(grp);
-    const runeTex = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g2 = cv.getContext('2d'); g2.strokeStyle = '#ff3a1a'; g2.lineWidth = 6; for (const r of [120, 96]) { g2.beginPath(); g2.arc(128, 128, r, 0, 7); g2.stroke(); } g2.font = 'bold 26px serif'; g2.fillStyle = '#ff5a2a'; for (let k = 0; k < 12; k++) { const a = (k / 12) * Math.PI * 2; g2.save(); g2.translate(128 + Math.cos(a) * 108, 128 + Math.sin(a) * 108); g2.rotate(a + Math.PI / 2); g2.fillText('ᛟᛉᚦᛞ'[k % 4], -8, 8); g2.restore(); } const t2 = new THREE.CanvasTexture(cv); return t2; })();
-    const rune = new THREE.Mesh(new THREE.CircleGeometry(2.2, 48), new THREE.MeshBasicMaterial({ map: runeTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })); rune.rotation.x = -Math.PI / 2; rune.position.y = 0.03; grp.add(rune);
-    const L = buildLucifer(); L.root.position.y = 0.2; L.root.rotation.y = Math.PI / 2; grp.add(L.root); L.hero.kneel(1e6);
-    const chainM = new THREE.MeshStandardMaterial({ color: 0xd4a53a, metalness: 0.9, roughness: 0.3, emissive: 0x3a2400, emissiveIntensity: 0.4 });
-    for (let k = 0; k < 4; k++) { const a = (k / 4) * Math.PI * 2 + Math.PI / 4; const px = Math.cos(a) * 2, pz = Math.sin(a) * 2; const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 1.4, 8), chainM); post.position.set(px, 0.7, pz); grp.add(post); const len = Math.hypot(px, pz, 0.6); const ch = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, len, 6), chainM); ch.position.set(px / 2, 1, pz / 2); ch.lookAt(new THREE.Vector3(at.x, 1.2, at.z)); ch.rotateX(Math.PI / 2); grp.add(ch); }
-    const red = new THREE.PointLight(0xff2a10, 14, 9, 1.6); red.position.set(0, 1.6, 0); grp.add(red);
-    const lines = ['اضحك هلأ… بس أنا ما بموت', 'محاربينك رح يضعفوا يوم من الأيام', 'بستناك… كل مرة بتتعب بسمعك', 'الحيطان ما بتحبسني للأبد'];
-    let li = 0, lt = 0;
-    prison = { at, L, rune, red, line: () => lines[li], tick(t, dt) { lt += dt; if (lt > 6) { lt = 0; li = (li + 1) % lines.length; } L.tick(t, dt, Math.sin(t * 0.7) > 0.6 ? 'angry' : 'idle', 1); rune.rotation.z = t * 0.2; red.intensity = 12 + Math.sin(t * 7) * 4; } };
-  };
-  if (storyState.jailed) makePrison();
+  // Lucifer locked in the golden cage in the warriors' hall (until he escapes).
+  let caged = null;
+  const cageLucifer = () => { if (caged) return; const L = buildLucifer(); L.root.position.copy(heaven.cageLocal).setY(0.35); L.root.rotation.y = Math.PI / 2; heaven.group.add(L.root); L.hero.kneel(1e6); caged = L; };
+  if (storyState.jailed) cageLucifer();
+  const following = () => storyState.phase === 'march' || storyState.phase === 'back';
+  heaven.follow(following());
 
-  // Cinematic tools: letterbox, subtitles, a scripted camera, simple movers.
+  // Cinematic tools: letterbox, subtitles, a scripted camera that can track a figure, simple timed animations.
   const bars = document.createElement('div'); bars.className = 'cine-bars'; bars.hidden = true; container.appendChild(bars);
   const sub = document.createElement('div'); sub.className = 'cine-sub'; sub.hidden = true; container.appendChild(sub);
   const flashEl = document.createElement('div'); flashEl.className = 'cine-flash'; container.appendChild(flashEl);
-  const cine = { on: false, pos: new THREE.Vector3(), look: new THREE.Vector3(), cur: new THREE.Vector3(), curLook: new THREE.Vector3(), speed: 1.5 };
-  const shot = (pos, look, speed = 1.2, snap = false) => { cine.pos.copy(pos); cine.look.copy(look); cine.speed = speed; if (snap) { cine.cur.copy(pos); cine.curLook.copy(look); } };
+  const spyEl = document.createElement('div'); spyEl.className = 'spy-view'; spyEl.hidden = true; container.appendChild(spyEl);
+  const cine = { on: false, pos: new THREE.Vector3(), look: new THREE.Vector3(), cur: new THREE.Vector3(), curLook: new THREE.Vector3(), speed: 1.5, follow: null, off: new THREE.Vector3() };
+  const shot = (pos, look, speed = 1.2, snap = false) => { cine.follow = null; cine.pos.copy(pos); cine.look.copy(look); cine.speed = speed; if (snap) { cine.cur.copy(pos); cine.curLook.copy(look); } };
+  const track = (obj, off = new THREE.Vector3(0, 2, 0)) => { cine.follow = obj; cine.off.copy(off); };
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const say = (who, text, ms) => { sub.innerHTML = `${who ? `<b>${who}</b>` : ''}<span>${text}</span>`; sub.hidden = false; return wait(ms); };
   const anims = [];
   const animate = (dur, fn) => new Promise((res) => anims.push({ t: 0, dur, fn, res }));
   const flash = (color = '#fff') => { flashEl.style.background = color; flashEl.classList.remove('go'); void flashEl.offsetWidth; flashEl.classList.add('go'); };
-  let pointing = false, cheering = false;
+  const ease = (k) => k * k * (3 - 2 * k);
+  let pointing = false, cheering = false, cmdWalk = null, holdSpy = false;
   const HV = (x, y, z) => new THREE.Vector3(HX + x, y, z);   // a point in the warriors' hall
+  const SV = (x, y, z) => new THREE.Vector3(x, y, SZ + z);    // a point on the shore
+  const beginCine = () => { cine.on = true; prompt.hidden = true; action = null; caption.hidden = true; walker.setEnabled(false); bars.hidden = false; document.body.classList.add('cine'); hallLuci?.setEnabled(false); };
+  const endCine = () => { sub.hidden = true; bars.hidden = true; document.body.classList.remove('cine'); cine.on = false; cine.follow = null; walker.setEnabled(true); };
+  // Walk the commander to a point (with his walking animation).
+  const walkCmd = async (to, secs) => { const from = cmd.root.position.clone(), face = Math.atan2(to.x - from.x, to.z - from.z); cmdWalk = 1; await animate(secs, (k) => { const e = ease(k); walker.teleport(from.x + (to.x - from.x) * e, from.z + (to.z - from.z) * e, face); }); cmdWalk = null; };
+
+  // 1. The speech in the Hall of Warriors.
   async function runSpeech() {
     if (cine.on || storyState.speech) return;
-    cine.on = true; prompt.hidden = true; action = null; caption.hidden = true;
-    walker.setEnabled(false); bars.hidden = false; document.body.classList.add('cine');
-    hallLuci?.setEnabled(false);
+    beginCine();
     const P = heaven.platform;
     walker.teleport(P.x, P.z, 0);
     heaven.setFocus(P);
-    shot(HV(0, 8, 18), HV(0, 2.5, -12), 1, true);
-    await wait(1200);
-    shot(HV(2.5, 3.6, -6.5), HV(0, 3.2, -14), 0.6);
-    await say('القائد', 'أيها المحاربون… أنا ممتنٌّ لكم على انتصاراتكم…', 4200);
-    // Lucifer bursts in
+    shot(HV(0, 11, 21), HV(0, 3, -10), 0.5, true);
+    await wait(600);
+    shot(HV(0, 5.5, 8), HV(0, 3, -13), 0.35);                        // slow push down the aisle
+    await wait(3400);
+    shot(HV(2.4, 1.7, -9.2), HV(0, 3.5, -14), 0.6);                  // low, heroic, on the commander
+    await say('القائد', 'أيها المحاربون… أنا ممتنٌّ لكم على انتصاراتكم…', 4400);
+    // Lucifer bursts out of the floor in the aisle.
     sfx.thunder(); flash('#ff3a1a');
     const L = buildLucifer(); heaven.group.add(L.root); L.root.position.set(0, -3, 1); L.root.rotation.y = Math.PI; L.setOpacity(1);
     const redL = new THREE.PointLight(0xff2a10, 0, 18, 1.5); redL.position.set(0, 3, 1); heaven.group.add(redL);
-    let mood = 'happy';
-    const luciTick = { on: true };
-    anims.push({ t: 0, dur: 1e9, fn: (k, t, dt) => { if (luciTick.on) { L.tick(t, dt, mood, 1); redL.intensity = 20 + Math.sin(t * 9) * 6; } }, res: () => {} });
-    shot(HV(-4.5, 2.6, 7), HV(0, 2.2, 1), 1.2);
+    let mood = 'happy'; const luciOn = { on: true };
+    anims.push({ t: 0, dur: 1e9, fn: (k, t, dt) => { if (luciOn.on) { L.tick(t, dt, mood, 1); redL.intensity = 22 + Math.sin(t * 9) * 6; } }, res: () => {} });
+    shot(HV(-9, 4, -5.5), HV(0, 2.4, -6.5), 2, true);                 // wide two-shot: the commander and the intruder
     sfx.luciLaugh();
-    await animate(1.6, (k) => { L.root.position.y = -3 + k * 3.3; });
+    await animate(1.6, (k) => { L.root.position.y = -3 + ease(k) * 3.3; });
+    shot(HV(2.6, 2.2, -3.4), HV(0, 2.7, 1), 0.8);
     await say('لوسيفير', 'فرحةٌ مؤقتة! وسأُفسد محاربيك، من أوّلهم إلى آخرهم، أيها القائد…', 5200);
-    mood = 'angry';
+    mood = 'angry'; shot(HV(-2.6, 2.2, -3.4), HV(0, 2.7, 1), 0.35);    // slow orbit round him
     await say('لوسيفير', 'إلى أن أراك وحيدًا ضعيفًا… ثم أبيعك الآمالَ والأحلامَ الكاذبة إلى أن تموت…', 5600);
-    mood = 'happy'; sfx.luciLaugh();
+    mood = 'happy'; sfx.luciLaugh(); shot(HV(0.4, 2.9, -1.4), HV(0, 2.95, 1), 0.7);  // close on his face
     await say('لوسيفير', 'وبعدها سأضمن أنك ستكون رفيقي الأبديّ في جهنّم!', 4600);
-    shot(HV(1.8, 3.5, -9.5), HV(0, 3.2, -14), 1);
+    shot(HV(2.2, 3.3, -8.4), HV(0, 3.6, -14), 1.2);                  // close on the commander
     await say('القائد', 'هذه أكبرُ أمانيك.', 3200);
-    // The commander points to the spiritual warrior.
+    // He points to the spiritual warrior.
     const w = heaven.warriors[0];
-    const face = Math.atan2(HX + w.x - P.x, w.z - P.z);
-    walker.teleport(P.x, P.z, face); pointing = true;
-    shot(HV(-2.5, 4, -9), HV(w.x, 2.4, w.z), 1);
-    await say('', '(القائد يؤشّر للمحارب الروحي)', 2400);
-    // The spiritual warrior strides to Lucifer and strikes.
+    walker.teleport(P.x, P.z, Math.atan2(w.x, w.z - (P.z))); pointing = true;
+    shot(HV(-1.4, 3.9, -16.8), HV(w.x, 2.2, w.z), 1);
+    await say('', '(القائد يؤشّر للمحارب الروحي)', 2600);
     heaven.script(w, true); w.walk = 1;
-    const from = w.hero.root.position.clone(), to = new THREE.Vector3(1.6, 0, 1.4);
-    shot(HV(8, 4, 8), HV(2, 1.8, 2), 0.9);
-    await animate(3, (k) => { const e = k * k * (3 - 2 * k); w.hero.root.position.lerpVectors(from, to, e); w.hero.root.rotation.y = Math.atan2(to.x - from.x, to.z - from.z); });
+    const from = w.hero.root.position.clone(), to = new THREE.Vector3(1.6, 0, 1.6);
+    shot(HV(9, 4, -2), HV(3, 2, 4), 0.8); track(w.hero.root, new THREE.Vector3(0, 2, 0));
+    await animate(3, (k) => { w.hero.root.position.lerpVectors(from, to, ease(k)); w.hero.root.rotation.y = Math.atan2(to.x - from.x, to.z - from.z); });
     w.walk = 0; w.hero.root.rotation.y = Math.atan2(0 - to.x, 1 - to.z); pointing = false;
-    w.hero.salute(); await wait(450);
+    shot(HV(4.6, 1.5, -2.6), HV(0.8, 2.2, 1.3), 2.5);               // low angle on the strike
+    w.hero.salute(); await wait(500);
     flash('#fff'); sfx.impact(); sfx.luciRoar(); mood = 'angry';
     const wave = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.9, 48), new THREE.MeshBasicMaterial({ color: 0xffe8a0, transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })); wave.rotation.x = -Math.PI / 2; wave.position.set(0, 0.2, 1); heaven.group.add(wave);
     const chainsG = new THREE.Group(); chainsG.position.set(0, 1.2, 1); heaven.group.add(chainsG);
     const chainM = new THREE.MeshStandardMaterial({ color: 0xffd06a, metalness: 1, roughness: 0.25, emissive: 0x6a4400, emissiveIntensity: 0.8 });
     for (let k = 0; k < 6; k++) { const c = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.06, 6, 32), chainM); c.rotation.set(Math.PI / 2 + (k - 2.5) * 0.25, k, 0); c.position.y = (k - 2.5) * 0.35; chainsG.add(c); }
-    await animate(1, (k) => { wave.scale.setScalar(1 + k * 9); wave.material.opacity = 1 - k; L.root.position.x = -k * 1.6; L.root.rotation.z = k * 0.5; chainsG.position.x = -k * 1.6; chainsG.scale.setScalar(1.6 - k * 0.9); });
-    shot(HV(-5, 2.4, 6), HV(-1.6, 1, 1), 1);
-    await say('', '(المحارب الروحي يقيّد لوسيفير…)', 2000);
-    await animate(2.6, (k) => { L.root.position.y = 0.3 - k * 4; chainsG.position.y = 1.2 - k * 4; L.setOpacity(1 - k * 0.9); });
-    luciTick.on = false; heaven.group.remove(L.root, chainsG, wave, redL);
-    await say('', '⛓ وحُبس لوسيفير في القبو', 2600);
-    storyState.jailed = true; hallLuci?.dispose(); hallLuci = null; makePrison();
-    // The warrior returns to his place.
+    await animate(1, (k) => { wave.scale.setScalar(1 + k * 9); wave.material.opacity = 1 - k; L.root.position.x = -k * 1.4; L.root.rotation.z = k * 0.5; chainsG.position.x = -k * 1.4; chainsG.scale.setScalar(1.6 - k * 1); });
+    heaven.group.remove(wave);
+    await say('', '(المحارب الروحي يقيّد لوسيفير…)', 1800);
+    // He drags him to the golden cage.
+    shot(HV(-3, 4.5, 11), HV(-6, 1.6, 2), 0.7);
+    const cage = heaven.cageLocal, lf = L.root.position.clone(), lt = cage.clone().setY(0.35);
+    heaven.setCageOpen(1); w.walk = 1;
+    await animate(3, (k) => { const e = ease(k); L.root.position.lerpVectors(lf, lt, e); L.root.position.y = 0.35 + Math.sin(k * Math.PI) * 0.6; chainsG.position.set(L.root.position.x, 1.2, L.root.position.z); w.hero.root.position.lerpVectors(to, new THREE.Vector3(cage.x + 2.6, 0, cage.z + 1), e); w.hero.root.rotation.y = Math.atan2(cage.x - to.x, cage.z - to.z); });
+    w.walk = 0; heaven.setCageOpen(0); sfx.impact(); creak();
+    luciOn.on = false; heaven.group.remove(L.root, chainsG, redL); cageLucifer();
+    shot(HV(-7.5, 2.6, 7.5), HV(cage.x, 1.6, cage.z), 1);
+    await say('', '⛓ وحُبس لوسيفير في القفص الذهبي', 2800);
+    storyState.jailed = true; hallLuci?.dispose(); hallLuci = null;
     w.walk = 1;
-    const back = from.clone();
-    await animate(2.4, (k) => { w.hero.root.position.lerpVectors(to, back, k); w.hero.root.rotation.y = Math.atan2(back.x - to.x, back.z - to.z); });
+    const wb = w.hero.root.position.clone();
+    shot(HV(0, 3.4, -8.6), HV(0, 3.3, -14), 0.8);
+    await animate(2.4, (k) => { w.hero.root.position.lerpVectors(wb, from, k); w.hero.root.rotation.y = Math.atan2(from.x - wb.x, from.z - wb.z); });
     w.walk = 0; heaven.script(w, false);
     walker.teleport(P.x, P.z, 0);
-    shot(HV(0, 3.6, -7.6), HV(0, 3.3, -14), 0.8);
+    shot(HV(1.4, 2.5, -8.6), HV(0, 3.6, -14), 0.35);                 // slow push-in during the vow
     await say('القائد', 'أنظاري تتّجه إلى جزيرة القادة… حتى يكون لي فيها مكانٌ بين قادة البشر.', 6000);
-    // The warriors roar.
+    // The warriors roar: the camera cranes up over the hall.
     cheering = true; sfx.cheer();
     heaven.warriors.forEach((x, i) => setTimeout(() => x.hero.salute(), i * 90));
-    shot(HV(0, 11, 15), HV(0, 1, -5), 1);
-    await say('المحاربون', 'هووووووه! هووووه!', 3800);
+    shot(HV(0, 2.5, 4), HV(0, 2, -6), 3, true); shot(HV(0, 15, 10), HV(0, 1, -6), 0.5);
+    await say('المحاربون', 'هووووووه! هووووه!', 4000);
     cheering = false;
-    shot(HV(0, 3.4, -10.4), HV(0, 3.3, -14), 0.5);
+    shot(HV(0.5, 3.45, -11.4), HV(0, 3.45, -14), 0.6);
     await say('', '(القائد ينظر إليهم بفخر)', 3000);
-    cmd.wave(); sfx.cheer();
+    cmd.wave(); sfx.cheer(); shot(HV(1.6, 2.2, -9.4), HV(0, 3.7, -14), 1);
     await say('القائد', 'هيّااااااا!', 2400);
     heaven.openGate(); creak();
-    shot(HV(10, 6, 7), HV(23, 4, 0), 0.8);
-    await wait(3200);
-    // Down the new gate to the shore.
-    fade.classList.add('on'); await wait(900);
-    room = 'shore'; setRoomLights('shore'); onRoom?.('shore');
-    walker.setGround(shore.groundAt); walker.teleport(0, SZ + 5, Math.PI); walker.setBlocked(shore.blocked); walker.setCameraClamp(shore.clamp);
-    scene.fog.color.set(shore.fog); scene.fog.density = 0.004; renderer.toneMappingExposure = 0.9;
+    shot(HV(11, 5, 6), HV(23, 4, 0), 0.7);
+    await wait(3000);
     heaven.setFocus(null);
-    shot(new THREE.Vector3(14, 8, SZ + 14), new THREE.Vector3(0, 3, SZ - 6), 1, true);
-    fade.classList.remove('on');
-    await wait(1500);
-    await say('القائد', 'أكمِلوا بناءها!', 3200);
-    sub.hidden = true; bars.hidden = true; document.body.classList.remove('cine');
-    cine.on = false; walker.setEnabled(true);
-    storyState.speech = true;
-    onSpeechDone?.();
+    storyState.speech = true; storyState.phase = 'march'; heaven.follow(true);
+    onStory?.('march');
+    endCine();
+    walker.teleport(P.x, P.z + 3.2, Math.PI / 2);
+    say('', 'خذ المحاربين عالشط: من الباب الشرقي ⬅', 5000).then(() => { if (!cine.on) sub.hidden = true; });
   }
-  if (window.__nmnDebug) window.__hqSpeech = runSpeech;
+
+  // 2. On the shore: the spyglass, the map, the island.
+  async function runSpyglass() {
+    if (cine.on || storyState.phase !== 'march') return;
+    beginCine();
+    shore.following = true;
+    const V = shore.view, I = shore.isle;
+    const face = Math.atan2(I.x - V.x, I.z - V.z);
+    const p0 = cmd.root.position, wp = p0.x >= 0 ? new THREE.Vector3(13.5, 0, SZ - 13) : new THREE.Vector3(-13.5, 0, SZ - 3);
+    shot(SV(24, 9, 6), SV(0, 1, -8), 1, true); track(cmd.root, new THREE.Vector3(0, 1.5, 0));
+    await walkCmd(wp, 2.4);
+    await walkCmd(V, 3.2);
+    walker.teleport(V.x, V.z, face);
+    const ws = shore.workers, A = ws[1], B = ws[6];
+    A.scripted = B.scripted = true;
+    const side = (k) => new THREE.Vector3(V.x + Math.cos(face) * k, 0, V.z - Math.sin(face) * k);
+    shot(SV(-24, 4, -10), new THREE.Vector3(V.x, 2, V.z), 1);
+    // a warrior brings the spyglass
+    const aTo = side(1.4), aFrom = A.h.root.position.clone(); A.walk = 1;
+    track(A.h.root, new THREE.Vector3(0, 1.8, 0));
+    await animate(2.2, (k) => { A.h.root.position.lerpVectors(aFrom, aTo, ease(k)); A.h.root.rotation.y = Math.atan2(aTo.x - aFrom.x, aTo.z - aFrom.z); });
+    A.walk = 0; A.h.root.rotation.y = face - Math.PI / 2;
+    const FW = new THREE.Vector3(Math.sin(face), 0, Math.cos(face)), LT = new THREE.Vector3(Math.cos(face), 0, -Math.sin(face));
+    shot(V.clone().addScaledVector(FW, 5).addScaledVector(LT, 2.4).setY(3), V.clone().setY(2.6), 1.5);   // in front of them, looking back
+    A.h.wave();
+    const spy = shore.spyglass; spy.visible = true;
+    await say('', '(أحد المحاربين يناول القائد المنظار)', 2600);
+    // another stands beside him with the map
+    const bTo = side(-1.4), bFrom = B.h.root.position.clone(); B.walk = 1;
+    await animate(2, (k) => { B.h.root.position.lerpVectors(bFrom, bTo, ease(k)); B.h.root.rotation.y = Math.atan2(bTo.x - bFrom.x, bTo.z - bFrom.z); });
+    B.walk = 0; B.h.root.rotation.y = face; shore.mapProp.visible = true; B.holdMap = true;
+    await say('', '(ومحارب ثاني يوقف جنبه ماسك الخريطة)', 2600);
+    // he raises the spyglass and looks
+    holdSpy = true;
+    shot(V.clone().addScaledVector(FW, 3.4).addScaledVector(LT, -2.2).setY(3.2), V.clone().setY(3.1), 1.4);   // his face as he raises the glass
+    await wait(2200);
+    spyEl.hidden = false; const fov0 = camera.fov; camera.fov = 24; camera.updateProjectionMatrix();
+    const fog0 = scene.fog.density; scene.fog.density = 0.0009;
+    const eye = V.clone().addScaledVector(FW, 1.5).setY(3.4);
+    shot(eye, I.clone().add(new THREE.Vector3(-55, -12, 0)), 4, true); shot(eye, I.clone().add(new THREE.Vector3(0, -8, 0)), 0.45);
+    await say('', '(جزيرة القادة… بعيدة، بس واضحة)', 4400);
+    spyEl.hidden = true; camera.fov = fov0; camera.updateProjectionMatrix(); scene.fog.density = fog0; holdSpy = false;
+    // excitement: the camera rises above them, all hands up
+    cheering = true; sfx.cheer(); cmd.salute?.(); ws.forEach((x, i) => setTimeout(() => x.h.salute(), i * 80));
+    shot(new THREE.Vector3(V.x + 1, 2.4, V.z + 3), new THREE.Vector3(V.x, 2.5, V.z), 3, true);
+    shot(new THREE.Vector3(V.x + 2, 17, V.z + 7), new THREE.Vector3(V.x, 1, V.z), 0.45);
+    await wait(2600);
+    await say('القائد', 'كمّلوا مهامكم… عشان نخلّص السفينة!', 4200);
+    cheering = false; spy.visible = false; shore.mapProp.visible = false; B.holdMap = false; A.scripted = B.scripted = false;
+    // he turns for the castle and waves them on
+    const st = shore.top, toward = new THREE.Vector3(-15, 0, SZ + 3);
+    shot(new THREE.Vector3(-24, 5, SZ - 6), new THREE.Vector3(-14, 2, SZ - 6), 0.8); track(cmd.root, new THREE.Vector3(0, 2, 0));
+    await walkCmd(toward, 2.6);
+    walker.teleport(toward.x, toward.z, Math.atan2(V.x - toward.x, V.z - toward.z)); cmd.wave();
+    shot(new THREE.Vector3(-15 - 3, 3.2, SZ + 3 - 4.5), new THREE.Vector3(-15, 2.8, SZ + 3), 1.4);
+    await say('القائد', 'يلّا… وَرايْ!', 2400);
+    storyState.phase = 'back'; onStory?.('back');
+    endCine();
+    walker.teleport(toward.x, toward.z, Math.atan2(st.x - toward.x, st.z - toward.z));
+    say('', 'ارجع للقلعة من الدرج ⬆ — والمحاربين وراك', 4500).then(() => { if (!cine.on) sub.hidden = true; });
+  }
+
+  // 3. Back in the hall: the cage is locked… and empty.
+  async function runCage() {
+    if (cine.on || storyState.phase !== 'back') return;
+    beginCine();
+    const C = heaven.cage, w = heaven.warriors[0];
+    // Lucifer is already gone: the cage stands locked and empty.
+    if (caged) { heaven.group.remove(caged.root); caged = null; }
+    // They gather near the cage: the commander, the spiritual warrior beside him, the others behind.
+    heaven.follow(false); heaven.script(w, true);
+    walker.teleport(HX - 6.5, 4.2, 0);
+    const wt = new THREE.Vector3(-6.6, 0, 6.2);
+    w.hero.root.position.copy(wt); w.hero.root.rotation.y = Math.PI;
+    heaven.arrange((i) => new THREE.Vector3(-4.6 - (i % 3) * 1.7, 0, 8.6 + Math.floor(i / 3) * 1.6), w);
+    heaven.setFocus(new THREE.Vector3(HX - 6.5, 0, 5));
+    shot(HV(1, 6, 9), HV(-7, 2, 4), 1, true); shot(HV(-1.5, 4.5, 8.5), HV(-6.6, 2.4, 4.8), 0.5);
+    await wait(2600);
+    shot(HV(-2.4, 3.1, 5.6), HV(-6.6, 2.9, 5.2), 1.4);               // profile two-shot
+    await say('القائد', 'هل حبستَ لوسيفير؟', 3000);
+    shot(HV(-2.9, 3.0, 4.4), HV(-6.6, 3.0, 5.8), 0.6);               // drifting closer on the warrior
+    await say('المحارب الروحي', 'نعم يا قائدي… بيديّ هاتين.', 3200);
+    // they turn to the cage
+    walker.teleport(HX - 6.5, 4.2, Math.atan2(C.x - (HX - 6.5), C.z - 4.2)); w.hero.root.rotation.y = Math.atan2(heaven.cageLocal.x - wt.x, heaven.cageLocal.z - wt.z);
+    heaven.setFocus(C);
+    shot(HV(-3.6, 3.6, 6.4), HV(-10, 1.8, 3.2), 0.9);
+    await wait(1800);
+    shot(HV(-5, 2.7, 3.6), HV(-11.5, 1.6, 2.5), 0.5);
+    await say('', '(القفص مقفول… بس فاضي)', 3800);
+    sfx.luciLaugh();
+    await say('', '(ضحكة لوسيفير من بعيد…)', 3000);
+    shot(HV(-4.2, 3.3, 2.2), HV(-6.5, 3.2, 4.2), 1);
+    await say('القائد', 'هرب…', 2400);
+    heaven.script(w, false); heaven.setFocus(null); heaven.sendHome();
+    storyState.phase = 'done'; storyState.jailed = false;
+    hallLuci = createLucifer(scene, { camera, container, hero: cmd.root, who: 'commander', groundAt: () => 0, first: 20 });
+    onStory?.('done');
+    endCine();
+  }
+  if (window.__nmnDebug) { window.__hqSpeech = runSpeech; window.__hqSpy = runSpyglass; window.__hqCage = runCage; window.__hqStory = storyState; }
+
 
   // Door prompt: near the great doors (hall) or the iron door (dungeon).
   const prompt = document.createElement('button'); prompt.className = 'door-btn'; prompt.hidden = true; container.appendChild(prompt);
@@ -581,7 +677,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
       if (to === 'dungeon') { walker.setGround(null); walker.teleport(DX, D.hl - 4, Math.PI, 0); walker.setBlocked(inDungeon); walker.setCameraClamp(clampDungeon); scene.fog.color.set(0x0a0806); scene.fog.density = 0.03; chains(); }
       else if (to === 'gallery') { walker.setGround(null); if (from === 'heaven') walker.teleport(gallery.fromLight.x, gallery.fromLight.z, 0, 0); else walker.teleport(gallery.entrance.x, gallery.entrance.z, Math.PI, 0); walker.setBlocked(gallery.blocked); walker.setCameraClamp(gallery.clamp); scene.fog.color.set(0xd8c8a8); scene.fog.density = 0.016; renderer.toneMappingExposure = 0.85; }
       else if (to === 'heaven') { walker.setGround(heaven.groundAt); if (from === 'shore') walker.teleport(heaven.gateOut.x - 3, 0, -Math.PI / 2); else walker.teleport(heaven.entrance.x, heaven.entrance.z, Math.PI, 0); walker.setBlocked(heaven.blocked); walker.setCameraClamp(heaven.clamp); heavenSky(); }
-      else if (to === 'shore') { walker.setGround(shore.groundAt); walker.teleport(shore.top.x, shore.top.z, Math.PI); walker.setBlocked(shore.blocked); walker.setCameraClamp(shore.clamp); scene.fog.color.set(shore.fog); scene.fog.density = 0.004; renderer.toneMappingExposure = 0.9; }
+      else if (to === 'shore') { walker.setGround(shore.groundAt); walker.teleport(shore.top.x, shore.top.z, Math.PI); shore.following = following(); if (shore.following) shore.placeBehind(new THREE.Vector3(shore.top.x, 0, shore.top.z - SZ), Math.PI); else shore.sendToWork(); walker.setBlocked(shore.blocked); walker.setCameraClamp(shore.clamp); scene.fog.color.set(shore.fog); scene.fog.density = 0.004; renderer.toneMappingExposure = 0.9; }
       else {
         walker.setGround(hallGround); walker.setBlocked(inHall); walker.setCameraClamp(clampHall); scene.fog.color.set(0x1a120c); scene.fog.density = 0.012; setCry(0); applySky();
         if (from === 'dungeon') {
@@ -591,6 +687,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
         } else walker.teleport(7, SIDE.z, -Math.PI / 2);   // inside the hall, so the camera is behind him
       }
       onRoom?.(to);
+      if (to === 'heaven') { heaven.follow(following()); if (following() && from === 'shore') { const c0 = cmd.root.position; heaven.warriors.forEach((w, i) => w.hero.root.position.set(c0.x - HX + 1.8 * (Math.floor(i / 2) + 1), 0, c0.z + (i % 2 ? -1.3 : 1.3))); } if (storyState.phase === 'back' && from === 'shore') setTimeout(runCage, 900); }
       setTimeout(() => { fade.classList.remove('on'); going = false; }, white ? 500 : 150);
     }, white ? 1400 : 700);
   };
@@ -630,12 +727,14 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
         const k = `<i style="--v:${Math.round((heaven.stage / heaven.total) * 100)}%"></i>`;
         if (!heaven.complete) caption.innerHTML = `<b>🏛 منبر القائد</b><span>بيتبنى شوي شوي مع كل محارب بينضم لجيشك: ${heaven.stage} من ${heaven.total}.</span>${k}`;
         else if (!storyState.speech) { caption.innerHTML = '<b>🏛 منبر القائد</b><span>اكتمل المنبر… والمحاربون بانتظار كلمتك.</span>'; showPrompt('🎙 اخطب في المحاربين', runSpeech); }
-        else caption.innerHTML = '<b>🏛 منبر القائد</b><span>⛓ لوسيفير محبوس في القبو. الباب الشرقي بيوديك عالشط، لعند السفينة.</span>';
-      } else caption.hidden = true;
+        else caption.innerHTML = `<b>🏛 منبر القائد</b><span>${storyState.phase === 'done' ? 'لوسيفير هرب من القفص… والسفينة لسا بتتبنى عالشط.' : 'الباب الشرقي بيوديك عالشط، لعند السفينة.'}</span>`;
+      } else if (Math.hypot(p.x - heaven.cage.x, p.z - heaven.cage.z) < 4.5) { caption.hidden = false; caption.innerHTML = caged ? '<b>⛓ لوسيفير</b><span>«اضحك هلأ… القفص ما رح يحبسني للأبد.»</span>' : '<b>⛓ القفص الذهبي</b><span>مقفول… وفاضي. لوسيفير هرب.</span>'; }
+      else caption.hidden = true;
     } else if (room === 'shore') {
       prompt.hidden = true; action = null;
       if (cine.on) { caption.hidden = true; return; }
       if (shore.atTop(p) && !going) { going = true; go('heaven'); }
+      if (storyState.phase === 'march' && p.z - SZ < 1.5) { runSpyglass(); return; }
       if (shore.nearShip(p)) { caption.hidden = false; caption.innerHTML = `<b>🚢 السفينة: ${shore.stage} من 12</b><span>${shore.stage >= 12 ? 'السفينة جاهزة… الإبحار لجزيرة القادة قريبًا.' : 'بتتبنى لحالها: كل 6 مهام بتنجزوها = قطعة جديدة.'}</span><i style="--v:${Math.round((shore.stage / 12) * 100)}%"></i>`; }
       else caption.hidden = true;
     } else {
@@ -649,8 +748,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
       const dF = p.distanceTo(dungeon.futureAt), dC = p.distanceTo(dungeon.childAt);
       // Crying grows louder as you approach the child (only while it is sad).
       setCry(childLevel < 0.4 ? Math.max(0, 1 - dC / 22) * (1 - childLevel * 2) : 0);
-      if (prison && Math.hypot(p.x - prison.at.x, p.z - prison.at.z) < 6) { caption.hidden = false; caption.innerHTML = `<b>⛓ لوسيفير</b><span>«${prison.line()}»</span>`; }
-      else       if ((mario.holding && t0 - heldAt < 6) || (!mario.holding && mario.near(p))) { caption.hidden = false; caption.innerHTML = mario.holding ? '<b>🎎 القادة الثمانية بين إيديك</b><span>هم صراعاتك الداخلية… وإنت اللي ماسك الخيوط. حرّكهم زي ما بدك.</span>' : '<b>🎎 خيوط القائد</b><span>ثمان دمى لقادة الأبعاد الثمانية، معلّقة بخيوط بين إيديك.</span>'; }
+      if ((mario.holding && t0 - heldAt < 6) || (!mario.holding && mario.near(p))) { caption.hidden = false; caption.innerHTML = mario.holding ? '<b>🎎 القادة الثمانية بين إيديك</b><span>هم صراعاتك الداخلية… وإنت اللي ماسك الخيوط. حرّكهم زي ما بدك.</span>' : '<b>🎎 خيوط القائد</b><span>ثمان دمى لقادة الأبعاد الثمانية، معلّقة بخيوط بين إيديك.</span>'; }
       else if (dF < 8 && dF <= dC) { caption.hidden = false; caption.innerHTML = futureText(futureLevel); }
       else if (dC < 8) { caption.hidden = false; caption.innerHTML = childText(childLevel); }
       else caption.hidden = true;
@@ -690,17 +788,19 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
   if (camera.aspect < 0.8) { camera.fov = 58; camera.updateProjectionMatrix(); }
 
+  const tmpV = new THREE.Vector3();
   const clock = new THREE.Clock(); let raf, lastSky = 0;
   const tick = () => {
-    const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+    const raw = clock.getDelta(), dt = Math.min(raw, 0.05), rdt = Math.min(raw, 0.3), t = clock.elapsedTime;   // rdt: real time, for cinematics
     if (t - lastSky > 30) { if (room === 'heaven') heavenSky(); else if (room !== 'gallery') applySky(); lastSky = t; }
     const mv = walker.update(dt);
-    cmd.update(t, dt, mv.walk, mv.air);
+    cmd.update(t, dt, cmdWalk ?? mv.walk, mv.air);
+    if (holdSpy) { const ar = cmd.arms[1]; ar.sh.rotation.x = -2.1; ar.sh.rotation.z = -0.25; ar.el.rotation.x = -1.5; }
     if (pointing) { const ar = cmd.arms[1]; ar.sh.rotation.x = -1.55; ar.sh.rotation.z = 0; ar.el.rotation.x = 0; }
-    for (let i = anims.length - 1; i >= 0; i--) { const an = anims[i]; an.t += window.__nmnDebug ? dt * 6 : dt; const k = Math.min(1, an.t / an.dur); an.fn(k, t, dt); if (k >= 1) { anims.splice(i, 1); an.res(); } }
-    if (cine.on) { const k = 1 - Math.exp(-dt * cine.speed); cine.cur.lerp(cine.pos, k); cine.curLook.lerp(cine.look, k); camera.position.copy(cine.cur); camera.lookAt(cine.curLook); }
+    for (let i = anims.length - 1; i >= 0; i--) { const an = anims[i]; an.t += rdt; const k = Math.min(1, an.t / an.dur); an.fn(k, t, rdt); if (k >= 1) { anims.splice(i, 1); an.res(); } }
+    if (cine.on && cine.follow) { cine.follow.getWorldPosition(cine.look); cine.look.add(cine.off); }
+    if (cine.on) { const k = 1 - Math.exp(-rdt * cine.speed); cine.cur.lerp(cine.pos, k); cine.curLook.lerp(cine.look, k); camera.position.copy(cine.cur); camera.lookAt(cine.curLook); }
     if (hallLuci) { hallLuci.setEnabled(room === 'hall' && !cine.on); if (room === 'hall') hallLuci.tick(t, dt); }
-    if (prison && room === 'dungeon') prison.tick(t, dt);
     if (room === 'dungeon') {
       mario.tick(t, dt, cmd.root);
       // His arms reach forward to hold the controller (higher when he lifts them).
@@ -713,9 +813,20 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
     }
     dungeon.tick(t, dt);
     for (const w of wellFlames) { const k = 0.85 + Math.sin(t * 11 + w.l.position.y) * 0.12; w.fl.scale.y = k; w.l.intensity = 14 * k; }
-    if (room === 'heaven') { heaven.tick(t, dt, cmd.root.position); heaven.weatherTick(t, dt); }
+    if (room === 'heaven') { heaven.tick(t, rdt, cmd.root.position, cmd.root.rotation.y); heaven.weatherTick(t, dt); }
     if (cheering) heaven.warriors.forEach((w, i) => { w.hero.root.position.y = Math.abs(Math.sin(t * 6 + i)) * 0.5; });
-    if (room === 'shore') shore.tick(t, dt, 0);
+    if (room === 'shore') {
+      shore.tick(t, dt, 0);
+      if (shore.following) shore.followTick(t, rdt, new THREE.Vector3(cmd.root.position.x, 0, cmd.root.position.z - SZ), cmd.root.rotation.y);
+      if (cheering) shore.workers.forEach((w, i) => { w.h.root.position.y = Math.abs(Math.sin(t * 6 + i)) * 0.4; });
+      const B = shore.workers[6];
+      if (B.holdMap) { const f = B.h.root.rotation.y; shore.mapProp.position.set(B.h.root.position.x + Math.sin(f) * 0.55, 2.35, B.h.root.position.z + Math.cos(f) * 0.55); shore.mapProp.rotation.set(-0.5, f, 0, 'YXZ'); B.h.arms.forEach((a) => { a.sh.rotation.x = -1.2; a.el.rotation.x = -0.4; }); }
+      if (shore.spyglass.visible) {
+        const f = cmd.root.rotation.y;
+        if (holdSpy) { cmd.head.getWorldPosition(tmpV); shore.spyglass.position.set(tmpV.x + Math.sin(f) * 0.42, tmpV.y + 0.02, tmpV.z + Math.cos(f) * 0.42 - SZ); shore.spyglass.rotation.set(0, f, 0); }
+        else { cmd.arms[1].el.getWorldPosition(tmpV); shore.spyglass.position.set(tmpV.x, tmpV.y - 0.55, tmpV.z - SZ); shore.spyglass.rotation.set(1.2, f, 0); }
+      }
+    }
     if (room === 'gallery') { const k = gallery.tick(t, dt, cmd.root.position); bloom.strength = 0.55 + k * 0.6; scene.fog.density = 0.012 + k * 0.012; }
     else bloom.strength = 0.5;
     updatePrompts();
