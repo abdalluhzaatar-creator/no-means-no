@@ -10,6 +10,7 @@ import { createEnv, canvasTex, glowTex } from './env3d.js';
 import { DIM_SCENES, DIM_ENV } from './dims3d.js';
 import { placeAmbience } from './audio.js';
 import { createLucifer } from './lucifer3d.js';
+import { arm, unarm } from './heaven3d.js';
 
 const heartTex = canvasTex(64, 64, (g) => { g.fillStyle = '#fff'; g.beginPath(); g.moveTo(32, 56); g.bezierCurveTo(-8, 30, 12, 0, 32, 18); g.bezierCurveTo(52, 0, 72, 30, 32, 56); g.fill(); });
 
@@ -56,6 +57,9 @@ export function mountPlace(container, { regionId, palette, rank, features = new 
   // The character.
   const hero = buildWorshipper(palette);
   accessory(regionId, hero);
+  // His armour grows with his rank, the same as in the Hall of Warriors.
+  let tier = rank?.current ?? 0;
+  let cape = arm(hero, palette, false, tier);
   scene.add(hero.root);
   const blocked = (x, z) => place.blocked(x, z) || (stand && Math.hypot(x - SX, z - SZ) < 1);
   const walker = createWalker({ hero, camera, dom: renderer.domElement, container, blocked, dist: 12, height: 3 });
@@ -124,7 +128,7 @@ export function mountPlace(container, { regionId, palette, rank, features = new 
   tick();
 
   return {
-    update({ rank: r, features: f } = {}) { if (r) stand?.update(r); if (f) { feats = f; showFeats(); } },
+    update({ rank: r, features: f } = {}) { if (r) { stand?.update(r); if (r.current !== tier) { unarm(hero); tier = r.current; cape = arm(hero, palette, false, tier); } } if (f) { feats = f; showFeats(); } },
     pray() { if (!hero.busy()) hero.wave(); celebrate(); },
     react(kind) { luci?.react(kind); },
     setWeather(k) { env.setWeather(k); },

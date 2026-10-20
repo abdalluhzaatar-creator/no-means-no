@@ -117,7 +117,11 @@ const WEATHER = {
 //   Gold: + a gold plume, gauntlets, trimmed cape · Platinum: glowing armour and a halo.
 // Within a metal, 1–3 stars on the helm and shield mark the level.
 const TIER_METAL = [0xb87a42, 0xd6dce4, 0xf0c04a, 0xa8f0f8];
+// Remove the armour put on by arm() (used when the rank changes).
+export function unarm(hero) { (hero.armour || []).forEach((o) => o.parent?.remove(o)); hero.armour = []; }
 export function arm(hero, pal, ghost, tier = 0) {
+  const added = [];
+  const put = (parent, o) => { parent.add(o); added.push(o); };
   const grade = Math.min(3, Math.floor(tier / 3)), stars = (tier % 3) + 1;
   const metal = std(ghost ? 0xcfe6ff : TIER_METAL[grade], { metalness: 0.9, roughness: grade === 3 ? 0.15 : 0.25, emissive: !ghost && grade === 3 ? 0x3ad8ff : 0x000000, emissiveIntensity: grade === 3 ? 0.35 : 0 });
   const accent = std(pal.accent, { metalness: 0.4, roughness: 0.4 });
@@ -125,35 +129,36 @@ export function arm(hero, pal, ghost, tier = 0) {
   const neck = hero.head.parent, upper = hero.root.children[1];
   // Helmet with a crest in the dimension colour.
   const helm = new THREE.Mesh(new THREE.SphereGeometry(0.178, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), metal);
-  helm.position.y = 0.17; neck.add(helm);
+  helm.position.y = 0.17; put(neck, helm);
   const crest = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.12 + grade * 0.05, 0.3 + grade * 0.04), std(grade >= 2 ? 0xffd04a : pal.robe, { emissive: grade >= 2 ? 0xffa020 : glow, emissiveIntensity: 0.4 }));
-  crest.position.set(0, 0.36 + grade * 0.025, -0.02); neck.add(crest);
+  crest.position.set(0, 0.36 + grade * 0.025, -0.02); put(neck, crest);
   const starM = std(0xffffff, { metalness: 1, roughness: 0.2, emissive: glow, emissiveIntensity: 0.9 });
-  for (let k = 0; k < stars; k++) { const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.03), starM); st.scale.z = 0.4; st.position.set((k - (stars - 1) / 2) * 0.07, 0.29, 0.15); neck.add(st); }
+  for (let k = 0; k < stars; k++) { const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.03), starM); st.scale.z = 0.4; st.position.set((k - (stars - 1) / 2) * 0.07, 0.29, 0.15); put(neck, st); }
   // Spear on the right, shield on the left.
-  const spear = new THREE.Group(); spear.position.set(-0.46, 0, 0.12); hero.root.add(spear);
-  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 2.5, 8), std(grade >= 2 ? 0x2a1a10 : 0x4a3420, { roughness: 0.7 })); shaft.position.y = 1.25; spear.add(shaft);
-  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.06 + grade * 0.01, 0.32 + grade * 0.06, 8), std(0xffffff, { metalness: 1, roughness: 0.15, emissive: glow, emissiveIntensity: 0.6 + grade * 0.2 })); tip.position.y = 2.66 + grade * 0.03; spear.add(tip);
-  const shield = new THREE.Group(); shield.position.set(0.42, 0.95, 0.12); shield.rotation.y = -0.25; hero.root.add(shield);
-  const face = new THREE.Mesh(new THREE.CylinderGeometry(0.3 + grade * 0.02, 0.3 + grade * 0.02, 0.05, 32), accent); face.rotation.x = Math.PI / 2; shield.add(face);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.3 + grade * 0.02, 0.03 + grade * 0.008, 8, 32), metal); shield.add(rim);
-  const boss = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 8), std(0xffffff, { metalness: 0.8, emissive: glow, emissiveIntensity: 0.8 })); boss.position.z = 0.04; shield.add(boss);
-  for (let k = 0; k < stars; k++) { const a = Math.PI / 2 + (k - (stars - 1) / 2) * 0.5; const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.035), starM); st.scale.z = 0.4; st.position.set(Math.cos(a) * 0.2, Math.sin(a) * 0.2, 0.04); shield.add(st); }
+  const spear = new THREE.Group(); spear.position.set(-0.46, 0, 0.12); put(hero.root, spear);
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 2.5, 8), std(grade >= 2 ? 0x2a1a10 : 0x4a3420, { roughness: 0.7 })); shaft.position.y = 1.25; put(spear, shaft);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.06 + grade * 0.01, 0.32 + grade * 0.06, 8), std(0xffffff, { metalness: 1, roughness: 0.15, emissive: glow, emissiveIntensity: 0.6 + grade * 0.2 })); tip.position.y = 2.66 + grade * 0.03; put(spear, tip);
+  const shield = new THREE.Group(); shield.position.set(0.42, 0.95, 0.12); shield.rotation.y = -0.25; put(hero.root, shield);
+  const face = new THREE.Mesh(new THREE.CylinderGeometry(0.3 + grade * 0.02, 0.3 + grade * 0.02, 0.05, 32), accent); face.rotation.x = Math.PI / 2; put(shield, face);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.3 + grade * 0.02, 0.03 + grade * 0.008, 8, 32), metal); put(shield, rim);
+  const boss = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 8), std(0xffffff, { metalness: 0.8, emissive: glow, emissiveIntensity: 0.8 })); boss.position.z = 0.04; put(shield, boss);
+  for (let k = 0; k < stars; k++) { const a = Math.PI / 2 + (k - (stars - 1) / 2) * 0.5; const st = new THREE.Mesh(new THREE.OctahedronGeometry(0.035), starM); st.scale.z = 0.4; st.position.set(Math.cos(a) * 0.2, Math.sin(a) * 0.2, 0.04); put(shield, st); }
   // Shoulder plates (bigger with rank).
-  for (const sx of [-1, 1]) { const pl = new THREE.Mesh(new THREE.SphereGeometry(0.13 + grade * 0.025, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), metal); pl.position.set(sx * 0.3, 1.55, 0); hero.root.add(pl); }
+  for (const sx of [-1, 1]) { const pl = new THREE.Mesh(new THREE.SphereGeometry(0.13 + grade * 0.025, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), metal); pl.position.set(sx * 0.3, 1.55, 0); put(hero.root, pl); }
   // Silver and up: a breastplate.
-  if (grade >= 1) { const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.27, 0.5, 24, 1, true), metal); plate.position.y = 0.32; upper.add(plate); const belt = new THREE.Mesh(new THREE.TorusGeometry(0.275, 0.03, 6, 24), std(0x3a2a1a)); belt.rotation.x = Math.PI / 2; belt.position.y = 0.08; upper.add(belt); }
+  if (grade >= 1) { const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.27, 0.5, 24, 1, true), metal); plate.position.y = 0.32; put(upper, plate); const belt = new THREE.Mesh(new THREE.TorusGeometry(0.275, 0.03, 6, 24), std(0x3a2a1a)); belt.rotation.x = Math.PI / 2; belt.position.y = 0.08; put(upper, belt); }
   // Gold and up: gauntlets.
-  if (grade >= 2) for (const a of hero.arms) { const g2 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.075, 0.16, 12), metal); g2.position.y = -0.24; a.el.add(g2); }
+  if (grade >= 2) for (const a of hero.arms) { const g2 = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.075, 0.16, 12), metal); g2.position.y = -0.24; put(a.el, g2); }
   // Cape: longer, and trimmed with gold from Gold rank.
   const len = 1.35 + grade * 0.12;
   const capeGeo = new THREE.PlaneGeometry(0.62 + grade * 0.04, len, 6, 8);
   const cp = capeGeo.attributes.position; for (let i = 0; i < cp.count; i++) { const y = cp.getY(i); cp.setZ(i, -Math.pow(Math.max(0, (len / 2 - y) / len), 1.6) * 0.18 + Math.abs(cp.getX(i)) * -0.12); }
   capeGeo.computeVertexNormals();
-  const cape = new THREE.Mesh(capeGeo, std(pal.robe, { side: THREE.DoubleSide, roughness: 0.7 })); cape.position.set(0, 1.62 - len / 2, -0.28); hero.root.add(cape);
-  if (grade >= 2) { const trimM = std(0xf0c04a, { metalness: 1, roughness: 0.3 }); const tr = new THREE.Mesh(new THREE.BoxGeometry(0.66 + grade * 0.04, 0.05, 0.02), trimM); tr.position.set(0, -len / 2 + 0.03, -0.03); cape.add(tr); }
+  const cape = new THREE.Mesh(capeGeo, std(pal.robe, { side: THREE.DoubleSide, roughness: 0.7 })); cape.position.set(0, 1.62 - len / 2, -0.28); put(hero.root, cape);
+  if (grade >= 2) { const trimM = std(0xf0c04a, { metalness: 1, roughness: 0.3 }); const tr = new THREE.Mesh(new THREE.BoxGeometry(0.66 + grade * 0.04, 0.05, 0.02), trimM); tr.position.set(0, -len / 2 + 0.03, -0.03); put(cape, tr); }
   // Platinum: a halo of light.
-  if (grade === 3 && !ghost) { const halo = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.015, 8, 32), new THREE.MeshBasicMaterial({ color: 0xbff4ff, toneMapped: false })); halo.rotation.x = Math.PI / 2; halo.position.y = 0.52; neck.add(halo); }
+  if (grade === 3 && !ghost) { const halo = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.015, 8, 32), new THREE.MeshBasicMaterial({ color: 0xbff4ff, toneMapped: false })); halo.rotation.x = Math.PI / 2; halo.position.y = 0.52; put(neck, halo); }
+  hero.armour = added;
   return cape;
 }
 
@@ -258,7 +263,7 @@ export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {}, 
   const chars = CHARACTERS.filter((c) => REGIONS.some((r) => r.characterId === c.id));
   const slots = [];
   chars.forEach((c, i) => {
-    const side = i % 2 ? -1 : 1, rank = Math.floor(i / 2);
+    const side = i % 2 ? -1 : 1, rank = 3 - Math.floor(i / 2);   // the spiritual warrior stands nearest the commander's platform
     slots.push({ c, x: side * 5.8, z: 9 - rank * 5.6, face: side > 0 ? -Math.PI / 2 : Math.PI / 2 });
   });
   const warriors = slots.map(({ c, x, z, face }) => {
@@ -320,6 +325,9 @@ export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {}, 
   gate.add(mk(new THREE.BoxGeometry(GW * 2 + 4.4, 1.4, 2.4), marble, 0, GH + 3.3, 0));
   { const sign = new THREE.Mesh(new THREE.PlaneGeometry(GW * 1.6, 0.9), new THREE.MeshBasicMaterial({ map: (() => { const cv = document.createElement('canvas'); cv.width = 512; cv.height = 96; const c2 = cv.getContext('2d'); c2.fillStyle = '#2a1c0c'; c2.fillRect(0, 0, 512, 96); c2.strokeStyle = '#e1b44c'; c2.lineWidth = 6; c2.strokeRect(4, 4, 504, 88); c2.fillStyle = '#ffd36b'; c2.font = 'bold 52px Tajawal, serif'; c2.textAlign = 'center'; c2.direction = 'rtl'; c2.fillText('باب البحر', 256, 66); const t5 = new THREE.CanvasTexture(cv); t5.colorSpace = THREE.SRGBColorSpace; return t5; })() })); sign.position.set(0, GH + 3.3, -1.25); sign.rotation.y = Math.PI; gate.add(sign); }
   const leaves = [-1, 1].map((sx) => { const hinge = new THREE.Group(); hinge.position.set(sx * GW, 0, 0); gate.add(hinge); hinge.add(mk(new THREE.BoxGeometry(GW, GH - 0.6, 0.35), std(0x5a3a1a, { roughness: 0.6 }), -sx * GW / 2, (GH - 0.6) / 2, 0)); for (let y = 1; y < GH - 1; y += 1.8) hinge.add(mk(new THREE.BoxGeometry(GW, 0.18, 0.42), gold, -sx * GW / 2, y, 0)); return hinge; });
+  // Two guards of the sea gate, in red and gold, spears up.
+  const GUARD_PAL = { robe: '#7a1a1e', accent: '#d4a53a', skin: '#e9c29e', glow: '#ffc84a' };
+  const guards = [-1, 1].map((sx) => { const h = buildWorshipper(GUARD_PAL); arm(h, GUARD_PAL, false, 7); h.root.position.set(22.3, 0, sx * 3.3); h.root.rotation.y = -Math.PI / 2; g.add(h.root); h.root.traverse((m) => { if (m.isMesh) m.castShadow = true; }); return { h, last: -99 }; });
   // light from the sea pouring in through the open gate
   const seaLight = new THREE.Mesh(new THREE.PlaneGeometry(GW * 2, GH), new THREE.MeshBasicMaterial({ color: 0xfff2d0, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); seaLight.position.set(0, GH / 2, 0.6); gate.add(seaLight);
   // steps leading out and down through the clouds
@@ -368,6 +376,7 @@ export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {}, 
     for (const [cx, cz] of cols) if (Math.hypot(x - cx, z - cz) < 1.4) return true;
     for (const b of braziers) if (Math.hypot(x - b.x, z - b.z) < 1.1) return true;
     if (Math.hypot(x - CAGE.x, z - CAGE.z) < 2.1) return true;
+    for (const sx of [-1, 1]) if (Math.hypot(x - 22.3, z - sx * 3.3) < 0.6) return true;   // the gate guards
     if (stage >= 5) for (const [px, pz] of PCOLS) if (Math.hypot(x - px, z - HEAVEN.seal.z - pz) < 0.45) return true;
     return false;
   };
@@ -385,7 +394,8 @@ export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {}, 
     rays.forEach((r, i) => { r.material.opacity = 0.014 + Math.sin(t * 0.8 + i) * 0.007; });
     colFires.forEach((f, i) => { f.scale.y = 0.85 + Math.sin(t * 10 + i) * 0.12 + Math.sin(t * 23 + i * 2) * 0.05; f.rotation.y = t + i; });
     for (const b of braziers) { b.fire.scale.y = 0.85 + Math.sin(t * 9 + b.ph) * 0.15; b.fire.rotation.y = t * 0.9 + b.ph; b.light.intensity = 30 * (0.85 + Math.sin(t * 12 + b.ph) * 0.12); }
-    seal.material.opacity = 0.55 + Math.sin(t * 2) * 0.15; seal.rotation.z = t * 0.15;
+    seal.material.opacity = 0.55 + Math.sin(t * 2) * 0.15;
+    for (const gd of guards) { gd.h.update(t, dt, 0, false); const p = gd.h.root.position; if (Math.hypot(cmdPos.x - HX - p.x, cmdPos.z - p.z) < 4.5 && t - gd.last > 8) { gd.last = t; gd.h.salute(); } } seal.rotation.z = t * 0.15;
     for (const s of clouds.children) { s.position.x += dt * s.userData.v; if (s.position.x > 230) s.position.x -= 460; }
     for (let i = 0; i < N; i++) { let y = mp[i * 3 + 1] + dt * ms[i] * 0.8; if (y > 22) y = 0; mp[i * 3 + 1] = y; mp[i * 3] += Math.sin(t * 0.7 + i) * dt * 0.08; }
     motes.geometry.attributes.position.needsUpdate = true;

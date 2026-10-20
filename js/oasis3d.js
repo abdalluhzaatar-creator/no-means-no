@@ -6,6 +6,7 @@ import { Sky } from './vendor/Sky.js';
 import { sfx } from './audio.js';
 import { buildRankStand } from './rankstand3d.js';
 import { createLucifer } from './lucifer3d.js';
+import { arm, unarm } from './heaven3d.js';
 
 // ---------- helpers ----------
 function makeNoise(seed = 5) {
@@ -528,6 +529,7 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
   const rug = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.04, 3.2), [0, 0, new THREE.MeshStandardMaterial({ map: rugTexture(palette.accent), roughness: 1 }), 0, 0, 0].map((m) => m || std(0x7a1f24)));
   rug.position.set(0, 0.42, -1); rug.rotation.y = Math.PI; rug.receiveShadow = true; scene.add(rug);
   const hero = buildWorshipper(palette);
+  let tier = rank?.current ?? 0; arm(hero, palette, false, tier);   // armour by rank
   hero.root.position.set(0, 0.44, 0); hero.root.rotation.y = Math.PI; scene.add(hero.root);
 
   const aura = new THREE.Mesh(new THREE.RingGeometry(1.3, 1.9, 64), new THREE.MeshBasicMaterial({ color: palette.glow, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide }));
@@ -846,7 +848,7 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
       cam.tYaw = Math.PI * 0.75; cam.tPitch = 0.3; cam.tDist = 7;   // side-front view to watch the prayer
       hero.pray(); burstUntil = clock.elapsedTime + 9;
     },
-    update({ features: f, level: l, rank: r }) { setFeatures(f, l); if (r) stand?.update(r); },
+    update({ features: f, level: l, rank: r }) { setFeatures(f, l); if (r) { stand?.update(r); if (r.current !== tier) { unarm(hero); tier = r.current; arm(hero, palette, false, tier); } } },
     react(kind) { luci?.react(kind); },
     setWeather(k) { kind = k in WEATHER ? k : 'clear'; W = WEATHER[kind]; applySky(); },
     refreshSky() { applySky(); },

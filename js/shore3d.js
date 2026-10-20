@@ -63,6 +63,9 @@ export function buildShore(scene, { parts = 12, tiers = {} } = {}) {
   const doorM = std(0x5a3a1a, { roughness: 0.6 }), ironM = std(0x2a2a2e, { metalness: 0.7, roughness: 0.4 });
   const doors = [-1, 1].map((sx) => { const h = new THREE.Group(); h.position.set(STAIR.x + sx * GW, T, GZ - 0.2); g.add(h); add(h, new THREE.BoxGeometry(GW, GH - 0.4, 0.4), doorM, -sx * GW / 2, (GH - 0.4) / 2, 0); for (let y = 1.2; y < GH - 0.6; y += 2) add(h, new THREE.BoxGeometry(GW, 0.22, 0.46), ironM, -sx * GW / 2, y, 0); add(h, new THREE.TorusGeometry(0.3, 0.06, 6, 16), ironM, -sx * (GW - 0.6), GH * 0.45, -0.3); return { h, sx }; });
   let doorOpen = 0, doorWant = 0;
+  // Two guards at the sea gate too.
+  const GUARD_PAL = { robe: '#7a1a1e', accent: '#d4a53a', skin: '#e9c29e', glow: '#ffc84a' };
+  const gateGuards = [-1, 1].map((sx) => { const h = buildWorshipper(GUARD_PAL); arm(h, GUARD_PAL, false, 7); h.root.position.set(STAIR.x + sx * (GW - 0.6), T, GZ - 2.2); h.root.rotation.y = Math.PI; g.add(h.root); return h; });
 
   // At the bottom: a stone arch (مقوّس), then a passage through the rocks onto the beach.
   for (const sx of [-1, 1]) add(g, new THREE.BoxGeometry(1, 6.2, 1.2), stoneM, STAIR.x + sx * (STAIR.w + 0.3), 3.1, 10.6);
@@ -180,6 +183,7 @@ export function buildShore(scene, { parts = 12, tiers = {} } = {}) {
       for (let i = 0; i < a.length; i += 3) a[i + 1] = Math.sin(seaBase[i] * 0.06 + t * 0.8) * 0.3 + Math.cos(seaBase[i + 2] * 0.09 + t * 0.6) * 0.22;
       seaGeo.attributes.position.needsUpdate = true;
       fires.forEach((f, i) => (f.scale.y = 0.85 + Math.sin(t * 11 + i) * 0.15));
+      gateGuards.forEach((h) => h.update(t, dt, 0, false));
       doorOpen += (doorWant - doorOpen) * Math.min(1, dt * 1.5); doors.forEach((d) => (d.h.rotation.y = d.sx * doorOpen * 1.7));
       torchL.intensity = 8 + night * 30;
       sails.forEach((s) => { const p = s.sail.geometry.attributes.position.array; for (let i = 0; i < p.length; i += 3) p[i + 2] = Math.sin(s.base[i] * 0.8 + t * 2) * 0.25 * (0.5 - s.base[i + 1] / 10); s.sail.geometry.attributes.position.needsUpdate = true; });

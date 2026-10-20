@@ -11,7 +11,7 @@ const DEPTH = SIZE * 0.75;
 const SEA = 0;                // sea level
 const HQ_SEA_D = 0.8;         // how far out (island falloff units) the headquarters islet sits
 const ISLET = { top: 9, flat: 36, edge: 56 };   // islet plateau height and radii
-const LEADERS = { dist: 620, rx: 400, rz: 300 };  // the Island of Leaders: bigger than the main island
+const LEADERS = { dist: 480, rx: 400, rz: 300 };  // the Island of Leaders: bigger than the main island
 
 // Region coords (0..1000 × 0..700) → world (x, z).
 const toWorld = ({ x, y }) => [(x / 1000 - 0.5) * SIZE * 0.55, (y / 700 - 0.5) * DEPTH * 0.55];
@@ -41,8 +41,8 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     let [x, z] = toWorld(s.def.map);
     // Headquarters stands off the coast on its own islet (as on the war map), joined by a bridge.
     if (s.def.kind === 'hq') { const f = HQ_SEA_D / Math.hypot((x / SIZE) * 1.1, (z / DEPTH) * 1.25); x *= f; z *= f; }
-    // The Island of Leaders lies far out at sea, in front of the castle.
-    if (s.def.kind === 'leaders') { const hq = spots.find((o) => o.def.kind === 'hq'); const [hx, hz] = hq ? toWorld(hq.def.map) : [-1, 1]; const l = Math.hypot(hx, hz) || 1; x = (hx / l) * LEADERS.dist; z = (hz / l) * LEADERS.dist; }   // out at sea beyond the castle, facing it
+    // The Island of Leaders lies far out at sea, beyond the floating Island of Cups.
+    if (s.def.kind === 'leaders') { const tr = spots.find((o) => o.def.kind === 'trophies'); const [tx, tz] = tr ? toWorld(tr.def.map) : [-1, -1]; const l = Math.hypot(tx, tz) || 1; x = (tx / l) * LEADERS.dist; z = (tz / l) * LEADERS.dist; }   // out at sea, behind the Island of Cups
     return { ...s, x, z };
   });
   const owned = shown.filter((s) => s.vis === 'owned');
@@ -166,50 +166,80 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   let leadersTop = 0;
   if (leadersSpot) {
     const ang = Math.atan2(leadersSpot.x, leadersSpot.z);
-    // Broad lowlands and plains, several mountain ranges, hills and valleys; a plateau for the citadel.
+    const toW = (lx, lz) => [leadersSpot.x + lx * Math.cos(ang) + lz * Math.sin(ang), leadersSpot.z - lx * Math.sin(ang) + lz * Math.cos(ang)];
+    // Like the main island: a ragged coast with bays, headlands and cliffs; broad lowlands,
+    // several mountain ranges and hills; a rise in the middle for the citadel.
     let isd = 77; const ir = () => ((isd = (isd * 16807) % 2147483647) / 2147483647);
-    const peaks = Array.from({ length: 9 }, () => { const a = ir() * Math.PI * 2, r = 0.25 + ir() * 0.32; return { x: Math.cos(a) * r * LEADERS.rx, z: Math.sin(a) * r * LEADERS.rz, h: 18 + ir() * 26, w: 22 + ir() * 30 }; });
+    const peaks = Array.from({ length: 10 }, () => { const a = ir() * Math.PI * 2, r = 0.22 + ir() * 0.3; return { x: Math.cos(a) * r * LEADERS.rx, z: Math.sin(a) * r * LEADERS.rz, h: 16 + ir() * 30, w: 18 + ir() * 30 }; });
+    const coast = (lx, lz) => Math.hypot(lx / LEADERS.rx, lz / LEADERS.rz) + noise(lx * 0.005 + 5, lz * 0.005 - 7, 4) * 0.32 + noise(lx * 0.02 - 3, lz * 0.02 + 9, 3) * 0.07;
     const hIsl = (lx, lz) => {
-      const d = Math.hypot(lx / LEADERS.rx, lz / LEADERS.rz);
-      let h = 7 + noise(lx * 0.008 + 40, lz * 0.008 - 20) * 8 + noise(lx * 0.03, lz * 0.03, 2) * 2.5;   // rolling lowlands
-      for (const p of peaks) { const q = Math.hypot(lx - p.x, lz - p.z) / p.w; h += p.h * Math.exp(-q * q) * (0.75 + 0.25 * noise(lx * 0.05, lz * 0.05, 2)); }
+      const d = coast(lx, lz);
+      let h = 6 + noise(lx * 0.008 + 40, lz * 0.008 - 20) * 8 + noise(lx * 0.03, lz * 0.03, 2) * 2.5;
+      for (const p of peaks) { const q = Math.hypot(lx - p.x, lz - p.z) / p.w; h += p.h * Math.exp(-q * q) * (0.7 + 0.3 * noise(lx * 0.05, lz * 0.05, 2)); }
       const ridge = 1 - Math.abs(noise(lx * 0.006 - 9, lz * 0.006 + 3, 4));
-      h += Math.pow(ridge, 6) * 16 * Math.max(0, 0.7 - d);
-      h -= Math.pow(Math.max(0, d - 0.6), 1.5) * 420;
-      const k = Math.exp(-(lx * lx + lz * lz) / 1600);            // a gentle rise for the citadel
+      h += Math.pow(ridge, 6) * 18 * Math.max(0, 0.6 - d);
+      const k = Math.exp(-(lx * lx + lz * lz) / 1600);
       h = h * (1 - k) + 14 * k;
+      // the coast: a shelf of beach, then a steep drop (cliffs where the land is high)
+      h -= Math.pow(Math.max(0, d - 0.5), 1.25) * 160 + Math.pow(Math.max(0, d - 0.56), 1.6) * 600;
       if (h < 1.5) h = h - (1.5 - h) * 2 - 1.5;
       return h;
     };
     leadersTop = hIsl(0, 0);
-    const ig = new THREE.PlaneGeometry(LEADERS.rx * 1.6, LEADERS.rz * 1.6, 240, 180); ig.rotateX(-Math.PI / 2);
-    const ip = ig.attributes.position, icol = new Float32Array(ip.count * 3), gold = new THREE.Color(0xc8b070);
+    const ig = new THREE.PlaneGeometry(LEADERS.rx * 1.7, LEADERS.rz * 1.7, 300, 220); ig.rotateX(-Math.PI / 2);
+    const ip = ig.attributes.position, icol = new Float32Array(ip.count * 3);
+    for (let i = 0; i < ip.count; i++) ip.setY(i, hIsl(ip.getX(i), ip.getZ(i)));
+    ig.computeVertexNormals();
+    const inrm = ig.attributes.normal;
     for (let i = 0; i < ip.count; i++) {
-      const lx = ip.getX(i), lz = ip.getZ(i), h = hIsl(lx, lz); ip.setY(i, h);
-      const v = noise(lx * 0.05, lz * 0.05, 2) * 0.5 + 0.5;
+      const lx = ip.getX(i), lz = ip.getZ(i), h = ip.getY(i);
+      const v = noise(lx * 0.05, lz * 0.05, 2) * 0.5 + 0.5, slope = 1 - inrm.getY(i);
       if (h < SEA + 1.2) c.copy(seabed).lerp(sand, THREE.MathUtils.clamp((h + 6) / 7, 0, 1));
-      else if (h < 5) c.copy(sand).lerp(grass, (h - 1.2) / 3.8);
-      else if (h < 18) c.copy(grass).lerp(dark, v * 0.6);
+      else if (h < 3.5) c.copy(sand).lerp(grass, (h - 1.2) / 2.3);
+      else if (h < 18) c.copy(grass).lerp(dark, v * 0.7);
       else if (h < 32) c.copy(dark).lerp(rock, (h - 18) / 14);
-      else c.copy(rock).lerp(snow, THREE.MathUtils.clamp((h - 36) / 10, 0, 0.8));
+      else c.copy(rock).lerp(snow, THREE.MathUtils.clamp((h - 36) / 10, 0, 0.85));
+      if (slope > 0.25 && h > 2.5) c.lerp(rock, Math.min(1, (slope - 0.25) * 3));      // cliffs read as rock
       icol.set([c.r, c.g, c.b], i * 3);
     }
-    ig.setAttribute('color', new THREE.BufferAttribute(icol, 3)); ig.computeVertexNormals();
+    ig.setAttribute('color', new THREE.BufferAttribute(icol, 3));
     const land = new THREE.Mesh(ig, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
     land.position.set(leadersSpot.x, 0, leadersSpot.z); land.rotation.y = ang; land.receiveShadow = true; scene.add(land);
-    // forests on its slopes
+    // Forests in groves (not everywhere), on the lowlands and lower slopes.
     const tGeo = new THREE.ConeGeometry(2.4, 8, 6); tGeo.translate(0, 4, 0);
-    const forest = new THREE.InstancedMesh(tGeo, new THREE.MeshStandardMaterial({ color: 0x2f5a2e, flatShading: true }), 900);
+    const rGeo = new THREE.IcosahedronGeometry(3, 0); rGeo.translate(0, 4.5, 0);
+    const pines = new THREE.InstancedMesh(tGeo, new THREE.MeshStandardMaterial({ color: 0x2f5a2e, flatShading: true }), 900);
+    const oaks = new THREE.InstancedMesh(rGeo, new THREE.MeshStandardMaterial({ color: 0x4a7a32, flatShading: true }), 700);
     const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
-    let n = 0;
-    for (let i = 0; i < 4000 && n < 900; i++) {
-      const lx = (Math.random() - 0.5) * LEADERS.rx * 1.8, lz = (Math.random() - 0.5) * LEADERS.rz * 1.8, h = hIsl(lx, lz);
-      if (h < 4 || h > 30 || Math.hypot(lx, lz) < 40) continue;
-      const wx = leadersSpot.x + lx * Math.cos(ang) + lz * Math.sin(ang), wz = leadersSpot.z - lx * Math.sin(ang) + lz * Math.cos(ang);
-      q4.setFromAxisAngle(up, Math.random() * 6); const sc = 0.7 + Math.random() * 0.8;
-      m4.compose(new THREE.Vector3(wx, h - 0.5, wz), q4, new THREE.Vector3(sc, sc, sc)); forest.setMatrixAt(n++, m4);
+    let np = 0, no = 0;
+    for (let i = 0; i < 9000 && (np < 900 || no < 700); i++) {
+      const lx = (Math.random() - 0.5) * LEADERS.rx * 1.5, lz = (Math.random() - 0.5) * LEADERS.rz * 1.5, h = hIsl(lx, lz);
+      if (h < 3.5 || h > 30 || Math.hypot(lx, lz) < 45 || noise(lx * 0.012 + 70, lz * 0.012, 2) < 0.05) continue;
+      const [wx, wz] = toW(lx, lz), sc = 0.7 + Math.random() * 0.8;
+      q4.setFromAxisAngle(up, Math.random() * 6); m4.compose(new THREE.Vector3(wx, h - 0.5, wz), q4, new THREE.Vector3(sc, sc, sc));
+      if (h > 14 && np < 900) pines.setMatrixAt(np++, m4); else if (no < 700) oaks.setMatrixAt(no++, m4);
     }
-    forest.count = n; forest.castShadow = true; scene.add(forest);
+    pines.count = np; oaks.count = no; pines.castShadow = oaks.castShadow = true; scene.add(pines, oaks);
+    const islandG = new THREE.Group(); scene.add(islandG);
+    const put = (geo, mat, lx, lz, y = null, ry = 0) => { const [wx, wz] = toW(lx, lz); const m = new THREE.Mesh(geo, mat); m.position.set(wx, y ?? hIsl(lx, lz), wz); m.rotation.y = ang + ry; m.castShadow = true; islandG.add(m); return m; };
+    // Villages of white houses with red roofs, on the plains.
+    const wallM = new THREE.MeshStandardMaterial({ color: 0xf0e8d8, roughness: 0.9 }), roofM = new THREE.MeshStandardMaterial({ color: 0xa8483a, roughness: 0.8 });
+    const hGeo = new THREE.BoxGeometry(5, 4, 5), rfGeo = new THREE.ConeGeometry(4.2, 3, 4);
+    for (let v = 0; v < 6; v++) {
+      let cx, cz, tries = 0; do { const a = ir() * Math.PI * 2, r = 0.2 + ir() * 0.28; cx = Math.cos(a) * r * LEADERS.rx; cz = Math.sin(a) * r * LEADERS.rz; tries++; } while ((hIsl(cx, cz) < 4 || hIsl(cx, cz) > 20) && tries < 40);
+      for (let k = 0; k < 9; k++) { const lx = cx + (ir() - 0.5) * 34, lz = cz + (ir() - 0.5) * 34, h = hIsl(lx, lz); if (h < 3.5 || h > 24) continue; put(hGeo, wallM, lx, lz, h + 2, ir()); const rf = put(rfGeo, roofM, lx, lz, h + 5.5, Math.PI / 4); }
+    }
+    // Statues of great leaders round the citadel.
+    const statM = new THREE.MeshStandardMaterial({ color: 0xd8cfbe, roughness: 0.55 });
+    for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2, lx = Math.cos(a) * 44, lz = Math.sin(a) * 44, h = hIsl(lx, lz); put(new THREE.BoxGeometry(5, 4, 5), statM, lx, lz, h + 2); put(new THREE.CapsuleGeometry(1.6, 7, 4, 10), statM, lx, lz, h + 9); put(new THREE.SphereGeometry(1.5, 12, 10), statM, lx, lz, h + 14.8); }
+    // A harbour with a long pier, facing home.
+    const towardHome = Math.atan2(-leadersSpot.x, -leadersSpot.z) - ang;
+    let hd = 0.4; while (hd < 1 && hIsl(Math.sin(towardHome) * hd * LEADERS.rx, Math.cos(towardHome) * hd * LEADERS.rz) > 1.5) hd += 0.01;
+    const hx = Math.sin(towardHome) * hd * LEADERS.rx, hz = Math.cos(towardHome) * hd * LEADERS.rz;
+    const woodM = new THREE.MeshStandardMaterial({ color: 0x7a5232, roughness: 0.8 });
+    const pier = put(new THREE.BoxGeometry(6, 1, 50), woodM, hx + Math.sin(towardHome) * 20, hz + Math.cos(towardHome) * 20, 1.6, towardHome);
+    put(new THREE.CylinderGeometry(2.2, 2.6, 16, 12), new THREE.MeshStandardMaterial({ color: 0xf0ece4 }), hx - Math.cos(towardHome) * 14, hz + Math.sin(towardHome) * 14, 8);
+    islandG.traverse((m) => { if (m.isMesh) m.receiveShadow = true; });
   }
 
   // ---------- sea ----------
