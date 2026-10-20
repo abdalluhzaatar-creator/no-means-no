@@ -1,7 +1,7 @@
 // The seven dimension places, each with its own world and mood:
 //   library → دار الحكمة: an open-sky octagonal library around a golden armillary sphere
 //   body    → واحة العافية: a health park with a gym, a running loop, strength, food, pool, clinic
-//   heart   → حديقة الوجدان: an olive garden with a heart pond, a sabil fountain and lanterns
+//   heart   → حديقة السكينة: a leafy garden with a pond, koi, a red bridge and lanterns
 //   social  → ساحة اللمّة: a village square around a bonfire, people sitting together
 //   career  → ساحة الإنجاز: a business plaza with a glass tower, a real clock and a ladder of success
 //   wealth  → ميناء التاجر: a harbour with a counting house, ships, a vault and a lighthouse
@@ -71,7 +71,7 @@ function library(scene, kit) {
       for (let y = 0.6; y < 9; y += 0.7) { const rung = add(lad, new THREE.CylinderGeometry(0.035, 0.035, 0.8, 6), gold, 0, y, 0); rung.rotation.z = Math.PI / 2; }
     }
   }
-  books.count = bi; books.castShadow = true; books.receiveShadow = true; scene.add(books); kit.feat('shelves', books);
+  books.count = bi; books.castShadow = true; books.receiveShadow = true; scene.add(books);
   // Columns between bays with gold capitals, and an arch ring over the open sky.
   for (let k = 0; k < 8; k++) {
     const a = (k / 8) * TAU + Math.PI / 8, x = Math.sin(a) * (R + 1.3), z = Math.cos(a) * (R + 1.3);
@@ -105,10 +105,10 @@ function library(scene, kit) {
     cyl(d, 0.07, 0.08, 0.35, std(0xf6f0e0), 1.2, 1.53, -0.3, 8);
     const f = fire(d, 1.2, 1.88, -0.3, 0.12); candles.push(f);
     const stool = cyl(d, 0.45, 0.4, 0.8, wood, 0, 0, 1.6, 12);
-    desks.push([x, z]); kit.feat('desk', d);
+    desks.push([x, z]);
   }, Math.PI / 4);
   // Four brass lamp posts with lanterns (off the line between the door and the sphere).
-  const lamps = [], lampG = group(scene); kit.feat('lamps', lampG);
+  const lamps = [], lampG = group(scene);
   ring(4, 18, (x, z) => {
     cyl(lampG, 0.12, 0.18, 4.2, gold, x, 0, z, 8);
     const m = lampMat(0xffd38a); const lamp = sph(lampG, 0.42, m, x, 4.6, z, 16, 12); kit.glow(m, 0.3, 2.2);
@@ -116,17 +116,39 @@ function library(scene, kit) {
     lamps.push([x, z]);
   }, Math.PI / 4 + 0.39);
   // A globe on its stand and scroll piles.
-  const globeG = group(scene, -7, 0, 9), scrollG = group(scene); kit.feat('globe', globeG, scrollG);
+  const globeG = group(scene, -7, 0, 9), scrollG = group(scene);
   cyl(globeG, 0.12, 0.3, 1.6, wood, 0, 0, 0, 8);
   const globeTex = canvasTex(256, 128, (g, w, h) => { g.fillStyle = '#2a5a8a'; g.fillRect(0, 0, w, h); g.fillStyle = '#d9c38a'; for (let i = 0; i < 14; i++) { g.beginPath(); g.ellipse(Math.random() * w, 20 + Math.random() * (h - 40), 10 + Math.random() * 26, 6 + Math.random() * 16, Math.random() * 3, 0, 7); g.fill(); } });
   const globe = sph(globeG, 0.75, new THREE.MeshStandardMaterial({ map: globeTex, roughness: 0.5 }), 0, 2.4, 0, 32, 20);
   const meridian = add(globeG, new THREE.TorusGeometry(0.85, 0.04, 6, 40), gold, 0, 2.4, 0);
   for (let i = 0; i < 9; i++) { const sc = add(scrollG, new THREE.CylinderGeometry(0.16, 0.16, 1.1, 12), parch, 7 + (i % 3) * 0.36, 0.18 + Math.floor(i / 3) * 0.3, 9 + (i % 2) * 0.1); sc.rotation.z = Math.PI / 2; }
+
+  // ---- upgrades: new things added to the library ----
+  const tele = group(scene, 15, 0, -9, faceTo(15, -9) + Math.PI); kit.feat('telescope', tele);
+  for (let k = 0; k < 3; k++) { const leg = add(tele, new THREE.CylinderGeometry(0.05, 0.06, 2.4, 6), gold, Math.cos(k * 2.1) * 0.5, 1.1, Math.sin(k * 2.1) * 0.5); leg.rotation.set(Math.sin(k * 2.1) * 0.25, 0, -Math.cos(k * 2.1) * 0.25); }
+  const tube = group(tele, 0, 2.3, 0); tube.rotation.x = -0.7; cyl(tube, 0.18, 0.28, 2.6, std(0x1f3a5a, { metalness: 0.5, roughness: 0.3 }), 0, -0.6, 0, 16); cyl(tube, 0.3, 0.3, 0.12, gold, 0, 1.95, 0, 16);
+  const chand = group(scene, 0, 12.5, 0); kit.feat('chandelier', chand);
+  add(chand, new THREE.CylinderGeometry(0.02, 0.02, 2.2, 4), gold, 0, 1.1, 0);
+  add(chand, new THREE.TorusGeometry(2.2, 0.08, 8, 40), gold).rotation.x = Math.PI / 2;
+  add(chand, new THREE.TorusGeometry(1.3, 0.06, 8, 32), gold, 0, -0.6, 0).rotation.x = Math.PI / 2;
+  const chandFires = []; ring(12, 2.2, (x, z) => chandFires.push(fire(chand, x, 0.05, z, 0.16))); ring(6, 1.3, (x, z) => chandFires.push(fire(chand, x, -0.55, z, 0.14)));
+  const chandLight = new THREE.PointLight(0xffc878, 0, 30, 1.4); chand.add(chandLight); kit.glow(chandLight, 4, 24);
+  const calli = group(scene); kit.feat('calligraphy', calli);
+  const verses = ['وَقُل رَبِّ زِدْنِي عِلْمًا', 'اقْرَأْ بِاسْمِ رَبِّكَ', 'نۤ وَالْقَلَمِ وَمَا يَسْطُرُونَ', 'هَلْ يَسْتَوِي الَّذِينَ يَعْلَمُونَ'];
+  verses.forEach((v, i) => { const a = ((i * 2 + 1) / 8) * TAU, r = R - 0.2; const pnl = add(calli, new THREE.PlaneGeometry(9, 1.3), new THREE.MeshStandardMaterial({ map: textTex([v], { w: 1024, h: 150, bg: '#14283c', fg: '#e8c86a', font: '"Amiri", "Traditional Arabic", serif' }), roughness: 0.5 }), Math.sin(a) * r, 11.6, Math.cos(a) * r); pnl.rotation.y = a + Math.PI; });
+  const fnt = group(scene, -15, 0, -9); kit.feat('fountain', fnt);
+  cyl(fnt, 1.8, 1.9, 0.5, marble, 0, 0, 0, 8); add(fnt, new THREE.CylinderGeometry(1.6, 1.6, 0.05, 8), new THREE.MeshPhysicalMaterial({ color: 0x3a8aa8, roughness: 0.05, clearcoat: 1 }), 0, 0.47, 0);
+  cyl(fnt, 0.2, 0.3, 1.2, gold, 0, 0.5, 0, 10); const fjet = add(fnt, new THREE.ConeGeometry(0.12, 0.7, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xdff4ff, transparent: true, opacity: 0.6 }), 0, 2, 0);
+  const owlG = group(scene, 9, 0, 15, faceTo(9, 15)); kit.feat('owl', owlG);
+  cyl(owlG, 0.08, 0.1, 2.6, wood, 0, 0, 0, 6); const perch = add(owlG, new THREE.CylinderGeometry(0.05, 0.05, 1, 6), wood, 0, 2.6, 0); perch.rotation.z = Math.PI / 2;
+  const owl = group(owlG, 0, 2.66, 0); const owlM = std(0x8a6a4a, { roughness: 1 });
+  sph(owl, 0.28, owlM, 0, 0.3, 0, 12, 10).scale.set(1, 1.25, 0.9); const owlHead = group(owl, 0, 0.72, 0); sph(owlHead, 0.24, owlM, 0, 0, 0, 12, 10);
+  for (const sx of [-0.1, 0.1]) { sph(owlHead, 0.08, std(0xf6e8c0), sx, 0.02, 0.18, 10, 8); sph(owlHead, 0.04, std(0x111111), sx, 0.02, 0.24, 8, 6); add(owlHead, new THREE.ConeGeometry(0.05, 0.14, 4), owlM, sx * 1.5, 0.24, 0); }
   shade(scene);
 
   // Pages flying in a slow spiral round the sphere, and golden dust.
   const pageM = new THREE.MeshStandardMaterial({ color: 0xf6ead0, side: THREE.DoubleSide, roughness: 0.9, emissive: 0x6a5a30, emissiveIntensity: 0.2 });
-  const pagesG = group(scene); kit.feat('pages', pagesG);
+  const pagesG = group(scene);
   const pages = Array.from({ length: 34 }, (_, i) => { const m = add(pagesG, new THREE.PlaneGeometry(0.55, 0.75), pageM); return { m, a: rand() * TAU, r: 4 + rand() * 4.5, y: 1.5 + rand() * 9, sp: 0.15 + rand() * 0.2, ph: rand() * 6 }; });
   const dust = particles(scene, { n: 260, color: 0xffd98a, size: 0.09, init: () => ({ x: (rand() - 0.5) * 44, y: rand() * 14, z: (rand() - 0.5) * 44, s: 0.1 + rand() * 0.3 }), step: (d, t, dt) => { d.y += dt * d.s; d.x += Math.sin(t * 0.3 + d.s * 9) * dt * 0.2; if (d.y > 14) d.y = 0; } });
 
@@ -136,9 +158,12 @@ function library(scene, kit) {
     blocked: (x, z) => {
       const r = hyp(x, z);
       if (r > R - 2.6 || r < 2.6) return true;
-      if (kit.has('desk')) for (const [dx, dz] of desks) if (hyp(x - dx, z - dz) < 2.3) return true;
-      if (kit.has('lamps')) for (const [lx, lz] of lamps) if (hyp(x - lx, z - lz) < 0.6) return true;
-      if (kit.has('globe') && (hyp(x + 7, z - 9) < 1.2 || hyp(x - 7.4, z - 9) < 1)) return true;
+      for (const [dx, dz] of desks) if (hyp(x - dx, z - dz) < 2.3) return true;
+      for (const [lx, lz] of lamps) if (hyp(x - lx, z - lz) < 0.6) return true;
+      if (hyp(x + 7, z - 9) < 1.2 || hyp(x - 7.4, z - 9) < 1) return true;
+      if (kit.has('telescope') && hyp(x - 15, z + 9) < 1.6) return true;
+      if (kit.has('fountain') && hyp(x + 15, z + 9) < 2.2) return true;
+      if (kit.has('owl') && hyp(x - 9, z - 15) < 0.7) return true;
       return false;
     },
     tick(t, dt, s) {
@@ -155,6 +180,9 @@ function library(scene, kit) {
         p.m.rotation.set(Math.sin(t * 1.3 + p.ph) * 0.8, p.a + t * 0.5, Math.cos(t + p.ph) * 0.6);
       }
       candles.forEach((c) => c.tick(t));
+      if (kit.has('chandelier')) chandFires.forEach((c) => c.tick(t));
+      if (kit.has('fountain')) fjet.scale.y = 1 + Math.sin(t * 6) * 0.1;
+      if (kit.has('owl')) { owlHead.rotation.y = Math.sin(t * 0.4) * 1.2 * (Math.sin(t * 0.13) > 0 ? 1 : 0.2); owl.scale.y = 1 + Math.sin(t * 2) * 0.02; }
       dust.tick(t, dt);
     },
     burst: [0xffe7a8, 0xf6ead0, 0x9fe3ff],
@@ -290,123 +318,149 @@ function wellness(scene, kit) {
   };
 }
 
-// ======================= حديقة الوجدان — heart =======================
+// ======================= حديقة السكينة — heart =======================
 function heartGarden(scene, kit) {
   const { rand } = kit;
   const R = 32;
-  ground(scene, 400, speckle('#7a9a5a', ['#6a8a4a', '#8aa86a', '#a8a070', '#5a7a3a'], { repeat: 50, n: 3200 }));
-  const flag = canvasTex(512, 512, (g, w) => { g.fillStyle = '#b8a888'; g.fillRect(0, 0, w, w); for (let y = 0; y < w; y += 64) for (let x = (y / 64) % 2 ? -48 : 0; x < w; x += 96) { const v = 150 + Math.random() * 40; g.fillStyle = `rgb(${v + 30},${v + 20},${v})`; g.beginPath(); g.roundRect(x + 3, y + 3, 90, 58, 8); g.fill(); } }, 8);
-  const court = add(scene, new THREE.RingGeometry(9.5, 15, 64), new THREE.MeshStandardMaterial({ map: flag, roughness: 0.9 }), 0, 0.03, -6); court.rotation.x = -Math.PI / 2; court.receiveShadow = true;
-  const path = add(scene, new THREE.PlaneGeometry(3, 16), new THREE.MeshStandardMaterial({ map: flag, roughness: 0.9 }), 0, 0.03, 15); path.rotation.x = -Math.PI / 2; path.receiveShadow = true;
-  // The pond, heart-shaped, edged with stone.
-  const PZ = -6, PS = 1.55;
-  const sh = new THREE.Shape(); sh.moveTo(0, -3.4); sh.bezierCurveTo(-5.4, 0.6, -3.8, 5.2, 0, 2.8); sh.bezierCurveTo(3.8, 5.2, 5.4, 0.6, 0, -3.4);
+  ground(scene, 400, speckle('#86c070', ['#76b060', '#96d080', '#f0e08a', '#ffffff'], { repeat: 50, n: 3200 }));
+  // The pond.
+  const PZ = -6, PS = 1.4;
+  const sh = new THREE.Shape();
+  for (let i = 0; i <= 64; i++) { const a = (i / 64) * TAU, r = 4.2 + Math.sin(a * 3) * 0.45 + Math.cos(a * 2) * 0.35, x = Math.cos(a) * r * 1.3, y = Math.sin(a) * r * 0.95; i ? sh.lineTo(x, y) : sh.moveTo(x, y); }
   const pondPts = sh.getSpacedPoints(80).map((p) => new THREE.Vector2(p.x * PS, -p.y * PS + PZ));
   const inPond = (x, z) => { let c = false; for (let i = 0, j = pondPts.length - 1; i < pondPts.length; j = i++) { const a = pondPts[i], b = pondPts[j]; if ((a.y > z) !== (b.y > z) && x < ((b.x - a.x) * (z - a.y)) / (b.y - a.y) + a.x) c = !c; } return c; };
-  const bed = add(scene, new THREE.ShapeGeometry(sh, 40), std(0x24443e, { roughness: 1 }), 0, 0.02, PZ); bed.rotation.x = -Math.PI / 2; bed.scale.setScalar(PS * 1.04);
-  const waterM = new THREE.MeshPhysicalMaterial({ color: 0x4f8a90, roughness: 0.05, transparent: true, opacity: 0.85, clearcoat: 1 });
+  const bed = add(scene, new THREE.ShapeGeometry(sh, 40), std(0x2a5a5a, { roughness: 1 }), 0, 0.02, PZ); bed.rotation.x = -Math.PI / 2; bed.scale.setScalar(PS * 1.04);
+  const waterM = new THREE.MeshPhysicalMaterial({ color: 0x6fc0d0, roughness: 0.05, transmission: 0, transparent: true, opacity: 0.82, clearcoat: 1 });
   const water = add(scene, new THREE.ShapeGeometry(sh, 40), waterM, 0, 0.28, PZ); water.rotation.x = -Math.PI / 2; water.scale.setScalar(PS);
-  const stoneM = std(0x9a948a, { roughness: 1, flatShading: true });
-  pondPts.forEach((p, i) => { if (i % 2) return; const s2 = add(scene, new THREE.DodecahedronGeometry(0.45 + rand() * 0.25, 0), stoneM, p.x, 0.2, p.y); s2.scale.y = 0.55; s2.rotation.y = rand() * 6; });
-  for (let i = 0; i < 12; i++) {
+  const stoneM = std(0x9a9a92, { roughness: 1, flatShading: true });
+  pondPts.forEach((p, i) => { if (i % 2) return; const s = add(scene, new THREE.DodecahedronGeometry(0.45 + rand() * 0.25, 0), stoneM, p.x, 0.2, p.y); s.scale.y = 0.55; s.rotation.y = rand() * 6; });
+  // lily pads + lotus
+  for (let i = 0; i < 14; i++) {
     let x, z; do { x = (rand() - 0.5) * 12; z = PZ + (rand() - 0.5) * 9; } while (!inPond(x, z) || Math.abs(z - PZ) < 1.3);
-    const pad = add(scene, new THREE.CircleGeometry(0.45 + rand() * 0.25, 16, 0.3, TAU - 0.4), std(0x3f6a32, { side: THREE.DoubleSide }), x, 0.31, z); pad.rotation.x = -Math.PI / 2; pad.rotation.z = rand() * 6;
-    if (i % 4 === 0) for (let k = 0; k < 6; k++) { const pe = add(scene, new THREE.SphereGeometry(0.15, 8, 6), std(0xf4efe0), x + Math.cos(k) * 0.12, 0.42, z + Math.sin(k) * 0.12); pe.scale.set(0.6, 1.3, 0.6); pe.rotation.z = 0.5; }
+    const pad = add(scene, new THREE.CircleGeometry(0.45 + rand() * 0.25, 16, 0.3, TAU - 0.4), std(0x3f8a3a, { side: THREE.DoubleSide }), x, 0.31, z); pad.rotation.x = -Math.PI / 2; pad.rotation.z = rand() * 6;
+    if (i % 3 === 0) for (let k = 0; k < 6; k++) { const pe = add(scene, new THREE.SphereGeometry(0.16, 8, 6), std(0xfaf6ea, { emissive: 0xfff0c0, emissiveIntensity: 0.1 }), x + Math.cos(k) * 0.12, 0.42, z + Math.sin(k) * 0.12); pe.scale.set(0.6, 1.3, 0.6); pe.rotation.z = 0.5; }
   }
-  // Fish (upgrade)
-  const koiG = group(scene); kit.feat('koi', koiG);
+  // koi
   const koi = Array.from({ length: 8 }, (_, i) => {
-    const g = group(koiG, 0, 0.2, PZ);
-    const body = add(g, new THREE.SphereGeometry(0.22, 12, 8), std([0xe8742a, 0xf2efe6, 0xc0a040][i % 3], { roughness: 0.4 })); body.scale.set(0.7, 0.5, 1.8);
-    const tail = add(g, new THREE.ConeGeometry(0.16, 0.36, 6), std(0xe8944a, { transparent: true, opacity: 0.85 }), 0, 0, -0.5); tail.rotation.x = -Math.PI / 2; tail.scale.x = 0.3;
+    const g = group(scene, 0, 0.2, PZ);
+    const body = add(g, new THREE.SphereGeometry(0.22, 12, 8), std(i % 3 ? 0xff7a2a : 0xffffff, { roughness: 0.4 })); body.scale.set(0.7, 0.5, 1.8);
+    if (i % 2) { const spot = add(g, new THREE.SphereGeometry(0.12, 8, 6), std(0xd02a1a), 0, 0.06, 0.1); spot.scale.set(0.9, 0.5, 1.4); }
+    const tail = add(g, new THREE.ConeGeometry(0.16, 0.36, 6), std(0xff9a5a, { transparent: true, opacity: 0.85 }), 0, 0, -0.5); tail.rotation.x = -Math.PI / 2; tail.scale.x = 0.3;
     return { g, tail, a: rand() * TAU, r: 1.4 + rand() * 3, sp: (0.25 + rand() * 0.3) * (i % 2 ? 1 : -1), cy: (rand() - 0.5) * 2 };
   });
-  // A dark timber bridge across the pond (upgrade, walkable).
+  // Red arched bridge across the pond (walkable).
   const BR = { z: PZ + 0.4, hw: 1.15, len: 8.2, h: 1.25 };
   const bridgeY = (x) => (Math.abs(x) > BR.len ? 0 : BR.h * Math.cos((x / BR.len) * Math.PI / 2) ** 1.2);
-  const darkWood = std(0x3a2618, { roughness: 0.7 }), deckM = std(0x6a4a30, { roughness: 0.8 }), bronze = std(0xa8783a, { metalness: 0.8, roughness: 0.35 });
-  const bridgeG = group(scene); kit.feat('bridge', bridgeG);
-  for (let i = -16; i <= 16; i++) { const x = (i / 16) * BR.len; box(bridgeG, BR.len / 16 + 0.04, 0.12, BR.hw * 2, deckM, x, bridgeY(x) + 0.02, BR.z); }
+  const redM = std(0xc8282a, { roughness: 0.55 }), deckM = std(0x8a5a34, { roughness: 0.8 });
+  for (let i = -16; i <= 16; i++) { const x = (i / 16) * BR.len; const y = bridgeY(x); box(scene, BR.len / 16 + 0.04, 0.12, BR.hw * 2, deckM, x, y + 0.02, BR.z); }
   for (const sz of [-1, 1]) {
     const pts = []; for (let i = -16; i <= 16; i++) { const x = (i / 16) * BR.len; pts.push(new THREE.Vector3(x, bridgeY(x) + 1.05, BR.z + sz * BR.hw)); }
-    add(bridgeG, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.07, 6), darkWood);
-    for (let i = -16; i <= 16; i += 4) { const x = (i / 16) * BR.len; cyl(bridgeG, 0.08, 0.08, 1.05, darkWood, x, bridgeY(x), BR.z + sz * BR.hw, 6); sph(bridgeG, 0.11, bronze, x, bridgeY(x) + 1.12, BR.z + sz * BR.hw, 10, 8); }
+    add(scene, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 48, 0.07, 6), redM);
+    for (let i = -16; i <= 16; i += 4) { const x = (i / 16) * BR.len; cyl(scene, 0.07, 0.07, 1.05, redM, x, bridgeY(x), BR.z + sz * BR.hw, 6); sph(scene, 0.11, std(0xd4a53a, { metalness: 0.8 }), x, bridgeY(x) + 1.12, BR.z + sz * BR.hw, 10, 8); }
   }
-  // Stone gateway on the path.
-  const gate = group(scene, 0, 0, 13);
-  for (const sx of [-2.4, 2.4]) { box(gate, 1, 5, 1, stoneM, sx, 0, 0); box(gate, 1.3, 0.4, 1.3, std(0x7a7468), sx, 5, 0); }
-  box(gate, 6, 0.8, 1.1, stoneM, 0, 5.4, 0);
-  const plaque = add(gate, new THREE.PlaneGeometry(3.6, 0.6), new THREE.MeshStandardMaterial({ map: textTex(['حديقة الوجدان'], { w: 512, h: 96, bg: '#2a2218', fg: '#e8c070' }) }), 0, 5.8, 0.56);
-  // A public water fountain (sabil): water given freely to anyone who passes.
-  const sabil = group(scene, -13, 0, 5, Math.PI / 2);
-  box(sabil, 3.2, 3.4, 1.4, stoneM, 0, 0, -0.5);
-  const archS = add(sabil, new THREE.TorusGeometry(0.8, 0.12, 8, 24, Math.PI), bronze, 0, 2, 0.22);
-  box(sabil, 2.4, 0.5, 1, std(0x7a7468), 0, 0, 0.6);
-  const sabilW = add(sabil, new THREE.BoxGeometry(2.2, 0.05, 0.8), new THREE.MeshPhysicalMaterial({ color: 0x5a9aa0, roughness: 0.05, clearcoat: 1 }), 0, 0.5, 0.6);
-  const spout = add(sabil, new THREE.CylinderGeometry(0.04, 0.04, 1.3, 6), new THREE.MeshBasicMaterial({ color: 0xcfe8f0, transparent: true, opacity: 0.7 }), 0, 1.15, 0.45);
-  for (const sx of [-0.7, 0.7]) cyl(sabil, 0.09, 0.07, 0.2, bronze, sx, 0.5, 0.95, 10);
-  add(sabil, new THREE.PlaneGeometry(2.4, 0.5), new THREE.MeshStandardMaterial({ map: textTex(['سبيل'], { w: 256, h: 64, bg: '#2a2218', fg: '#e8c070' }) }), 0, 3, 0.21);
-  // The arbour (upgrade): dark timber, vines, a long bench.
-  const pav = group(scene, 14, 0, -2, -Math.PI / 2); kit.feat('pavilion', pav);
-  cyl(pav, 3.4, 3.6, 0.4, std(0x8a8270), 0, 0, 0, 6);
-  ring(6, 3, (x, z) => cyl(pav, 0.16, 0.16, 3.6, darkWood, x, 0.4, z, 8));
-  ring(6, 3, (x, z, a) => { const b = add(pav, new THREE.BoxGeometry(3.1, 0.18, 0.18), darkWood, x * 0.87, 4.1, z * 0.87); b.rotation.y = -a + Math.PI / 2 + Math.PI / 6; });
-  for (let k = 0; k < 18; k++) { const v = add(pav, new THREE.IcosahedronGeometry(0.5 + rand() * 0.3, 0), std(0x4a6a32, { flatShading: true }), (rand() - 0.5) * 5, 4.3 + rand() * 0.3, (rand() - 0.5) * 5); v.scale.y = 0.5; }
-  box(pav, 2.6, 0.45, 0.8, darkWood, 0, 0.4, 0.4); box(pav, 2.6, 0.1, 0.8, std(0x5a2a22), 0, 0.85, 0.4);
-  // Stone lanterns (upgrade)
-  const lanternG = group(scene); kit.feat('lanterns', lanternG);
+  // A red torii gate on the path, a pavilion, stone lanterns, raked sand with rocks.
+  const torii = group(scene, 0, 0, 13);
+  for (const sx of [-2.4, 2.4]) cyl(torii, 0.28, 0.32, 5.6, redM, sx, 0, 0, 14);
+  box(torii, 6.6, 0.4, 0.6, redM, 0, 4.6, 0); const top = box(torii, 7.8, 0.45, 0.8, std(0x1e1e1e), 0, 5.5, 0); top.scale.y = 1;
+  const pav = group(scene, 14, 0, -2, -Math.PI / 2);
+  cyl(pav, 3.4, 3.6, 0.4, std(0xb8a888), 0, 0, 0, 6);
+  ring(6, 3, (x, z) => cyl(pav, 0.15, 0.15, 3.6, redM, x, 0.4, z, 8));
+  const roof = add(pav, new THREE.ConeGeometry(4.6, 1.8, 6, 1, true), std(0x2a3a3a, { side: THREE.DoubleSide, roughness: 0.6 }), 0, 4.9, 0);
+  sph(pav, 0.25, std(0xd4a53a, { metalness: 0.8 }), 0, 5.9, 0, 12, 8);
+  box(pav, 2, 0.3, 1.4, std(0x6a2a2a), 0, 0.4, 0);
   const lanterns = [];
   [[-6, 8], [6, 8], [-10, -1], [9, 3], [-5, -14], [6, -14]].forEach(([x, z], i) => {
-    const g = group(lanternG, x, 0, z);
+    const g = group(scene, x, 0, z);
     cyl(g, 0.45, 0.55, 0.3, stoneM); cyl(g, 0.16, 0.2, 1.2, stoneM, 0, 0.3, 0, 8); box(g, 0.9, 0.2, 0.9, stoneM, 0, 1.5, 0);
-    const m = lampMat(0xffd090); box(g, 0.6, 0.6, 0.6, m, 0, 1.7, 0); kit.glow(m, 0.15, 2.4);
+    const m = lampMat(0xffd0a0); box(g, 0.6, 0.6, 0.6, m, 0, 1.7, 0); kit.glow(m, 0.15, 2.4);
     const rf = add(g, new THREE.ConeGeometry(0.8, 0.6, 4), stoneM, 0, 2.6, 0); rf.rotation.y = Math.PI / 4;
-    if (i % 2 === 0) { const l = new THREE.PointLight(0xffc080, 0, 12, 1.8); l.position.set(0, 2, 0); g.add(l); kit.glow(l, 0, 9); }
+    if (i % 2 === 0) { const l = new THREE.PointLight(0xffb890, 0, 12, 1.8); l.position.set(x, 2, z); scene.add(l); kit.glow(l, 0, 9); }
     lanterns.push([x, z]);
   });
-  // Old olive trees: gnarled trunks, silver-green crowns.
-  const trunkM = std(0x5a4a3a, { roughness: 1 });
-  const olive = [std(0x7a8a5a, { flatShading: true, roughness: 0.9 }), std(0x8a9a6a, { flatShading: true, roughness: 0.9 }), std(0x6a7a4a, { flatShading: true, roughness: 0.9 })];
+  const sandTex = canvasTex(512, 512, (g, w) => { g.fillStyle = '#e8dcc2'; g.fillRect(0, 0, w, w); g.strokeStyle = '#c9b996'; g.lineWidth = 3; for (let r = 20; r < 360; r += 16) { g.beginPath(); g.arc(w * 0.5, w * 0.5, r, 0, 7); g.stroke(); } });
+  const zen = add(scene, new THREE.CircleGeometry(6, 40), new THREE.MeshStandardMaterial({ map: sandTex, roughness: 1 }), -14, 0.04, 6); zen.rotation.x = -Math.PI / 2;
+  [[-14, 6, 1.1], [-12.3, 7.6, 0.6], [-15.6, 4.6, 0.7]].forEach(([x, z, s]) => { const r = add(scene, new THREE.DodecahedronGeometry(s, 1), std(0x6a6a66, { flatShading: true }), x, s * 0.4, z); r.scale.y = 0.7; });
+  // Stepping stones to the pond.
+  for (let i = 0; i < 6; i++) { const s = add(scene, new THREE.CylinderGeometry(0.6, 0.65, 0.12, 10), std(0xb0aaa0), (i % 2 ? 0.5 : -0.5), 0.06, 11 - i * 1.4); }
+  // Leafy garden trees all round.
+  const trunkM = std(0x5a3a2a, { roughness: 1 });
+  const blossom = [std(0x5f9a48, { flatShading: true, roughness: 0.9 }), std(0x4f8a3a, { flatShading: true, roughness: 0.9 }), std(0x7aaa58, { flatShading: true, roughness: 0.9 })];
   const trees = [];
   const tree = (x, z, s) => {
     const g = group(scene, x, 0, z, rand() * 6); g.scale.setScalar(s);
-    for (let k = 0; k < 3; k++) { const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3((rand() - 0.5) * 1.2, 1.4, (rand() - 0.5) * 1.2), new THREE.Vector3((rand() - 0.5) * 2, 2.8, (rand() - 0.5) * 2), new THREE.Vector3((rand() - 0.5) * 2.6, 3.8, (rand() - 0.5) * 2.6)]); add(g, new THREE.TubeGeometry(curve, 12, 0.3 - k * 0.06, 7), trunkM); }
-    for (let k = 0; k < 9; k++) { const b = add(g, new THREE.IcosahedronGeometry(1 + rand() * 0.7, 1), olive[k % 3], (rand() - 0.5) * 4, 3.6 + rand() * 1.6, (rand() - 0.5) * 4); b.scale.y = 0.6; }
+    const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0.4, 1.6, 0.2), new THREE.Vector3(-0.2, 3, 0), new THREE.Vector3(0.3, 4.2, -0.2)]);
+    add(g, new THREE.TubeGeometry(curve, 12, 0.32, 8), trunkM);
+    for (let k = 0; k < 7; k++) { const b = add(g, new THREE.IcosahedronGeometry(1.2 + rand() * 0.8, 1), blossom[k % 3], (rand() - 0.5) * 3.2, 4 + rand() * 1.8, (rand() - 0.5) * 3.2); b.scale.y = 0.75; }
     trees.push([x, z, 0.9 * s]);
   };
-  [[-9, -14], [9, -15], [-17, -6], [18, -10], [-19, 14], [17, 14], [-7, 21], [8, 22], [0, -22], [-24, 2], [24, 4]].forEach(([x, z]) => tree(x, z, 1 + rand() * 0.4));
-  // Dry-stone wall round the garden.
-  for (let i = 0; i < 90; i++) { const a = (i / 90) * TAU; const b = add(scene, new THREE.BoxGeometry(2.4, 1.2 + rand() * 0.3, 0.9), std([0x9a948a, 0x8a8478, 0xa8a090][i % 3], { roughness: 1 }), Math.cos(a) * (R + 0.5), 0.6, Math.sin(a) * (R + 0.5)); b.rotation.y = -a + Math.PI / 2; }
+  [[-9, -12], [9, -13], [-16, -6], [17, -10], [-18, 12], [16, 14], [-7, 19], [8, 20], [0, -20], [-22, 2], [22, 4]].forEach(([x, z]) => tree(x, z, 1 + rand() * 0.4));
+  // A bamboo fence at the edge.
+  const bambooM = std(0x8aa04a, { roughness: 0.7 });
+  for (let i = 0; i < 220; i++) { const a = (i / 220) * TAU, r = R + rand() * 0.6; cyl(scene, 0.09, 0.1, 3 + rand() * 1.4, bambooM, Math.cos(a) * r, 0, Math.sin(a) * r, 6); }
+  for (const y of [1, 2.4]) { const rl = add(scene, new THREE.TorusGeometry(R + 0.3, 0.06, 4, 128), std(0x6a4a2a), 0, y, 0); rl.rotation.x = Math.PI / 2; }
+
+  // ---- upgrades: new things added to the garden ----
+  // a sabil: free water for anyone who passes
+  const sabil = group(scene, -21, 0, -8, Math.PI / 2 - 0.3); kit.feat('sabil', sabil);
+  box(sabil, 3.2, 3.4, 1.4, stoneM, 0, 0, -0.5);
+  add(sabil, new THREE.TorusGeometry(0.8, 0.12, 8, 24, Math.PI), std(0xa8783a, { metalness: 0.8, roughness: 0.35 }), 0, 2, 0.22);
+  box(sabil, 2.4, 0.5, 1, std(0x7a7468), 0, 0, 0.6);
+  add(sabil, new THREE.BoxGeometry(2.2, 0.05, 0.8), new THREE.MeshPhysicalMaterial({ color: 0x5a9aa0, roughness: 0.05, clearcoat: 1 }), 0, 0.5, 0.6);
+  const spout = add(sabil, new THREE.CylinderGeometry(0.04, 0.04, 1.3, 6), new THREE.MeshBasicMaterial({ color: 0xcfe8f0, transparent: true, opacity: 0.7 }), 0, 1.15, 0.45);
+  // an ancient olive tree
+  const olive = group(scene, 13, 0, 9); kit.feat('olive', olive);
+  for (let k = 0; k < 4; k++) { const c = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3((rand() - 0.5) * 1.6, 1.6, (rand() - 0.5) * 1.6), new THREE.Vector3((rand() - 0.5) * 2.6, 3.2, (rand() - 0.5) * 2.6), new THREE.Vector3((rand() - 0.5) * 3.4, 4.4, (rand() - 0.5) * 3.4)]); add(olive, new THREE.TubeGeometry(c, 14, 0.45 - k * 0.08, 8), std(0x5a4a3a, { roughness: 1 })); }
+  for (let k = 0; k < 12; k++) { const b = add(olive, new THREE.IcosahedronGeometry(1.1 + rand() * 0.7, 1), std([0x7a8a5a, 0x8a9a6a, 0x6a7a4a][k % 3], { flatShading: true }), (rand() - 0.5) * 5, 4.2 + rand() * 1.8, (rand() - 0.5) * 5); b.scale.y = 0.6; }
+  // doves and a dovecote
+  const doveG = group(scene); kit.feat('doves', doveG);
+  const cote = group(doveG, -15, 0, 14); cyl(cote, 0.12, 0.15, 3.6, std(0x5a3a22), 0, 0, 0, 8); box(cote, 1.4, 1, 1.4, std(0xf0ece0), 0, 3.6, 0); const cr = add(cote, new THREE.ConeGeometry(1.2, 0.8, 4), std(0x8a4a2a), 0, 5, 0); cr.rotation.y = Math.PI / 4;
+  const doveM = std(0xf8f8f4, { side: THREE.DoubleSide });
+  const doves = Array.from({ length: 7 }, (_, i) => { const g = group(doveG); add(g, new THREE.SphereGeometry(0.16, 8, 6), doveM).scale.set(0.8, 0.7, 1.6); const w = [-1, 1].map((sx) => add(g, new THREE.PlaneGeometry(0.5, 0.18), doveM, sx * 0.25, 0.05, 0)); return { g, w, ph: i * 0.9, r: 5 + (i % 3) * 2 }; });
+  // an old stone well with a bucket
+  const well = group(scene, 20, 0, -4); kit.feat('well', well);
+  cyl(well, 1.3, 1.4, 1.1, stoneM, 0, 0, 0, 16); cyl(well, 1.05, 1.05, 0.05, std(0x1a3a4a), 0, 1, 0, 16);
+  for (const sx of [-1.1, 1.1]) box(well, 0.16, 2.8, 0.16, std(0x5a3a22), sx, 0.6, 0);
+  const wroof = add(well, new THREE.ConeGeometry(1.7, 1, 4), std(0x4a3a2a), 0, 3.9, 0); wroof.rotation.y = Math.PI / 4;
+  const bucket = group(well, 0, 2.4, 0); add(bucket, new THREE.CylinderGeometry(0.01, 0.01, 0.9, 3), std(0x8a7a5a), 0, 0.45, 0); cyl(bucket, 0.22, 0.17, 0.35, std(0x7a5a3a), 0, -0.2, 0, 10);
+  // a reflection bench by the water
+  const bench = group(scene, -6, 0, 1.5, 0.3); kit.feat('bench', bench);
+  box(bench, 3, 0.15, 0.8, std(0x6a4a30), 0, 0.55, 0); box(bench, 3, 0.7, 0.12, std(0x6a4a30), 0, 0.65, -0.35); for (const sx of [-1.3, 1.3]) box(bench, 0.2, 0.55, 0.7, stoneM, sx, 0, 0);
   shade(scene);
 
-  // Falling olive leaves; fireflies at night (upgrade).
-  const leaves = particles(scene, { n: 260, color: 0xb8b070, size: 0.18, additive: false, opacity: 0.9,
+  // Falling leaves and, at night, fireflies.
+  const petals = particles(scene, { n: 300, color: 0xa8c060, size: 0.2, additive: false, opacity: 0.95,
     init: () => ({ x: (rand() - 0.5) * 50, y: rand() * 9, z: (rand() - 0.5) * 50, s: 0.3 + rand() * 0.5, ph: rand() * 6 }),
-    step: (d, t, dt) => { d.y -= dt * d.s; d.x += (Math.sin(t * 0.8 + d.ph) * 0.6 + 0.3) * dt; d.z += Math.cos(t * 0.6 + d.ph) * 0.3 * dt; if (d.y < 0.05) { d.y = 7 + rand() * 3; d.x = (rand() - 0.5) * 50; d.z = (rand() - 0.5) * 50; } } });
-  const flies = particles(scene, { n: 160, color: 0xe8ff8a, size: 0.25, opacity: 0,
-    init: () => ({ x: (rand() - 0.5) * 50, y: 0.5 + rand() * 3, z: (rand() - 0.5) * 50, ph: rand() * 6 }),
-    step: (d, t, dt) => { d.x += Math.sin(t * 0.7 + d.ph) * dt * 0.6; d.z += Math.cos(t * 0.5 + d.ph * 2) * dt * 0.6; d.y = 1.8 + Math.sin(t * 0.9 + d.ph) * 0.8; } });
+    step: (d, t, dt) => { d.y -= dt * d.s * (1 + kit.burstK() * 3); d.x += (Math.sin(t * 0.8 + d.ph) * 0.6 + 0.4) * dt; d.z += Math.cos(t * 0.6 + d.ph) * 0.3 * dt; if (d.y < 0.05) { d.y = 7 + rand() * 3; d.x = (rand() - 0.5) * 50; d.z = (rand() - 0.5) * 50; } } });
+  const flies = particles(scene, { n: 140, color: 0xd8ff8a, size: 0.25, opacity: 0,
+    init: () => ({ x: (rand() - 0.5) * 50, y: 0.5 + rand() * 3, z: (rand() - 0.5) * 50, ph: rand() * 6, bx: 0, bz: 0 }),
+    step: (d, t, dt) => { d.x += Math.sin(t * 0.7 + d.ph) * dt * 0.6; d.z += Math.cos(t * 0.5 + d.ph * 2) * dt * 0.6; d.y = 0.8 + Math.sin(t * 0.9 + d.ph) * 0.8 + 1; } });
 
   return {
-    spawn: [0, 19, Math.PI], stand: [-11.5, -9, faceTo(-11.5, -9, 0, 14)], camR: R - 1, camY: 20,
-    groundAt: (x, z) => (kit.has('bridge') && Math.abs(z - BR.z) < BR.hw && Math.abs(x) < BR.len ? bridgeY(x) + 0.08 : 0),
+    spawn: [0, 17, Math.PI], stand: [-11.5, -9, faceTo(-11.5, -9, 0, 14)], camR: R - 1, camY: 20,
+    groundAt: (x, z) => (Math.abs(z - BR.z) < BR.hw && Math.abs(x) < BR.len ? bridgeY(x) + 0.08 : 0),
     blocked: (x, z) => {
       if (hyp(x, z) > R - 1.4) return true;
-      const onBridge = kit.has('bridge') && Math.abs(z - BR.z) < BR.hw - 0.2 && Math.abs(x) < BR.len;
+      const onBridge = Math.abs(z - BR.z) < BR.hw - 0.2 && Math.abs(x) < BR.len;
       if (inPond(x, z) && !onBridge) return true;
-      if (kit.has('bridge') && Math.abs(z - BR.z) < BR.hw + 0.25 && Math.abs(z - BR.z) > BR.hw - 0.2 && Math.abs(x) < BR.len - 0.3) return true;
+      if (Math.abs(z - BR.z) < BR.hw + 0.25 && Math.abs(z - BR.z) > BR.hw - 0.2 && Math.abs(x) < BR.len - 0.3) return true;   // bridge railings
       for (const [tx, tz, r] of trees) if (hyp(x - tx, z - tz) < r) return true;
-      if (kit.has('lanterns')) for (const [lx, lz] of lanterns) if (hyp(x - lx, z - lz) < 0.9) return true;
-      if (kit.has('pavilion') && hyp(x - 14, z + 2) < 3.9 && hyp(x - 14, z + 2) > 2.4) { const a = Math.atan2(z + 2, x - 14); if (Math.abs(Math.sin(a * 3)) < 0.35) return true; }
-      for (const sx of [-2.4, 2.4]) if (Math.abs(x - sx) < 0.8 && Math.abs(z - 13) < 0.8) return true;
-      if (Math.abs(x + 13.3) < 1.6 && Math.abs(z - 5) < 1.8) return true;
+      for (const [lx, lz] of lanterns) if (hyp(x - lx, z - lz) < 0.9) return true;
+      if (hyp(x - 14, z + 2) < 3.9 && hyp(x - 14, z + 2) > 2.4) { const a = Math.atan2(z + 2, x - 14); if (Math.abs(Math.sin(a * 3)) < 0.35) return true; }   // pavilion posts
+      for (const sx of [-2.4, 2.4]) if (hyp(x - sx, z - 13) < 0.6) return true;
+      if (kit.has('sabil') && hyp(x + 21, z + 8) < 2) return true;
+      if (kit.has('olive') && hyp(x - 13, z - 9) < 1.2) return true;
+      if (kit.has('doves') && hyp(x + 15, z - 14) < 0.6) return true;
+      if (kit.has('well') && hyp(x - 20, z + 4) < 1.8) return true;
+      if (kit.has('bench') && hyp(x + 6, z - 1.5) < 1.6) return true;
       return false;
     },
     tick(t, dt, s) {
-      if (kit.has('koi')) koi.forEach((k) => { k.a += dt * k.sp; const x = Math.cos(k.a) * k.r, z = PZ + Math.sin(k.a) * k.r * 0.75 + k.cy; k.g.position.set(x, 0.18, z); k.g.rotation.y = Math.atan2(-Math.sin(k.a) * k.sp, Math.cos(k.a) * k.sp * 0.75); k.tail.rotation.y = Math.sin(t * 8 + k.r) * 0.5; });
-      waterM.color.setHSL(0.5, 0.3, 0.45 - s.night * 0.28);
-      spout.scale.x = 1 + Math.sin(t * 20) * 0.15;
-      leaves.tick(t, dt); flies.tick(t, dt); flies.mat.opacity = kit.has('fireflies') ? Math.max(s.night, kit.burstK()) * 0.95 : 0;
+      koi.forEach((k) => { k.a += dt * k.sp; const x = Math.cos(k.a) * k.r, z = PZ + Math.sin(k.a) * k.r * 0.75 + k.cy; k.g.position.set(x, 0.18, z); k.g.rotation.y = Math.atan2(-Math.sin(k.a) * k.sp, Math.cos(k.a) * k.sp * 0.75); k.tail.rotation.y = Math.sin(t * 8 + k.r) * 0.5; });
+      waterM.color.setHSL(0.52, 0.45, 0.6 - s.night * 0.35);
+      petals.tick(t, dt); flies.tick(t, dt); flies.mat.opacity = s.night * 0.95;
+      if (kit.has('sabil')) spout.scale.x = 1 + Math.sin(t * 20) * 0.15;
+      if (kit.has('doves')) doves.forEach((d) => { const an = t * 0.35 + d.ph; d.g.position.set(-15 + Math.cos(an) * d.r, 6 + Math.sin(t * 0.8 + d.ph) * 1.2, 14 + Math.sin(an) * d.r * 0.8); d.g.rotation.y = -an; const f = Math.sin(t * 9 + d.ph) * 0.7; d.w[0].rotation.z = f; d.w[1].rotation.z = -f; });
+      if (kit.has('well')) bucket.position.y = 2.4 + Math.sin(t * 0.5) * 0.3;
     },
     burst: [0xe8c070, 0xfff0c0, 0xb8d890],
   };
@@ -452,7 +506,7 @@ function village(scene, kit) {
     init: () => ({ x: 0, y: rand() * 6, z: 0, vx: (rand() - 0.5) * 0.6, vz: (rand() - 0.5) * 0.6, s: 1 + rand() * 2 }),
     step: (d, t, dt) => { d.y += dt * d.s; d.x += d.vx * dt + Math.sin(t * 3 + d.s * 9) * dt * 0.3; d.z += d.vz * dt; if (d.y > 7 + d.s) { d.y = 0.6; d.x = (rand() - 0.5) * 0.8; d.z = (rand() - 0.5) * 0.8; } } });
   const cushions = [0xc0392b, 0x2f6f7a, 0xd4a53a, 0x6a2a6a, 0x2e7a4a];
-  const majlis = group(scene); kit.feat('majlis', majlis);
+  const majlis = group(scene);
   ring(14, 5.4, (x, z, a, i) => {
     if (i % 7 === 3) return;   // gaps to walk in
     const c = group(majlis, x, 0, z, faceTo(x, z)); box(c, 1.6, 0.45, 1.2, std(cushions[i % 5], { roughness: 1 }), 0, 0, 0); box(c, 1.6, 0.9, 0.35, std(cushions[(i + 2) % 5], { roughness: 1 }), 0, 0.3, -0.5);
@@ -471,7 +525,7 @@ function village(scene, kit) {
   [[-13, 9, 0], [-11.6, 10.2, 1]].forEach(([x, z, k]) => { const p = buildWorshipper(PALS[4 + k]); p.root.position.set(x, 0, z); p.root.rotation.y = faceTo(x, z, k ? -13 : -11.6, k ? 9 : 10.2); scene.add(p.root); people.push({ p, next: 2 + rand() * 4, talk: true }); });
   // String lights between poles.
   const bulbs = [0xffd070, 0xff8a70, 0x8ad0ff, 0xa0ff9a, 0xffffff];
-  const poles = [], lightsG = group(scene); kit.feat('lights', lightsG);
+  const poles = [], lightsG = group(scene);
   ring(8, 15, (x, z) => { cyl(lightsG, 0.1, 0.14, 6.5, std(0x5a3a22), x, 0, z, 8); poles.push(new THREE.Vector3(x, 6.4, z)); }, 0.2);
   const bulbMs = bulbs.map((c) => { const m = lampMat(c); kit.glow(m, 0.3, 3); return m; });
   poles.forEach((p, i) => {
@@ -481,43 +535,73 @@ function village(scene, kit) {
     add(lightsG, new THREE.TubeGeometry(curve, 20, 0.015, 4), std(0x222222));
   });
   // A long dining table, a well.
-  const tbl = group(scene, -14, 0, -9, 0.6); kit.feat('feast', tbl);
+  const tbl = group(scene, -14, 0, -9, 0.6);
   box(tbl, 7, 0.18, 1.8, std(0x8a5a34), 0, 1.1, 0); for (const [sx, sz] of [[-3.2, -0.7], [3.2, -0.7], [-3.2, 0.7], [3.2, 0.7]]) box(tbl, 0.16, 1.1, 0.16, std(0x6a4a2a), sx, 0, sz);
   box(tbl, 7.2, 0.02, 0.8, std(0xc0392b), 0, 1.29, 0);
   for (let k = 0; k < 6; k++) { cyl(tbl, 0.3, 0.26, 0.05, std(0xf6f0e0), -2.8 + k * 1.1, 1.29, (k % 2 ? 0.5 : -0.5), 16); const food = add(tbl, new THREE.SphereGeometry(0.22, 12, 8, 0, TAU, 0, Math.PI / 2), std([0xd4a03a, 0xc0502a, 0x7aa03a][k % 3]), -2.8 + k * 1.1, 1.34, (k % 2 ? 0.5 : -0.5)); }
   for (const sz of [-1.6, 1.6]) box(tbl, 6.6, 0.5, 0.6, std(0x6a4a2a), 0, 0, sz);
-  const well = group(scene, 14, 0, 9); kit.feat('well', well);
+  const well = group(scene, 14, 0, 9);
   cyl(well, 1.4, 1.5, 1.1, stoneM, 0, 0, 0, 16); cyl(well, 1.15, 1.15, 0.05, std(0x1a3a4a), 0, 1.0, 0, 16);
   for (const sx of [-1.2, 1.2]) box(well, 0.18, 3.2, 0.18, std(0x5a3a22), sx, 0.6, 0);
   const wr = add(well, new THREE.ConeGeometry(1.9, 1.1, 4), std(0x8a3a2a), 0, 4.2, 0); wr.rotation.y = Math.PI / 4;
   shade(scene);
 
-  // Fireworks for good days.
-  const fw = particles(scene, { n: 300, color: 0xffffff, size: 0.5, opacity: 0,
-    init: () => ({ x: 0, y: -50, z: 0, vx: 0, vy: 0, vz: 0, life: 0 }),
-    step: (d, t, dt) => { if (d.life <= 0) { d.y = -50; return; } d.life -= dt; d.vy -= dt * 4; d.x += d.vx * dt; d.y += d.vy * dt; d.z += d.vz * dt; } });
-  let fwT = 0;
-  const shoot = () => { const cx = (rand() - 0.5) * 30, cy = 22 + rand() * 10, cz = (rand() - 0.5) * 30; fw.mat.color.setHSL(rand(), 1, 0.65); fw.data.forEach((d, i) => { if (i % 3 !== fwT % 3) return; const v = new THREE.Vector3().randomDirection().multiplyScalar(5 + rand() * 4); Object.assign(d, { x: cx, y: cy, z: cz, vx: v.x, vy: v.y, vz: v.z, life: 1.6 + rand() * 0.6 }); }); fwT++; };
-
+  // ---- upgrades: new things added to the square ----
+  // a guest tent
+  const tent = group(scene, -19, 0, 3, Math.PI / 2 + 0.2); kit.feat('tent', tent);
+  const tentM = std(0x2a2420, { roughness: 1, side: THREE.DoubleSide });
+  const tg = new THREE.CylinderGeometry(0.1, 5, 3.6, 4, 1, true); const tm = add(tent, tg, tentM, 0, 1.8, 0); tm.rotation.y = Math.PI / 4; tm.scale.set(1.5, 1, 0.8);
+  for (const [x, z] of [[-5, 0], [5, 0], [0, 0]]) cyl(tent, 0.08, 0.08, x ? 2.6 : 3.8, std(0x5a3a22), x, 0, z, 6);
+  const rugT = add(tent, new THREE.PlaneGeometry(7, 3.4), new THREE.MeshStandardMaterial({ map: canvasTex(128, 64, (g) => { g.fillStyle = '#8a1a1a'; g.fillRect(0, 0, 128, 64); g.strokeStyle = '#e8c070'; g.lineWidth = 4; g.strokeRect(6, 6, 116, 52); for (let i = 0; i < 6; i++) { g.fillStyle = i % 2 ? '#e8c070' : '#1a3a5a'; g.fillRect(14 + i * 17, 26, 12, 12); } }) }), 0, 0.04, 0); rugT.rotation.x = -Math.PI / 2;
+  for (let k = 0; k < 5; k++) box(tent, 1.2, 0.35, 0.8, std([0xc0392b, 0x2f6f7a, 0xd4a53a][k % 3]), -2.6 + k * 1.3, 0, -1.1);
+  // an Arabic coffee corner: a brazier with a dallah on the coals
+  const coffee = group(scene, 9, 0, -15, faceTo(9, -15)); kit.feat('coffee', coffee);
+  cyl(coffee, 0.7, 0.5, 0.6, std(0x3a3a3a, { metalness: 0.6 }), 0, 0, 0, 16);
+  const coals = add(coffee, new THREE.CylinderGeometry(0.62, 0.62, 0.06, 16), std(0x3a1a0a, { emissive: 0xff4a10, emissiveIntensity: 1.2 }), 0, 0.6, 0);
+  add(coffee, new THREE.LatheGeometry([[0.001, 0], [0.22, 0], [0.24, 0.1], [0.15, 0.32], [0.12, 0.44], [0.2, 0.54], [0.001, 0.6]].map(([a, b2]) => new THREE.Vector2(a, b2)), 16), std(0xd4a53a, { metalness: 0.9, roughness: 0.25 }), 0, 0.63, 0);
+  const steam = particles(scene, { n: 30, color: 0xffffff, size: 0.35, additive: false, opacity: 0.25, init: () => ({ x: 9, y: 1.3, z: -15, h: rand() * 2, s: 0.3 + rand() * 0.4, ph: rand() * 6 }), step: (d, t, dt) => { d.h += dt * d.s; if (d.h > 2) d.h = 0; d.x = 9 + Math.sin(t + d.ph) * 0.15 * d.h; d.z = -15; d.y = 1.3 + d.h; } });
+  const brewer = buildWorshipper(PALS[4]); brewer.root.position.set(9 + 1.4, 0.2, -15 - 0.6); brewer.root.rotation.y = faceTo(10.4, -15.6, 9, -15); coffee.parent.add(brewer.root); brewer.kneel(1e6);
+  kit.feat('coffee', brewer.root);
+  // a playground with swings and children
+  const play = group(scene, 17, 0, -6, -0.4); kit.feat('playground', play);
+  const frameM = std(0x2f6f7a, { metalness: 0.4 });
+  for (const sx of [-2.2, 2.2]) { const l1 = add(play, new THREE.CylinderGeometry(0.08, 0.08, 3.4, 6), frameM, sx, 1.6, -0.6); l1.rotation.x = 0.35; const l2 = add(play, new THREE.CylinderGeometry(0.08, 0.08, 3.4, 6), frameM, sx, 1.6, 0.6); l2.rotation.x = -0.35; }
+  const topBar = add(play, new THREE.CylinderGeometry(0.08, 0.08, 4.6, 6), frameM, 0, 3.2, 0); topBar.rotation.z = Math.PI / 2;
+  const swings = [-1, 1].map((sx) => { const sw = group(play, sx, 3.2, 0); for (const zz of [-0.2, 0.2]) add(sw, new THREE.CylinderGeometry(0.01, 0.01, 2.4, 3), std(0x333333), 0, -1.2, zz); box(sw, 0.6, 0.06, 0.5, std(0xd4a53a), 0, -2.5, 0); return sw; });
+  const kids = [{ robe: '#e8743a', accent: '#ffffff', skin: '#f0cfae', glow: '#ffd38a' }, { robe: '#3a8ad0', accent: '#ffffff', skin: '#e9c29e', glow: '#9fc8ff' }].map((pal, i) => { const k = buildWorshipper(pal); swings[i].add(k.root); k.root.position.set(0, -2.45, 0); k.root.scale.setScalar(0.95); k.kneel(1e6); return k; });
+  const slide = group(play, 0, 0, 4.5); box(slide, 1, 2.2, 1, frameM, 0, 0, -1.9); const sl = add(slide, new THREE.BoxGeometry(0.9, 0.1, 3.4), std(0xd04a2a), 0, 1.15, 0); sl.rotation.x = 0.62;
+  // neighbourhood stalls
+  const stalls = group(scene); kit.feat('stalls', stalls);
+  [[-6, -21], [3, -22]].forEach(([x, z], i) => { const st = group(stalls, x, 0, z, faceTo(x, z)); for (const [sx, sz] of [[-1.6, -0.8], [1.6, -0.8], [-1.6, 0.8], [1.6, 0.8]]) cyl(st, 0.07, 0.08, 2.8, std(0x7a4e2a), sx, 0, sz, 6); const aw = add(st, new THREE.PlaneGeometry(3.6, 2.2), new THREE.MeshStandardMaterial({ map: canvasTex(128, 64, (g) => { for (let s2 = 0; s2 < 8; s2++) { g.fillStyle = s2 % 2 ? '#f4ead2' : (i ? '#2f6f7a' : '#c0392b'); g.fillRect(s2 * 16, 0, 16, 64); } }), side: THREE.DoubleSide }), 0, 2.9, 0); aw.rotation.x = -Math.PI / 2 + 0.25; box(st, 3, 0.9, 0.9, std(0x8a5a34), 0, 0, 0.4); for (let k = 0; k < 8; k++) sph(st, 0.14, std([0xf0a020, 0xd02a1a, 0x7ac040, 0xe8d040][k % 4]), -1.2 + (k % 4) * 0.8, 1.05, 0.2 + (k < 4 ? 0 : 0.35), 8, 6); });
+  // a small fountain
+  const fnt = group(scene, -9, 0, 15); kit.feat('fountain', fnt);
+  cyl(fnt, 1.8, 1.9, 0.6, stoneM, 0, 0, 0, 24); add(fnt, new THREE.CylinderGeometry(1.6, 1.6, 0.05, 24), new THREE.MeshPhysicalMaterial({ color: 0x4aa8c8, roughness: 0.05, clearcoat: 1 }), 0, 0.56, 0);
+  cyl(fnt, 0.25, 0.35, 1.6, stoneM, 0, 0.6, 0, 12); cyl(fnt, 0.8, 0.6, 0.2, stoneM, 0, 2.2, 0, 16);
+  const jet = add(fnt, new THREE.ConeGeometry(0.15, 0.8, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xdff4ff, transparent: true, opacity: 0.6 }), 0, 2.7, 0);
   return {
     spawn: [0, 19, Math.PI], stand: [17, -4, faceTo(17, -4, 0, 19)], camR: R + 2, camY: 18,
     blocked: (x, z) => {
       const r = hyp(x, z);
       if (r > R + 1.5) return true;
-      if (r < (kit.has('majlis') ? 6.3 : 2.4)) return true;   // the fire and the majlis
-      if (kit.has('lights')) for (const p of poles) if (hyp(x - p.x, z - p.z) < 0.5) return true;
-      if (kit.has('well') && hyp(x - 14, z - 9) < 2) return true;
-      if (kit.has('feast')) { const dx = x + 14, dz = z + 9, c = Math.cos(0.6), s2 = Math.sin(0.6), lx = dx * c - dz * s2, lz = dx * s2 + dz * c; if (Math.abs(lx) < 3.8 && Math.abs(lz) < 2.3) return true; }
+      if (r < 6.3) return true;   // the fire and the majlis
+      for (const p of poles) if (hyp(x - p.x, z - p.z) < 0.5) return true;
+      if (hyp(x - 14, z - 9) < 2) return true;
+      { const dx = x + 14, dz = z + 9, c = Math.cos(0.6), s2 = Math.sin(0.6), lx = dx * c - dz * s2, lz = dx * s2 + dz * c; if (Math.abs(lx) < 3.8 && Math.abs(lz) < 2.3) return true; }
       if (hyp(x + 12.3, z - 9.6) < 1.6) return true;
+      if (kit.has('tent') && hyp(x + 19, z - 3) < 4.4) return true;
+      if (kit.has('coffee') && hyp(x - 9, z + 15) < 1.6) return true;
+      if (kit.has('playground') && hyp(x - 17, z + 6) < 3.4) return true;
+      if (kit.has('stalls') && (hyp(x + 6, z + 21) < 2.2 || hyp(x - 3, z + 22) < 2.2)) return true;
+      if (kit.has('fountain') && hyp(x + 9, z - 15) < 2.1) return true;
       return false;
     },
     tick(t, dt, s) {
       bonfire.tick(t); bonfire2.tick(t); sparks.tick(t, dt);
-      people.forEach((o) => { o.next -= dt; if (!o.talk && !kit.has('majlis')) return; o.p.update(t, dt, 0, false); if (o.next < 0 && o.talk) { o.p.wave(); o.next = 3 + rand() * 5; } });
-      const k = kit.burstK();
-      if (kit.has('fireworks') && k > 0.2 && Math.floor(t * 2.2) !== fw.lastShot) { fw.lastShot = Math.floor(t * 2.2); shoot(); }
-      fw.mat.opacity = fw.data.some((d) => d.life > 0) ? 1 : 0;
-      fw.tick(t, dt);
+      people.forEach((o) => { o.next -= dt; o.p.update(t, dt, 0, false); if (o.next < 0 && o.talk) { o.p.wave(); o.next = 3 + rand() * 5; } });
+      if (kit.has('coffee')) { steam.tick(t, dt); brewer.update(t, dt, 0, false); }
+      steam.mat.opacity = kit.has('coffee') ? 0.25 : 0;
+      if (kit.has('playground')) { swings.forEach((sw, i) => (sw.rotation.x = Math.sin(t * 1.8 + i * 1.4) * 0.5)); kids.forEach((k) => k.update(t, dt, 0, false)); }
+      if (kit.has('fountain')) jet.scale.y = 1 + Math.sin(t * 6) * 0.1;
     },
     burst: [0xffd070, 0xff8a70, 0x8ad0ff],
   };

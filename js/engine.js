@@ -84,6 +84,7 @@ export function newState() {
     tasks: {}, // progress per task: `${characterId}.${taskId}` -> { streak, lastDate, lastResult }
     log: [],
     planV: 2,
+    story: { speech: false, jailed: false, ship: 0 },
   };
   for (const c of CHARACTERS.filter((c) => c.starter)) s.characters[c.id] = newCharacter();
   for (const r of REGIONS.filter((r) => r.starter)) s.regions[r.id] = { level: 1 };
@@ -114,6 +115,7 @@ export function migrate(raw) {
     if (def?.legacyTasks && !ch.plan) { ch.plan = defaultPlan(def); ch.plan[0] = def.legacyTasks.map((t) => ({ ...t })); }
   }
   s.planV = 2;
+  s.story = { ...base.story, ...(raw.story || {}) };
   s.version = SAVE_VERSION;
   return s;
 }
@@ -144,7 +146,7 @@ function checkUnlocks(s, events) {
   for (const [kind, list] of [['character', CHARACTERS], ['region', REGIONS]]) {
     for (const item of list) {
       const key = `${kind}:${item.id}`;
-      if (item.starter || s.seenUnlocks[key]) continue;
+      if (item.starter || item.kind === 'leaders' || s.seenUnlocks[key]) continue;
       const st = shopStatus(s, kind, item);
       if (!st.owned && st.canBuy) {
         s.seenUnlocks[key] = true;
@@ -388,6 +390,7 @@ export function reportTask(s, charId, taskId, success, { applyPenalty = true, da
     s.stats.tasksCompleted++;
     gainGold(s, task.reward, `✔ ${task.title}${times > 1 ? ` (${count}/${times})` : ''}`, events);
     if (count >= times) { p.streak = currentStreak(p, date) + 1; p.doneDate = date; }
+    if (s.story?.speech) s.story.ship = (s.story.ship || 0) + 1;   // every task done adds to the warriors' ship
   } else {
     p.streak = 0;
     s.stats.tasksFailed++;
@@ -480,6 +483,7 @@ export function upgradeRegion(s, id) {
 export function buy(s, kind, id) {
   const item = kind === 'character' ? findCharacter(id) : findRegion(id);
   if (!item) return fail('غير موجود');
+  if (item.kind === 'leaders') return fail('بتوصلها بالسفينة بس 🚢');
   const st = shopStatus(s, kind, item);
   if (st.owned) return fail('مملوك بالفعل');
   if (!st.conditionsMet) return fail('الشروط غير مكتملة');
@@ -501,6 +505,7 @@ export function buy(s, kind, id) {
 // Visible: owned places. Teaser: a locked place whose `revealedBy` place is owned.
 // Everything else stays under fog.
 export function mapVisibility(s, region) {
+  if (region.kind === 'leaders') return s.story?.speech ? 'teaser' : 'hidden';   // appears after the commander's speech, closed
   if (s.regions[region.id]) return 'owned';
   const by = region.map?.revealedBy;
   return by && s.regions[by] ? 'teaser' : 'hidden';
@@ -513,7 +518,7 @@ export const SANDBOX = { keys: 99, gold: 99999 };
 export function enterSandbox(real) {
   const t = newState();
   for (const c of CHARACTERS) t.characters[c.id] = newCharacter();
-  for (const r of REGIONS) t.regions[r.id] = { level: 1 };
+  for (const r of REGIONS) if (r.kind !== 'leaders') t.regions[r.id] = { level: 1 };
   t.keys = SANDBOX.keys; t.gold = SANDBOX.gold;
   t.location = real.location;
   t.sandbox = { backup: JSON.stringify({ ...real, sandbox: undefined }) };
@@ -522,6 +527,16 @@ export function enterSandbox(real) {
 }
 export function refillSandbox(s) { if (s.sandbox) { s.keys = Math.max(s.keys, SANDBOX.keys); s.gold = Math.max(s.gold, SANDBOX.gold); } }
 export function leaveSandbox(s) { return s.sandbox ? migrate(JSON.parse(s.sandbox.backup)) : s; }
+
+// ---------- The story: the speech, Lucifer locked away, the ship ----------
+// The ship to the Island of Leaders grows one part every SHIP.per tasks done after the speech.
+export const SHIP = { parts: 12, per: 6 };
+export const shipStage = (s) => Math.min(SHIP.parts, Math.floor((s.story?.ship || 0) / SHIP.per));
+export function finishSpeech(s) {
+  s.story = { ...(s.story || {}), speech: true, jailed: true, ship: s.story?.ship || 0 };
+  addLog(s, '⛓ لوسيفير محبوس في القبو');
+  return done(s, [{ type: 'unlock' }]);
+}
 
 export function demoState() {
   const s = newState();

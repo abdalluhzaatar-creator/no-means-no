@@ -656,3 +656,21 @@ body.in-heaven .hud .cup-side, body.in-heaven .hud .dock, body.in-heaven .hud .v
 /* Test mode badge */
 .sandbox-badge { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); z-index: 25; padding: 5px 14px; border-radius: 99px; border: 1px solid #7fe0a0; background: rgba(10,40,24,.85); color: #b8ffd0; font: inherit; font-weight: 800; font-size: .85rem; cursor: pointer; box-shadow: 0 0 16px #3fd08055; }
 .hp-times[hidden] { display: none; }
+/* Lucifer's words */
+.luci-bubble { position: absolute; z-index: 7; transform: translate(-50%, -100%); max-width: min(280px, 70vw); padding: 9px 14px; border-radius: 14px 14px 14px 4px; background: rgba(18,4,6,.9); color: #ffb8a8; border: 1px solid #c0201a; box-shadow: 0 0 18px #ff2a1a55; font-weight: 700; font-size: .95rem; line-height: 1.5; pointer-events: none; text-align: center; animation: luciIn .25s; }
+.luci-bubble::before { content: 'لوسيفير'; display: block; font-size: .7rem; color: #ff5a3a; letter-spacing: .05em; }
+.luci-bubble[hidden] { display: none; }
+@keyframes luciIn { from { opacity: 0; transform: translate(-50%, -80%); } }
+/* Cinematic: letterbox, subtitles, flash */
+.cine-bars { position: absolute; inset: 0; z-index: 20; pointer-events: none; }
+.cine-bars::before, .cine-bars::after { content: ''; position: absolute; left: 0; right: 0; height: 11vh; background: #000; animation: barIn .8s ease-out; }
+.cine-bars::before { top: 0; } .cine-bars::after { bottom: 0; }
+.cine-bars[hidden] { display: none; }
+@keyframes barIn { from { height: 0; } }
+.cine-sub { position: absolute; left: 50%; bottom: 13vh; transform: translateX(-50%); z-index: 21; width: min(760px, 92vw); text-align: center; color: #fff; font-size: clamp(1rem, 2.4vw, 1.45rem); font-weight: 700; line-height: 1.7; text-shadow: 0 2px 6px #000, 0 0 2px #000; pointer-events: none; }
+.cine-sub b { display: block; font-size: .78em; color: #ffd36b; margin-bottom: 2px; }
+.cine-sub[hidden] { display: none; }
+.cine-flash { position: absolute; inset: 0; z-index: 22; pointer-events: none; opacity: 0; }
+.cine-flash.go { animation: flashGo .9s ease-out; }
+@keyframes flashGo { 0% { opacity: .95; } 100% { opacity: 0; } }
+body.cine .hud, body.cine .move-pad, body.cine .door-btn, body.cine .cell-caption, body.cine .puppet-bar, body.cine .luci-bubble, body.cine > header, body.cine .foot { display: none !important; }

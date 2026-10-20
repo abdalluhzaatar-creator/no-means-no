@@ -9,6 +9,7 @@ import { buildRankStand } from './rankstand3d.js';
 import { createEnv, canvasTex, glowTex } from './env3d.js';
 import { DIM_SCENES, DIM_ENV } from './dims3d.js';
 import { placeAmbience } from './audio.js';
+import { createLucifer } from './lucifer3d.js';
 
 const heartTex = canvasTex(64, 64, (g) => { g.fillStyle = '#fff'; g.beginPath(); g.moveTo(32, 56); g.bezierCurveTo(-8, 30, 12, 0, 32, 18); g.bezierCurveTo(52, 0, 72, 30, 32, 56); g.fill(); });
 
@@ -24,7 +25,7 @@ function accessory(regionId, hero) {
   if (regionId === 'wealth') { add(hero.root.children[1], new THREE.SphereGeometry(0.09, 10, 8), m(0xd4a53a, { metalness: 0.9, roughness: 0.25 }), 0.2, 0.0, 0.2); }
 }
 
-export function mountPlace(container, { regionId, palette, rank, features = new Set(), sky: skyInfo, weather = 'clear', onCharacter, onRanks }) {
+export function mountPlace(container, { regionId, palette, rank, features = new Set(), sky: skyInfo, weather = 'clear', lucifer = null, onCharacter, onRanks }) {
   let seed = 17; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -60,6 +61,7 @@ export function mountPlace(container, { regionId, palette, rank, features = new 
   const walker = createWalker({ hero, camera, dom: renderer.domElement, container, blocked, dist: 12, height: 3 });
   if (place.groundAt) walker.setGround(place.groundAt);
   walker.teleport(...place.spawn);
+  const luci = lucifer ? createLucifer(scene, { camera, container, hero: hero.root, who: lucifer.who, tasks: lucifer.tasks, groundAt: place.groundAt || (() => 0) }) : null;
   walker.setCameraClamp((p) => {
     const r = Math.hypot(p.x, p.z);
     if (r > place.camR) { p.x *= place.camR / r; p.z *= place.camR / r; }
@@ -108,6 +110,7 @@ export function mountPlace(container, { regionId, palette, rank, features = new 
     hero.update(t, dt, mv.walk, mv.air);
     stand?.tick(t);
     place.tick(t, dt, env.state, hero);
+    luci?.tick(t, dt);
     env.tick(t, dt);
     if (burst > 0) {
       burst = Math.max(0, burst - dt * 0.45);
@@ -123,10 +126,11 @@ export function mountPlace(container, { regionId, palette, rank, features = new 
   return {
     update({ rank: r, features: f } = {}) { if (r) stand?.update(r); if (f) { feats = f; showFeats(); } },
     pray() { if (!hero.busy()) hero.wave(); celebrate(); },
+    react(kind) { luci?.react(kind); },
     setWeather(k) { env.setWeather(k); },
     refreshSky() { env.applySky(); },
     dispose() {
-      cancelAnimationFrame(raf); ro.disconnect(); walker.dispose(); sound.stop();
+      cancelAnimationFrame(raf); ro.disconnect(); walker.dispose(); sound.stop(); luci?.dispose();
       scene.traverse((o) => { o.geometry?.dispose(); });
       renderer.dispose(); renderer.forceContextLoss?.();
       container.innerHTML = '';

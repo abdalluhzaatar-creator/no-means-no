@@ -138,7 +138,7 @@ export function arm(hero, pal, ghost) {
   return cape;
 }
 
-export function buildHeaven(scene, { owned = new Set() } = {}) {
+export function buildHeaven(scene, { owned = new Set(), story = {} } = {}) {
   const g = new THREE.Group(); g.position.x = HX; scene.add(g);
   const puff = puffTexture();
   const gold = std(0xe1b44c, { metalness: 1, roughness: 0.22, emissive: 0x4a3000, emissiveIntensity: 0.25 });
@@ -169,7 +169,7 @@ export function buildHeaven(scene, { owned = new Set() } = {}) {
   // Castle parapet around the edge: a low wall with merlons (open toward the door).
   const merlonGeo = new THREE.BoxGeometry(1.1, 1.2, 0.9);
   for (let i = 0; i < 72; i++) {
-    const a = (i / 72) * Math.PI * 2; if (Math.abs(Math.atan2(Math.sin(a - Math.PI / 2), Math.cos(a - Math.PI / 2))) < 0.16) continue;
+    const a = (i / 72) * Math.PI * 2; if (Math.abs(Math.atan2(Math.sin(a - Math.PI / 2), Math.cos(a - Math.PI / 2))) < 0.16 || Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < 0.14) continue;
     const m = new THREE.Mesh(merlonGeo, i % 2 ? lightStone : marble); m.position.set(Math.cos(a) * 24.4, i % 2 ? 0.6 : 1.0, Math.sin(a) * 24.4); m.rotation.y = -a; m.scale.y = i % 2 ? 1 : 1.6; m.castShadow = true; g.add(m);
   }
 
@@ -217,7 +217,7 @@ export function buildHeaven(scene, { owned = new Set() } = {}) {
   }));
   veil.position.set(0, 7.8, 0); arch.add(veil);
   const seal = new THREE.Mesh(new THREE.CircleGeometry(3.4, 64), new THREE.MeshBasicMaterial({ map: sealTexture(), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
-  seal.rotation.x = -Math.PI / 2; seal.position.set(0, 0.02, HEAVEN.seal.z); g.add(seal);
+  seal.rotation.x = -Math.PI / 2; seal.position.set(0, 0.02, HEAVEN.seal.z); seal.visible = false; g.add(seal);
 
   // Door back to the great hall: a gold-framed arch with a shimmering veil.
   const door = new THREE.Group(); door.position.set(0, 0, 24.3); door.rotation.y = Math.PI; g.add(door);
@@ -265,6 +265,39 @@ export function buildHeaven(scene, { owned = new Set() } = {}) {
     return { hero, ghost, cape, x, z, face, yaw: face, base: face, last: -99, beam };
   });
 
+  // ---- the commander's platform: built a little more with every warrior who joins ----
+  const stage = warriors.filter((w) => !w.ghost).length;
+  const P = new THREE.Group(); P.position.set(0, 0, HEAVEN.seal.z); g.add(P);
+  const ghostM = new THREE.MeshBasicMaterial({ color: 0xbfe0ff, wireframe: true, transparent: true, opacity: 0.12, depthWrite: false });
+  const part = (n, mesh) => { if (stage >= n) P.add(mesh); else { const gm = new THREE.Mesh(mesh.geometry, ghostM); gm.position.copy(mesh.position); gm.rotation.copy(mesh.rotation); gm.scale.copy(mesh.scale); P.add(gm); } return mesh; };
+  const mk = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; return o; };
+  part(1, mk(new THREE.CylinderGeometry(3.0, 3.1, 0.3, 48), lightStone, 0, 0.15, 0));
+  part(2, mk(new THREE.CylinderGeometry(2.4, 2.4, 0.3, 48), marble, 0, 0.45, 0));
+  part(3, mk(new THREE.CylinderGeometry(1.8, 1.8, 0.3, 48), marble, 0, 0.75, 0));
+  for (const [r, y] of [[3.02, 0.3], [2.42, 0.6], [1.82, 0.9]]) { const t2 = mk(new THREE.TorusGeometry(r, 0.06, 8, 64), gold, 0, y, 0); t2.rotation.x = Math.PI / 2; part(4, t2); }
+  const PCOLS = [[-2.2, -1.5], [2.2, -1.5], [-1.1, -2.4], [1.1, -2.4]];
+  for (const [x, z] of PCOLS) { part(5, mk(new THREE.CylinderGeometry(0.22, 0.26, 2.2, 16), marble, x, 1.4, z)); part(6, mk(new THREE.CylinderGeometry(0.2, 0.22, 2.4, 16), marble, x, 3.7, z)); part(6, mk(new THREE.CylinderGeometry(0.34, 0.22, 0.3, 16), gold, x, 5, z)); }
+  for (let k = 0; k <= 10; k++) { const a = Math.PI + (k / 10) * Math.PI; part(6, mk(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 6), gold, Math.cos(a) * 1.7, 1.25, Math.sin(a) * 1.7)); }
+  { const rail = mk(new THREE.TorusGeometry(1.7, 0.05, 6, 40, Math.PI), gold, 0, 1.6, 0); rail.rotation.x = Math.PI / 2; rail.rotation.z = Math.PI; part(6, rail); }
+  { const dome = mk(new THREE.SphereGeometry(2.7, 32, 16, 0, Math.PI, 0, Math.PI / 2), marble, 0, 5.15, -1.2); dome.rotation.y = Math.PI; dome.scale.set(1, 0.7, 0.8); part(7, dome); const rim = mk(new THREE.TorusGeometry(2.7, 0.12, 8, 40, Math.PI), gold, 0, 5.15, -1.2); rim.rotation.x = Math.PI / 2; rim.rotation.z = Math.PI; part(7, rim); }
+  const crest = new THREE.Group(); crest.position.set(0, 3.4, -2.75); P.add(crest); crest.visible = stage >= 8;
+  { const disc = mk(new THREE.CylinderGeometry(1.1, 1.1, 0.12, 40), gold, 0, 0, 0); disc.rotation.x = Math.PI / 2; crest.add(disc); for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; const ray = mk(new THREE.ConeGeometry(0.12, 0.6, 6), gold, Math.cos(a) * 1.35, Math.sin(a) * 1.35, 0); ray.rotation.z = a - Math.PI / 2; crest.add(ray); } }
+  const crownM = new THREE.MeshStandardMaterial({ color: 0xffe08a, emissive: 0xffc24d, emissiveIntensity: 1.2, metalness: 0.8, roughness: 0.3 });
+  const crown = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.07, 8, 24), crownM); crown.rotation.x = Math.PI / 2; crown.position.set(0, 6.6, -1.2); crown.visible = stage >= 8; P.add(crown);
+  const platBeam = new THREE.Mesh(new THREE.CylinderGeometry(1.7, 2, 14, 32, 1, true), new THREE.MeshBasicMaterial({ color: 0xffe2a0, transparent: true, opacity: 0.08, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })); platBeam.position.y = 7.9; platBeam.visible = stage >= 8; P.add(platBeam);
+  for (const sx of [-1, 1]) { const b = mk(new THREE.PlaneGeometry(1.1, 3.6), std(0x8a1a1a, { side: THREE.DoubleSide, emissive: 0x3a0606, emissiveIntensity: 0.3 }), sx * 2.2, 3.2, -1.2); b.visible = stage >= 8; P.add(b); }
+  const platTop = (x, z) => { const r = Math.hypot(x, z - HEAVEN.seal.z); return stage >= 3 && r < 1.8 ? 0.9 : stage >= 2 && r < 2.4 ? 0.6 : stage >= 1 && r < 3.0 ? 0.3 : 0; };
+
+  // ---- the new gate on the east side: closed until the speech, then the way down to the shore ----
+  const gate = new THREE.Group(); gate.position.set(23.6, 0, 0); gate.rotation.y = -Math.PI / 2; g.add(gate);
+  for (const sx of [-1, 1]) { const p2 = mk(new THREE.BoxGeometry(1.2, 9, 1.2), marble, sx * 2.7, 4.5, 0); gate.add(p2); const c2 = mk(new THREE.BoxGeometry(1.5, 0.5, 1.5), gold, sx * 2.7, 9.2, 0); gate.add(c2); }
+  { const t3 = mk(new THREE.TorusGeometry(2.7, 0.55, 12, 48, Math.PI), marble, 0, 9, 0); gate.add(t3); }
+  const leaves = [-1, 1].map((sx) => { const hinge = new THREE.Group(); hinge.position.set(sx * 2.1, 0, 0); gate.add(hinge); const leaf = mk(new THREE.BoxGeometry(2.1, 8, 0.25), std(0x5a3a1a, { roughness: 0.6 }), -sx * 1.05, 4, 0); hinge.add(leaf); for (let y = 1; y < 8; y += 1.6) { const band = mk(new THREE.BoxGeometry(2.1, 0.14, 0.3), gold, -sx * 1.05, y, 0); hinge.add(band); } return hinge; });
+  // steps leading out and down through the clouds
+  for (let k = 0; k < 14; k++) { const st = mk(new THREE.BoxGeometry(3.6, 0.4, 1.2), lightStone, 25.2 + k * 1.1, -0.2 - k * 0.7, 0); g.add(st); }
+  let gateOpen = !!story.speech, gateK = gateOpen ? 1 : 0;
+  const scripted = new Set();
+  let focus = null;
   // Motes of light rising through the hall.
   const N = 380, mp = new Float32Array(N * 3), ms = new Float32Array(N);
   for (let i = 0; i < N; i++) { const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * 23; mp.set([Math.cos(a) * r, rnd() * 22, Math.sin(a) * r], i * 3); ms[i] = 0.3 + rnd(); }
@@ -287,11 +320,13 @@ export function buildHeaven(scene, { owned = new Set() } = {}) {
 
   const blocked = (x, z) => {
     x -= HX;
+    if (gateOpen && x > 18 && Math.abs(z) < 1.9) return x > 27;                       // out through the open gate
     if (Math.hypot(x, z) > HEAVEN.r) return true;
     if (z < -18.6) return true;                                                     // the arch
     for (const w of warriors) if (Math.hypot(x - w.x, z - w.z) < 1.3) return true;
     for (const [cx, cz] of cols) if (Math.hypot(x - cx, z - cz) < 1.4) return true;
     for (const b of braziers) if (Math.hypot(x - b.x, z - b.z) < 1.1) return true;
+    if (stage >= 5) for (const [px, pz] of PCOLS) if (Math.hypot(x - px, z - HEAVEN.seal.z - pz) < 0.45) return true;
     return false;
   };
   const clamp = (p) => {
@@ -312,11 +347,16 @@ export function buildHeaven(scene, { owned = new Set() } = {}) {
     for (const s of clouds.children) { s.position.x += dt * s.userData.v; if (s.position.x > 230) s.position.x -= 460; }
     for (let i = 0; i < N; i++) { let y = mp[i * 3 + 1] + dt * ms[i] * 0.8; if (y > 22) y = 0; mp[i * 3 + 1] = y; mp[i * 3] += Math.sin(t * 0.7 + i) * dt * 0.08; }
     motes.geometry.attributes.position.needsUpdate = true;
+    gateK += ((gateOpen ? 1 : 0) - gateK) * Math.min(1, dt * 1.2);
+    leaves.forEach((h, i) => (h.rotation.y = (i ? -1 : 1) * gateK * 1.6));
+    if (stage >= 8) { crown.rotation.z = t * 0.6; crown.position.y = 6.6 + Math.sin(t * 1.5) * 0.12; platBeam.material.opacity = 0.06 + Math.sin(t * 2) * 0.02; crest.rotation.z = Math.sin(t * 0.5) * 0.05; }
     const local = tmp.copy(cmdPos); local.x -= HX;
-    const onSeal = Math.hypot(local.x, local.z - HEAVEN.seal.z) < 2.8;
+    const onSeal = false;
     if (onSeal && !kneeling) { kneeling = true; warriors.forEach((w, i) => { if (!w.ghost) setTimeout(() => w.hero.kneel(3), i * 120); }); }
     if (!onSeal && Math.hypot(local.x, local.z - HEAVEN.seal.z) > 4) kneeling = false;
     for (const w of warriors) {
+      if (scripted.has(w)) { w.hero.update(t, dt, w.walk || 0, false); continue; }
+      if (focus) { const want = Math.atan2(focus.x - w.x, focus.z - w.z); let d = want - w.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); w.yaw += d * Math.min(1, dt * 3); w.hero.root.rotation.y = w.yaw; w.hero.update(t, dt, 0, false); continue; }
       // Face the commander when he is close (or on the seal), else face the aisle.
       const dx = local.x - w.x, dz = local.z - w.z, near = Math.hypot(dx, dz) < 7 || onSeal;
       const want = near && !w.ghost ? Math.atan2(dx, dz) : w.base;
@@ -369,5 +409,17 @@ export function buildHeaven(scene, { owned = new Set() } = {}) {
     return false;
   };
 
-  return { group: g, lights, tick, blocked, clamp, applySky, setWeather, fogFor, weatherTick, entrance: new THREE.Vector3(HX, 0, 19.5), door: HEAVEN.door, seal: HEAVEN.seal, ownedCount, total: warriors.length };
+  return {
+    group: g, lights, tick, blocked, clamp, applySky, setWeather, fogFor, weatherTick, entrance: new THREE.Vector3(HX, 0, 19.5), door: HEAVEN.door, seal: HEAVEN.seal, ownedCount, total: warriors.length,
+    // the platform and the story
+    stage, complete: stage >= warriors.length, warriors,
+    groundAt: (x, z) => platTop(x - HX, z),
+    platform: new THREE.Vector3(HX, 0.9, HEAVEN.seal.z),
+    gateOut: new THREE.Vector3(HX + 22, 0, 0),
+    atGate: (p) => gateOpen && p.x - HX > 24.5 && Math.abs(p.z) < 2,
+    openGate() { gateOpen = true; },
+    setFocus(v) { focus = v ? new THREE.Vector3(v.x - HX, 0, v.z) : null; },
+    script(w, on) { if (on) scripted.add(w); else { scripted.delete(w); w.walk = 0; } },
+    local: (v) => new THREE.Vector3(v.x - HX, v.y, v.z),
+  };
 }

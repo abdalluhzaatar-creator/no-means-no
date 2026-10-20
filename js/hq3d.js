@@ -11,6 +11,8 @@ import { warMapCanvas } from './warmap.js';
 import { buildHeaven, HX } from './heaven3d.js';
 import { buildVestibule } from './vestibule3d.js';
 import { buildMarionette } from './marionette3d.js';
+import { buildShore, SZ } from './shore3d.js';
+import { createLucifer, buildLucifer } from './lucifer3d.js';
 import { EffectComposer } from './vendor/postprocessing/EffectComposer.js';
 import { RenderPass } from './vendor/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from './vendor/postprocessing/UnrealBloomPass.js';
@@ -41,7 +43,7 @@ function canvasTex(w, h, draw, repeat) {
   return t;
 }
 
-export function mountHQ(container, { places, owned = [], weather = 'clear', hq, rankIndex, future = 0, child = 0, sky: skyInfo, onCommander, onTable, onRoom }) {
+export function mountHQ(container, { places, owned = [], weather = 'clear', hq, rankIndex, future = 0, child = 0, story = {}, sky: skyInfo, onCommander, onTable, onRoom, onSpeechDone }) {
   let seed = 9; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -358,7 +360,8 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
 
   // ---------- walking: the commander moves around the hall ----------
   const dungeon = buildDungeon(scene);
-  const heaven = buildHeaven(scene, { owned: new Set(owned) });
+  const heaven = buildHeaven(scene, { owned: new Set(owned), story });
+  const shore = buildShore(scene); shore.setStage(story.ship || 0);
   const gallery = buildVestibule(scene);
   dungeon.setFuture(future); dungeon.setChild(child);
   // The marionette of the eight leaders, on its stand by the left wall of the vault, facing the aisle.
@@ -396,6 +399,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   };
   const inDungeon = (x, z) => {
     if (mario.blocked(x, z)) return true;
+    if (prison && Math.hypot(x - prison.at.x, z - prison.at.z) < 2.4) return true;
     x -= DX;
     if (Math.abs(x) > D.hw - 1.2 || z > D.hl - 1.5 || z < -D.hl + 10.8) return true;   // walls and cell bars
     for (const sx of [-1, 1]) for (const pz of [-12, 0, 12]) if (Math.abs(x - sx * 15) < 1.6 && Math.abs(z - pz) < 1.6) return true;
@@ -429,6 +433,131 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   const clampDungeon = (p) => { p.x = Math.max(DX - D.hw + 1, Math.min(DX + D.hw - 1, p.x)); p.z = Math.max(-D.hl + 10, Math.min(D.hl - 1, p.z)); p.y = Math.max(mario.holding ? 7.5 : 0.8, Math.min(14, p.y)); };
   walker.setCameraClamp(clampHall);
 
+  // ---------- the story: Lucifer in the hall, his cell in the vault, the speech ----------
+  const storyState = { ...story };
+  let hallLuci = storyState.jailed ? null : createLucifer(scene, { camera, container, hero: cmd.root, who: 'commander', groundAt: () => 0, first: 12 });
+  let prison = null;
+  const makePrison = () => {
+    if (prison) return;
+    const at = new THREE.Vector3(DX + 10, 0, 4);
+    const grp = new THREE.Group(); grp.position.copy(at); scene.add(grp);
+    const runeTex = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g2 = cv.getContext('2d'); g2.strokeStyle = '#ff3a1a'; g2.lineWidth = 6; for (const r of [120, 96]) { g2.beginPath(); g2.arc(128, 128, r, 0, 7); g2.stroke(); } g2.font = 'bold 26px serif'; g2.fillStyle = '#ff5a2a'; for (let k = 0; k < 12; k++) { const a = (k / 12) * Math.PI * 2; g2.save(); g2.translate(128 + Math.cos(a) * 108, 128 + Math.sin(a) * 108); g2.rotate(a + Math.PI / 2); g2.fillText('ᛟᛉᚦᛞ'[k % 4], -8, 8); g2.restore(); } const t2 = new THREE.CanvasTexture(cv); return t2; })();
+    const rune = new THREE.Mesh(new THREE.CircleGeometry(2.2, 48), new THREE.MeshBasicMaterial({ map: runeTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })); rune.rotation.x = -Math.PI / 2; rune.position.y = 0.03; grp.add(rune);
+    const L = buildLucifer(); L.root.position.y = 0.2; L.root.rotation.y = Math.PI / 2; grp.add(L.root); L.hero.kneel(1e6);
+    const chainM = new THREE.MeshStandardMaterial({ color: 0xd4a53a, metalness: 0.9, roughness: 0.3, emissive: 0x3a2400, emissiveIntensity: 0.4 });
+    for (let k = 0; k < 4; k++) { const a = (k / 4) * Math.PI * 2 + Math.PI / 4; const px = Math.cos(a) * 2, pz = Math.sin(a) * 2; const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 1.4, 8), chainM); post.position.set(px, 0.7, pz); grp.add(post); const len = Math.hypot(px, pz, 0.6); const ch = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, len, 6), chainM); ch.position.set(px / 2, 1, pz / 2); ch.lookAt(new THREE.Vector3(at.x, 1.2, at.z)); ch.rotateX(Math.PI / 2); grp.add(ch); }
+    const red = new THREE.PointLight(0xff2a10, 14, 9, 1.6); red.position.set(0, 1.6, 0); grp.add(red);
+    const lines = ['اضحك هلأ… بس أنا ما بموت', 'محاربينك رح يضعفوا يوم من الأيام', 'بستناك… كل مرة بتتعب بسمعك', 'الحيطان ما بتحبسني للأبد'];
+    let li = 0, lt = 0;
+    prison = { at, L, rune, red, line: () => lines[li], tick(t, dt) { lt += dt; if (lt > 6) { lt = 0; li = (li + 1) % lines.length; } L.tick(t, dt, Math.sin(t * 0.7) > 0.6 ? 'angry' : 'idle', 1); rune.rotation.z = t * 0.2; red.intensity = 12 + Math.sin(t * 7) * 4; } };
+  };
+  if (storyState.jailed) makePrison();
+
+  // Cinematic tools: letterbox, subtitles, a scripted camera, simple movers.
+  const bars = document.createElement('div'); bars.className = 'cine-bars'; bars.hidden = true; container.appendChild(bars);
+  const sub = document.createElement('div'); sub.className = 'cine-sub'; sub.hidden = true; container.appendChild(sub);
+  const flashEl = document.createElement('div'); flashEl.className = 'cine-flash'; container.appendChild(flashEl);
+  const cine = { on: false, pos: new THREE.Vector3(), look: new THREE.Vector3(), cur: new THREE.Vector3(), curLook: new THREE.Vector3(), speed: 1.5 };
+  const shot = (pos, look, speed = 1.2, snap = false) => { cine.pos.copy(pos); cine.look.copy(look); cine.speed = speed; if (snap) { cine.cur.copy(pos); cine.curLook.copy(look); } };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const say = (who, text, ms) => { sub.innerHTML = `${who ? `<b>${who}</b>` : ''}<span>${text}</span>`; sub.hidden = false; return wait(ms); };
+  const anims = [];
+  const animate = (dur, fn) => new Promise((res) => anims.push({ t: 0, dur, fn, res }));
+  const flash = (color = '#fff') => { flashEl.style.background = color; flashEl.classList.remove('go'); void flashEl.offsetWidth; flashEl.classList.add('go'); };
+  let pointing = false, cheering = false;
+  const HV = (x, y, z) => new THREE.Vector3(HX + x, y, z);   // a point in the warriors' hall
+  async function runSpeech() {
+    if (cine.on || storyState.speech) return;
+    cine.on = true; prompt.hidden = true; action = null; caption.hidden = true;
+    walker.setEnabled(false); bars.hidden = false; document.body.classList.add('cine');
+    hallLuci?.setEnabled(false);
+    const P = heaven.platform;
+    walker.teleport(P.x, P.z, 0);
+    heaven.setFocus(P);
+    shot(HV(0, 8, 18), HV(0, 2.5, -12), 1, true);
+    await wait(1200);
+    shot(HV(2.5, 3.6, -6.5), HV(0, 3.2, -14), 0.6);
+    await say('القائد', 'أيها المحاربون… أنا ممتنٌّ لكم على انتصاراتكم…', 4200);
+    // Lucifer bursts in
+    sfx.thunder(); flash('#ff3a1a');
+    const L = buildLucifer(); heaven.group.add(L.root); L.root.position.set(0, -3, 1); L.root.rotation.y = Math.PI; L.setOpacity(1);
+    const redL = new THREE.PointLight(0xff2a10, 0, 18, 1.5); redL.position.set(0, 3, 1); heaven.group.add(redL);
+    let mood = 'happy';
+    const luciTick = { on: true };
+    anims.push({ t: 0, dur: 1e9, fn: (k, t, dt) => { if (luciTick.on) { L.tick(t, dt, mood, 1); redL.intensity = 20 + Math.sin(t * 9) * 6; } }, res: () => {} });
+    shot(HV(-4.5, 2.6, 7), HV(0, 2.2, 1), 1.2);
+    sfx.luciLaugh();
+    await animate(1.6, (k) => { L.root.position.y = -3 + k * 3.3; });
+    await say('لوسيفير', 'فرحةٌ مؤقتة! وسأُفسد محاربيك، من أوّلهم إلى آخرهم، أيها القائد…', 5200);
+    mood = 'angry';
+    await say('لوسيفير', 'إلى أن أراك وحيدًا ضعيفًا… ثم أبيعك الآمالَ والأحلامَ الكاذبة إلى أن تموت…', 5600);
+    mood = 'happy'; sfx.luciLaugh();
+    await say('لوسيفير', 'وبعدها سأضمن أنك ستكون رفيقي الأبديّ في جهنّم!', 4600);
+    shot(HV(1.8, 3.5, -9.5), HV(0, 3.2, -14), 1);
+    await say('القائد', 'هذه أكبرُ أمانيك.', 3200);
+    // The commander points to the spiritual warrior.
+    const w = heaven.warriors[0];
+    const face = Math.atan2(HX + w.x - P.x, w.z - P.z);
+    walker.teleport(P.x, P.z, face); pointing = true;
+    shot(HV(-2.5, 4, -9), HV(w.x, 2.4, w.z), 1);
+    await say('', '(القائد يؤشّر للمحارب الروحي)', 2400);
+    // The spiritual warrior strides to Lucifer and strikes.
+    heaven.script(w, true); w.walk = 1;
+    const from = w.hero.root.position.clone(), to = new THREE.Vector3(1.6, 0, 1.4);
+    shot(HV(8, 4, 8), HV(2, 1.8, 2), 0.9);
+    await animate(3, (k) => { const e = k * k * (3 - 2 * k); w.hero.root.position.lerpVectors(from, to, e); w.hero.root.rotation.y = Math.atan2(to.x - from.x, to.z - from.z); });
+    w.walk = 0; w.hero.root.rotation.y = Math.atan2(0 - to.x, 1 - to.z); pointing = false;
+    w.hero.salute(); await wait(450);
+    flash('#fff'); sfx.impact(); sfx.luciRoar(); mood = 'angry';
+    const wave = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.9, 48), new THREE.MeshBasicMaterial({ color: 0xffe8a0, transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })); wave.rotation.x = -Math.PI / 2; wave.position.set(0, 0.2, 1); heaven.group.add(wave);
+    const chainsG = new THREE.Group(); chainsG.position.set(0, 1.2, 1); heaven.group.add(chainsG);
+    const chainM = new THREE.MeshStandardMaterial({ color: 0xffd06a, metalness: 1, roughness: 0.25, emissive: 0x6a4400, emissiveIntensity: 0.8 });
+    for (let k = 0; k < 6; k++) { const c = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.06, 6, 32), chainM); c.rotation.set(Math.PI / 2 + (k - 2.5) * 0.25, k, 0); c.position.y = (k - 2.5) * 0.35; chainsG.add(c); }
+    await animate(1, (k) => { wave.scale.setScalar(1 + k * 9); wave.material.opacity = 1 - k; L.root.position.x = -k * 1.6; L.root.rotation.z = k * 0.5; chainsG.position.x = -k * 1.6; chainsG.scale.setScalar(1.6 - k * 0.9); });
+    shot(HV(-5, 2.4, 6), HV(-1.6, 1, 1), 1);
+    await say('', '(المحارب الروحي يقيّد لوسيفير…)', 2000);
+    await animate(2.6, (k) => { L.root.position.y = 0.3 - k * 4; chainsG.position.y = 1.2 - k * 4; L.setOpacity(1 - k * 0.9); });
+    luciTick.on = false; heaven.group.remove(L.root, chainsG, wave, redL);
+    await say('', '⛓ وحُبس لوسيفير في القبو', 2600);
+    storyState.jailed = true; hallLuci?.dispose(); hallLuci = null; makePrison();
+    // The warrior returns to his place.
+    w.walk = 1;
+    const back = from.clone();
+    await animate(2.4, (k) => { w.hero.root.position.lerpVectors(to, back, k); w.hero.root.rotation.y = Math.atan2(back.x - to.x, back.z - to.z); });
+    w.walk = 0; heaven.script(w, false);
+    walker.teleport(P.x, P.z, 0);
+    shot(HV(0, 3.6, -7.6), HV(0, 3.3, -14), 0.8);
+    await say('القائد', 'أنظاري تتّجه إلى جزيرة القادة… حتى يكون لي فيها مكانٌ بين قادة البشر.', 6000);
+    // The warriors roar.
+    cheering = true; sfx.cheer();
+    heaven.warriors.forEach((x, i) => setTimeout(() => x.hero.salute(), i * 90));
+    shot(HV(0, 11, 15), HV(0, 1, -5), 1);
+    await say('المحاربون', 'هووووووه! هووووه!', 3800);
+    cheering = false;
+    shot(HV(0, 3.4, -10.4), HV(0, 3.3, -14), 0.5);
+    await say('', '(القائد ينظر إليهم بفخر)', 3000);
+    cmd.wave(); sfx.cheer();
+    await say('القائد', 'هيّااااااا!', 2400);
+    heaven.openGate(); creak();
+    shot(HV(10, 6, 7), HV(23, 4, 0), 0.8);
+    await wait(3200);
+    // Down the new gate to the shore.
+    fade.classList.add('on'); await wait(900);
+    room = 'shore'; setRoomLights('shore'); onRoom?.('shore');
+    walker.setGround(shore.groundAt); walker.teleport(0, SZ + 5, Math.PI); walker.setBlocked(shore.blocked); walker.setCameraClamp(shore.clamp);
+    scene.fog.color.set(shore.fog); scene.fog.density = 0.004; renderer.toneMappingExposure = 0.9;
+    heaven.setFocus(null);
+    shot(new THREE.Vector3(14, 8, SZ + 14), new THREE.Vector3(0, 3, SZ - 6), 1, true);
+    fade.classList.remove('on');
+    await wait(1500);
+    await say('القائد', 'أكمِلوا بناءها!', 3200);
+    sub.hidden = true; bars.hidden = true; document.body.classList.remove('cine');
+    cine.on = false; walker.setEnabled(true);
+    storyState.speech = true;
+    onSpeechDone?.();
+  }
+  if (window.__nmnDebug) window.__hqSpeech = runSpeech;
+
   // Door prompt: near the great doors (hall) or the iron door (dungeon).
   const prompt = document.createElement('button'); prompt.className = 'door-btn'; prompt.hidden = true; container.appendChild(prompt);
   const fade = document.createElement('div'); fade.className = 'room-fade'; container.appendChild(fade);
@@ -438,7 +567,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   const MOVES = [['dance', '💃', 'رقّصهم'], ['spin', '🔄', 'لفّهم'], ['lift', '⬆️', 'ارفعهم'], ['bow', '🙇', 'ينحنوا لك']];
   MOVES.forEach(([k, ic, txt], i) => { const b = document.createElement('button'); b.innerHTML = `<kbd>${i + 1}</kbd>${ic} ${txt}`; b.onclick = (e) => { e.stopPropagation(); playMove(k); }; bar.appendChild(b); });
   const playMove = (k) => { if (room === 'dungeon' && mario.holding && !mario.busy) { mario.play(k); sfx.pluck(); if (k === 'spin') sfx.whoosh(); } };
-  const setRoomLights = (r) => { heaven.lights.visible = r === 'heaven'; gallery.lights.visible = r === 'gallery'; hallHemi.visible = sun.visible = fill.visible = r === 'hall' || r === 'dungeon'; };
+  const setRoomLights = (r) => { heaven.lights.visible = r === 'heaven'; gallery.lights.visible = r === 'gallery'; shore.lights.visible = r === 'shore'; hallHemi.visible = sun.visible = fill.visible = r === 'hall' || r === 'dungeon'; };
   let weatherKind = weather;
   const heavenSky = () => { const e = heaven.setWeather(weatherKind, skyInfo()); const f = heaven.fogFor(); scene.fog.color.set(f.color); scene.fog.density = f.density; renderer.toneMappingExposure = e; };
   const go = (to, { white = false } = {}) => {
@@ -451,7 +580,8 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
       setRoomLights(to);
       if (to === 'dungeon') { walker.setGround(null); walker.teleport(DX, D.hl - 4, Math.PI, 0); walker.setBlocked(inDungeon); walker.setCameraClamp(clampDungeon); scene.fog.color.set(0x0a0806); scene.fog.density = 0.03; chains(); }
       else if (to === 'gallery') { walker.setGround(null); if (from === 'heaven') walker.teleport(gallery.fromLight.x, gallery.fromLight.z, 0, 0); else walker.teleport(gallery.entrance.x, gallery.entrance.z, Math.PI, 0); walker.setBlocked(gallery.blocked); walker.setCameraClamp(gallery.clamp); scene.fog.color.set(0xd8c8a8); scene.fog.density = 0.016; renderer.toneMappingExposure = 0.85; }
-      else if (to === 'heaven') { walker.setGround(null); walker.teleport(heaven.entrance.x, heaven.entrance.z, Math.PI, 0); walker.setBlocked(heaven.blocked); walker.setCameraClamp(heaven.clamp); heavenSky(); }
+      else if (to === 'heaven') { walker.setGround(heaven.groundAt); if (from === 'shore') walker.teleport(heaven.gateOut.x - 3, 0, -Math.PI / 2); else walker.teleport(heaven.entrance.x, heaven.entrance.z, Math.PI, 0); walker.setBlocked(heaven.blocked); walker.setCameraClamp(heaven.clamp); heavenSky(); }
+      else if (to === 'shore') { walker.setGround(shore.groundAt); walker.teleport(shore.top.x, shore.top.z, Math.PI); walker.setBlocked(shore.blocked); walker.setCameraClamp(shore.clamp); scene.fog.color.set(shore.fog); scene.fog.density = 0.004; renderer.toneMappingExposure = 0.9; }
       else {
         walker.setGround(hallGround); walker.setBlocked(inHall); walker.setCameraClamp(clampHall); scene.fog.color.set(0x1a120c); scene.fog.density = 0.012; setCry(0); applySky();
         if (from === 'dungeon') {
@@ -493,7 +623,20 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
       const onSeal = Math.hypot(p.x - heaven.seal.x, p.z - heaven.seal.z) < 2.8;
       prompt.hidden = true; action = null;
       if (nearDoor && !going) { going = true; go('gallery', { white: true }); }   // back the way he came, through the light
-      if (onSeal) { caption.hidden = false; caption.innerHTML = `<b>🫡 محاربوك</b><span>${heaven.ownedCount} من ${heaven.total} أبعاد انضمّت لجيشك. كل بُعد تفتحه بيصحى محاربه وبيوقف معك.</span><i style="--v:${Math.round((heaven.ownedCount / heaven.total) * 100)}%"></i>`; }
+      if (heaven.atGate(p) && !going) { going = true; go('shore'); }
+      if (cine.on) { caption.hidden = true; return; }
+      if (Math.hypot(p.x - heaven.platform.x, p.z - heaven.platform.z) < 4.2) {
+        caption.hidden = false;
+        const k = `<i style="--v:${Math.round((heaven.stage / heaven.total) * 100)}%"></i>`;
+        if (!heaven.complete) caption.innerHTML = `<b>🏛 منبر القائد</b><span>بيتبنى شوي شوي مع كل محارب بينضم لجيشك: ${heaven.stage} من ${heaven.total}.</span>${k}`;
+        else if (!storyState.speech) { caption.innerHTML = '<b>🏛 منبر القائد</b><span>اكتمل المنبر… والمحاربون بانتظار كلمتك.</span>'; showPrompt('🎙 اخطب في المحاربين', runSpeech); }
+        else caption.innerHTML = '<b>🏛 منبر القائد</b><span>⛓ لوسيفير محبوس في القبو. الباب الشرقي بيوديك عالشط، لعند السفينة.</span>';
+      } else caption.hidden = true;
+    } else if (room === 'shore') {
+      prompt.hidden = true; action = null;
+      if (cine.on) { caption.hidden = true; return; }
+      if (shore.atTop(p) && !going) { going = true; go('heaven'); }
+      if (shore.nearShip(p)) { caption.hidden = false; caption.innerHTML = `<b>🚢 السفينة: ${shore.stage} من 12</b><span>${shore.stage >= 12 ? 'السفينة جاهزة… الإبحار لجزيرة القادة قريبًا.' : 'بتتبنى لحالها: كل 6 مهام بتنجزوها = قطعة جديدة.'}</span><i style="--v:${Math.round((shore.stage / 12) * 100)}%"></i>`; }
       else caption.hidden = true;
     } else {
       const near = p.z > D.hl - 6 && Math.abs(p.x - DX) < 4;
@@ -506,7 +649,8 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
       const dF = p.distanceTo(dungeon.futureAt), dC = p.distanceTo(dungeon.childAt);
       // Crying grows louder as you approach the child (only while it is sad).
       setCry(childLevel < 0.4 ? Math.max(0, 1 - dC / 22) * (1 - childLevel * 2) : 0);
-      if ((mario.holding && t0 - heldAt < 6) || (!mario.holding && mario.near(p))) { caption.hidden = false; caption.innerHTML = mario.holding ? '<b>🎎 القادة الثمانية بين إيديك</b><span>هم صراعاتك الداخلية… وإنت اللي ماسك الخيوط. حرّكهم زي ما بدك.</span>' : '<b>🎎 خيوط القائد</b><span>ثمان دمى لقادة الأبعاد الثمانية، معلّقة بخيوط بين إيديك.</span>'; }
+      if (prison && Math.hypot(p.x - prison.at.x, p.z - prison.at.z) < 6) { caption.hidden = false; caption.innerHTML = `<b>⛓ لوسيفير</b><span>«${prison.line()}»</span>`; }
+      else       if ((mario.holding && t0 - heldAt < 6) || (!mario.holding && mario.near(p))) { caption.hidden = false; caption.innerHTML = mario.holding ? '<b>🎎 القادة الثمانية بين إيديك</b><span>هم صراعاتك الداخلية… وإنت اللي ماسك الخيوط. حرّكهم زي ما بدك.</span>' : '<b>🎎 خيوط القائد</b><span>ثمان دمى لقادة الأبعاد الثمانية، معلّقة بخيوط بين إيديك.</span>'; }
       else if (dF < 8 && dF <= dC) { caption.hidden = false; caption.innerHTML = futureText(futureLevel); }
       else if (dC < 8) { caption.hidden = false; caption.innerHTML = childText(childLevel); }
       else caption.hidden = true;
@@ -552,6 +696,11 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
     if (t - lastSky > 30) { if (room === 'heaven') heavenSky(); else if (room !== 'gallery') applySky(); lastSky = t; }
     const mv = walker.update(dt);
     cmd.update(t, dt, mv.walk, mv.air);
+    if (pointing) { const ar = cmd.arms[1]; ar.sh.rotation.x = -1.55; ar.sh.rotation.z = 0; ar.el.rotation.x = 0; }
+    for (let i = anims.length - 1; i >= 0; i--) { const an = anims[i]; an.t += window.__nmnDebug ? dt * 6 : dt; const k = Math.min(1, an.t / an.dur); an.fn(k, t, dt); if (k >= 1) { anims.splice(i, 1); an.res(); } }
+    if (cine.on) { const k = 1 - Math.exp(-dt * cine.speed); cine.cur.lerp(cine.pos, k); cine.curLook.lerp(cine.look, k); camera.position.copy(cine.cur); camera.lookAt(cine.curLook); }
+    if (hallLuci) { hallLuci.setEnabled(room === 'hall' && !cine.on); if (room === 'hall') hallLuci.tick(t, dt); }
+    if (prison && room === 'dungeon') prison.tick(t, dt);
     if (room === 'dungeon') {
       mario.tick(t, dt, cmd.root);
       // His arms reach forward to hold the controller (higher when he lifts them).
@@ -565,6 +714,8 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
     dungeon.tick(t, dt);
     for (const w of wellFlames) { const k = 0.85 + Math.sin(t * 11 + w.l.position.y) * 0.12; w.fl.scale.y = k; w.l.intensity = 14 * k; }
     if (room === 'heaven') { heaven.tick(t, dt, cmd.root.position); heaven.weatherTick(t, dt); }
+    if (cheering) heaven.warriors.forEach((w, i) => { w.hero.root.position.y = Math.abs(Math.sin(t * 6 + i)) * 0.5; });
+    if (room === 'shore') shore.tick(t, dt, 0);
     if (room === 'gallery') { const k = gallery.tick(t, dt, cmd.root.position); bloom.strength = 0.55 + k * 0.6; scene.fog.density = 0.012 + k * 0.012; }
     else bloom.strength = 0.5;
     updatePrompts();
@@ -583,12 +734,13 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   tick();
 
   return {
+    setShip(n) { shore.setStage(n); },
     update({ rankIndex: ri, future: f, child: c }) { setRank(ri); if (f != null) { futureLevel = f; dungeon.setFuture(f); } if (c != null) { childLevel = c; dungeon.setChild(c); } },
     salute() { cmd.wave(); },
     setWeather(k) { weatherKind = k; if (room === 'heaven') heavenSky(); },
     refreshSky() { if (room === 'heaven') heavenSky(); else if (room !== 'gallery') applySky(); },
     dispose() {
-      cancelAnimationFrame(raf); ro.disconnect(); walker.dispose(); setCry(0); window.removeEventListener('keydown', onE); window.removeEventListener('keydown', onDigit);
+      cancelAnimationFrame(raf); ro.disconnect(); walker.dispose(); setCry(0); hallLuci?.dispose(); document.body.classList.remove('cine'); window.removeEventListener('keydown', onE); window.removeEventListener('keydown', onDigit);
       scene.traverse((o) => { o.geometry?.dispose(); });
       composer.dispose(); renderer.dispose(); renderer.forceContextLoss?.();
       container.innerHTML = '';

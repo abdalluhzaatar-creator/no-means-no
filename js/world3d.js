@@ -40,6 +40,8 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     let [x, z] = toWorld(s.def.map);
     // Headquarters stands off the coast on its own islet (as on the war map), joined by a bridge.
     if (s.def.kind === 'hq') { const f = HQ_SEA_D / Math.hypot((x / SIZE) * 1.1, (z / DEPTH) * 1.25); x *= f; z *= f; }
+    // The Island of Leaders lies far out at sea.
+    if (s.def.kind === 'leaders') { const f = 0.95 / Math.hypot((x / SIZE) * 1.1, (z / DEPTH) * 1.25); x *= f; z *= f; }
     return { ...s, x, z };
   });
   const owned = shown.filter((s) => s.vis === 'owned');
@@ -385,6 +387,28 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   }
 
   // Floating island that holds the challenge cups.
+  // The Island of Leaders: a crowned tower among the statues of great leaders, its gate chained shut.
+  function leadersIsland() {
+    const g = new THREE.Group();
+    const stone = new THREE.MeshStandardMaterial({ color: 0xd8cfbe, roughness: 0.6 }), gold = new THREE.MeshStandardMaterial({ color: 0xe1b44c, metalness: 1, roughness: 0.25 }), dark = new THREE.MeshStandardMaterial({ color: 0x3a3a40, roughness: 0.5, metalness: 0.4 });
+    const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); g.add(o); return o; };
+    add(new THREE.CylinderGeometry(9, 10, 1, 40), stone, 0, 0.5, 0);
+    add(new THREE.CylinderGeometry(2.2, 2.8, 16, 16), stone, 0, 9, 0);
+    add(new THREE.CylinderGeometry(3, 2.4, 1.2, 16), gold, 0, 17.4, 0);
+    for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; add(new THREE.ConeGeometry(0.4, 1.6, 6), gold, Math.cos(a) * 2.6, 18.6, Math.sin(a) * 2.6); }
+    add(new THREE.SphereGeometry(0.9, 16, 12), gold, 0, 19.4, 0);
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2 + 0.3, x = Math.cos(a) * 6.5, z = Math.sin(a) * 6.5;
+      add(new THREE.BoxGeometry(1.4, 1.2, 1.4), stone, x, 1.6, z);
+      add(new THREE.CapsuleGeometry(0.45, 2.2, 4, 10), stone, x, 3.8, z);
+      add(new THREE.SphereGeometry(0.4, 12, 10), stone, x, 5.6, z);
+    }
+    const gate = add(new THREE.BoxGeometry(3, 4, 0.4), dark, 0, 2.5, 2.9);
+    for (let k = 0; k < 7; k++) { const l = add(new THREE.TorusGeometry(0.22, 0.06, 6, 12), gold, -1.2 + k * 0.4, 2.6, 3.15); l.rotation.y = k % 2 ? Math.PI / 2 : 0; }
+    addShadow(g);
+    return g;
+  }
+
   function skyIsland() {
     const g = new THREE.Group();
     let sd = 5; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
@@ -499,7 +523,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   for (const s of shown) {
     const floating = !!s.def.floating;
     const y = floating ? 26 : height(s.x, s.z);
-    const obj = floating ? skyIsland() : s.def.kind === 'hq' ? fortress() : s.def.id === 'sanctuary' ? palace() : (DIM_BUILD[s.def.id] || ruin)();
+    const obj = floating ? skyIsland() : s.def.kind === 'leaders' ? leadersIsland() : s.def.kind === 'hq' ? fortress() : s.def.id === 'sanctuary' ? palace() : (DIM_BUILD[s.def.id] || ruin)();
     obj.scale.setScalar(floating ? 1.1 : s.def.kind === 'hq' ? 1.9 : 1.5);
     obj.position.set(s.x, y - 0.2, s.z);
     if (s.def.kind === 'hq' && bridge) obj.rotation.y = Math.atan2(bridge.dir.x, bridge.dir.y);
@@ -513,7 +537,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     }
     const el = document.createElement('button');
     el.className = `w3-label ${s.vis}`;
-    el.innerHTML = s.vis === 'owned' ? s.def.name
+    el.innerHTML = s.def.kind === 'leaders' ? `🔒 ${s.def.name} · 🚢` : s.vis === 'owned' ? s.def.name
       : `🔒 ${s.def.name} · ${s.def.cost?.keys ? `🗝 ${s.def.cost.keys}` : `🪙 ${s.def.cost?.gold ?? 0}`}`;
     el.onclick = () => onPick(s.def.id);
     labelLayer.appendChild(el);

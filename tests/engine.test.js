@@ -300,4 +300,19 @@ t('test mode opens everything with keys and gold, upgrades nothing, and gives th
   assert.equal(E.activeTasks(def(), back.characters[W])[0].title, 'الصلاة');
 });
 
+t('the story: after the speech Lucifer is jailed, the island shows (closed) and tasks build the ship', () => {
+  const s = setup();
+  const isle = E.findRegion('leaders');
+  assert.equal(E.mapVisibility(s, isle), 'hidden');
+  E.reportTask(s, W, task(s, 'صفحة قرآن').id, true, { date: day(1) });
+  assert.equal(s.story.ship, 0, 'no ship before the speech');
+  assert.ok(E.finishSpeech(s).ok);
+  assert.equal(s.story.jailed, true);
+  assert.equal(E.mapVisibility(s, isle), 'teaser');
+  assert.equal(E.buy(s, 'region', 'leaders').ok, false, 'the island is reached by ship only');
+  for (let i = 0; i < E.SHIP.per; i++) E.reportTask(s, W, task(s, 'الصلاة').id, true, { date: day(2) });
+  assert.equal(E.shipStage(s), 1);
+  assert.equal(E.enterSandbox(s).regions.leaders, undefined);
+});
+
 console.log(`\n${passed} tests passed`);

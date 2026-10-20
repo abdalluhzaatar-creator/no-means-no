@@ -300,6 +300,13 @@ function openSpot(id) {
   const def = E.findRegion(id);
   if (def.kind === 'trophies') return go('trophies');
   if (def.kind === 'hq') return go('hq');
+  if (def.kind === 'leaders') {
+    const st = E.shipStage(state);
+    modal(`<div class="keyuse"><div class="keyuse-icon">🏝</div><h2>${def.name}</h2><p class="muted">${def.desc}</p>
+      <h3 class="keyuse-title">🚢 السفينة: ${st} من ${E.SHIP.parts}</h3>${bar(st, E.SHIP.parts, 'كل ' + E.SHIP.per + ' مهام بتنجزها = قطعة جديدة')}
+      <p class="muted">السفينة على الشط تحت قاعة المحاربين. ${st >= E.SHIP.parts ? 'السفينة جاهزة… الإبحار قريبًا.' : 'أكملوا بناءها.'}</p></div>`);
+    return;
+  }
   if (state.regions[id]) return enter(def.characterId);
   const st = E.shopStatus(state, 'region', def);
   const c = E.findCharacter(def.characterId);
@@ -522,7 +529,7 @@ async function bindPlace() {
       const { mountPlace } = await import('./place3d.js');
       if (!v.isConnected) return;
       v.querySelector('.w3-loading')?.remove();
-      const scene = mountPlace(v, { regionId: c.regionId, palette: c.palette, rank: placeState().rank, features: placeState().features, onRanks: () => showRanks(c.id), sky: skyInfo, weather: currentWeather(), onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${['يلا نكمل!', 'خطوة كل يوم', 'أنا جاهز', 'الاستمرار سر النجاح'][Math.random() * 4 | 0]}`); } });
+      const scene = mountPlace(v, { regionId: c.regionId, palette: c.palette, rank: placeState().rank, features: placeState().features, lucifer: luciFor(c.id), onRanks: () => showRanks(c.id), sky: skyInfo, weather: currentWeather(), onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${['يلا نكمل!', 'خطوة كل يوم', 'أنا جاهز', 'الاستمرار سر النجاح'][Math.random() * 4 | 0]}`); } });
       oasis = { char: c.id, scene };
       loadWeather();
       return;
@@ -530,7 +537,7 @@ async function bindPlace() {
     const { mountOasis } = await import('./oasis3d.js');
     if (!v.isConnected) return;
     v.querySelector('.w3-loading')?.remove();
-    const scene = mountOasis(v, { palette: c.palette, ...placeState(), onRanks: () => showRanks(c.id), sky: skyInfo, weather: currentWeather(),
+    const scene = mountOasis(v, { palette: c.palette, ...placeState(), lucifer: luciFor(c.id), onRanks: () => showRanks(c.id), sky: skyInfo, weather: currentWeather(),
       onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${randomLine()}`); } });
     oasis = { char: c.id, scene };
     loadWeather();
@@ -541,6 +548,8 @@ async function bindPlace() {
 }
 const LINES = ['الحمد لله', 'يلا نكمل!', 'خطوة كل يوم', 'سبحان الله وبحمده', 'الاستمرار سر النجاح'];
 const randomLine = () => LINES[Math.floor(Math.random() * LINES.length)];
+// Lucifer roams the places until the commander's warriors lock him in the vault.
+const luciFor = (id) => (state.story?.jailed ? null : { who: id, tasks: () => { const c = E.findCharacter(id), ch = state.characters[id], d = dayFor(id); return ch ? E.activeTasks(c, ch).filter((t) => !E.taskDoneToday(E.taskProgress(state, id, t.id), d)).map((t) => t.title) : []; } });
 
 // ---------- Sound ----------
 const WX_SOUND = { clear: [0, 0, 0.3], cloudy: [0, 0, 0.5], overcast: [0, 0, 0.6], fog: [0, 0, 0.2], rain: [1, 0, 0.6], storm: [1.4, 0, 1], snow: [0, 1, 0.4] };
@@ -847,7 +856,7 @@ async function bindHQ() {
     const { mountHQ } = await import('./hq3d.js');
     if (!v.isConnected) return;
     v.querySelector('.w3-loading')?.remove();
-    hqScene = mountHQ(v, { weather: currentWeather(), places: warPlaces(), owned: CHARACTERS.filter((c) => state.characters[c.id]).map((c) => c.id), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, ...innerState(), onRoom: (r) => { document.body.classList.toggle('in-dungeon', r === 'dungeon'); document.body.classList.toggle('in-heaven', r === 'heaven'); document.body.classList.toggle('in-gallery', r === 'gallery'); }, sky: skyInfo, onTable: showWarMap, onCommander: showCommandRanks });
+    hqScene = mountHQ(v, { weather: currentWeather(), places: warPlaces(), owned: CHARACTERS.filter((c) => state.characters[c.id]).map((c) => c.id), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, ...innerState(), story: { ...state.story, ship: E.shipStage(state) }, onSpeechDone: () => { act(E.finishSpeech(state)); FX.toast('🏝 ظهرت جزيرة القادة على الخريطة… مسكّرة لحد ما تكمل السفينة'); }, onRoom: (r) => { document.body.classList.toggle('in-dungeon', r === 'dungeon'); document.body.classList.toggle('in-heaven', r === 'heaven' || r === 'shore'); document.body.classList.toggle('in-gallery', r === 'gallery'); }, sky: skyInfo, onTable: showWarMap, onCommander: showCommandRanks });
     loadWeather();
   } catch (err) { console.warn('3D HQ unavailable', err); v.innerHTML = ''; }
 }
@@ -1256,7 +1265,7 @@ function bind() {
     const [c, t] = v.split(':');
     if (!inWindow(c, t)) return;
     const r = act(() => E.reportTask(state, c, t, true, { date: dayFor(c) }), el);
-    if (r.ok && oasis?.char === c) { oasis.scene.pray(); if (c === 'worshipper') SND.sfx.prayer(); }
+    if (r.ok && oasis?.char === c) { oasis.scene.pray(); oasis.scene.react?.('done'); if (c === 'worshipper') SND.sfx.prayer(); }
   });
   on('data-open-upgrades', showUpgrades);
   on('data-dim-ranks', showDimRanks);
@@ -1279,7 +1288,7 @@ function bind() {
   on('data-task-fail', (v) => {
     const [c, t] = v.split(':');
     const def = E.activeTasks(E.findCharacter(c), state.characters[c]).find((x) => x.id === t);
-    failDialog(def.title, def.penalty, (pen) => act(() => E.reportTask(state, c, t, false, { applyPenalty: pen, date: dayFor(c) })));
+    failDialog(def.title, def.penalty, (pen) => { const r = act(() => E.reportTask(state, c, t, false, { applyPenalty: pen, date: dayFor(c) })); if (r.ok && oasis?.char === c) oasis.scene.react?.('fail'); });
   });
   on('data-cmd-ranks', showCommandRanks);
   on('data-level', (id, el) => act(E.levelUpCharacter(state, id), el));

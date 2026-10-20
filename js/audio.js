@@ -299,3 +299,10 @@ export function wolf() {
 }
 setInterval(wolf, 15 * 60 * 1000);
 sfx.wolf = wolf;
+
+// Lucifer's voice: a low whisper, a mocking laugh, a furious roar; the warriors' cheer.
+sfx.luciWhisper = () => { noise({ dur: 1.2, vol: 0.08, freq: 900, q: 1.2, attack: 0.3, b: 'effects' }); tone({ f: 70, f2: 55, dur: 1.2, vol: 0.06, type: 'sawtooth', attack: 0.3 }); };
+sfx.luciLaugh = () => { for (let i = 0; i < 5; i++) { tone({ f: 150 - i * 12, f2: 110 - i * 10, dur: 0.18, vol: 0.12, at: i * 0.2, type: 'sawtooth', attack: 0.02 }); noise({ dur: 0.15, vol: 0.06, freq: 700, q: 2, at: i * 0.2 }); } };
+sfx.luciRoar = () => { noise({ dur: 1.4, vol: 0.25, freq: 220, q: 0.8, filter: 'lowpass', attack: 0.08 }); tone({ f: 90, f2: 45, dur: 1.4, vol: 0.14, type: 'sawtooth', attack: 0.05 }); tone({ f: 140, f2: 70, dur: 1.2, vol: 0.08, type: 'square', attack: 0.05 }); };
+sfx.impact = () => { noise({ dur: 0.9, vol: 0.4, freq: 160, q: 0.7, filter: 'lowpass' }); tone({ f: 60, f2: 30, dur: 0.8, vol: 0.2, type: 'sine' }); noise({ dur: 0.3, vol: 0.25, freq: 3000, q: 0.6 }); };
+sfx.cheer = () => { for (let i = 0; i < 4; i++) noise({ dur: 1.4, vol: 0.12, freq: 600 + i * 300, q: 1.4, at: i * 0.15, attack: 0.25 }); for (let i = 0; i < 6; i++) tone({ f: 220 + Math.random() * 120, f2: 330 + Math.random() * 160, dur: 0.9, vol: 0.04, at: Math.random() * 0.8, type: 'sawtooth', attack: 0.1 }); };

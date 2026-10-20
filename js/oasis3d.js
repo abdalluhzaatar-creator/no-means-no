@@ -5,6 +5,7 @@ import * as THREE from './vendor/three.module.min.js';
 import { Sky } from './vendor/Sky.js';
 import { sfx } from './audio.js';
 import { buildRankStand } from './rankstand3d.js';
+import { createLucifer } from './lucifer3d.js';
 
 // ---------- helpers ----------
 function makeNoise(seed = 5) {
@@ -443,7 +444,7 @@ const WEATHER = {
 
 // ---------- mount ----------
 // opts.sky() → { elev } sun elevation in degrees, recomputed every minute.
-export function mountOasis(container, { palette, features, level, rank, onCharacter, onRanks, sky: skyInfo, weather = 'clear' }) {
+export function mountOasis(container, { palette, features, level, rank, onCharacter, onRanks, sky: skyInfo, weather = 'clear', lucifer = null }) {
   let seed = 7; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -782,6 +783,7 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
     aura.position.set(p.x, 0.46, p.z - 0.3 * Math.cos(facing));
   };
 
+  const luci = lucifer ? createLucifer(scene, { camera, container, hero: hero.root, who: lucifer.who, tasks: lucifer.tasks, groundAt: () => 0.44 }) : null;
   const clock = new THREE.Clock();
   let raf, burstUntil = 0, lastSky = 0, nextBolt = 4;
   const tick = () => {
@@ -792,6 +794,7 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
     updateCamera(dt, walkAmt > 0.2);
     hero.update(t, dt, walkAmt, !grounded);
     stand?.tick(t);
+    luci?.tick(t, dt);
     fnt.userData.tick(t);
     const lvl = aura.userData.level || 0;
     aura.material.opacity = 0.12 + lvl * 0.03 + Math.sin(t * 2) * 0.05;
@@ -844,10 +847,11 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
       hero.pray(); burstUntil = clock.elapsedTime + 9;
     },
     update({ features: f, level: l, rank: r }) { setFeatures(f, l); if (r) stand?.update(r); },
+    react(kind) { luci?.react(kind); },
     setWeather(k) { kind = k in WEATHER ? k : 'clear'; W = WEATHER[kind]; applySky(); },
     refreshSky() { applySky(); },
     dispose() {
-      cancelAnimationFrame(raf); ro.disconnect();
+      cancelAnimationFrame(raf); ro.disconnect(); luci?.dispose();
       window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey);
       scene.traverse((o) => { o.geometry?.dispose(); });
       renderer.dispose(); renderer.forceContextLoss?.();
