@@ -345,6 +345,15 @@ export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {}, 
   // Warriors follow the commander (walking him down to the shore and back).
   let following = false;
   let gateOpen = !!story.speech, gateK = gateOpen ? 1 : 0;
+  // Golden guide arrows from the platform to the sea gate (shown while the march is on).
+  const guide = new THREE.Group(); guide.visible = false; g.add(guide);
+  const arrowM = new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false });
+  const arrowShape = new THREE.Shape(); arrowShape.moveTo(0, 0.9); arrowShape.lineTo(0.9, 0); arrowShape.lineTo(0.35, 0); arrowShape.lineTo(0.35, -0.9); arrowShape.lineTo(-0.35, -0.9); arrowShape.lineTo(-0.35, 0); arrowShape.lineTo(-0.9, 0); arrowShape.closePath();
+  const chevrons = [];
+  for (let k = 0; k < 9; k++) { const t2 = k / 8, x = 3 + t2 * 17, z = -10.5 + t2 * 10.5; const m = new THREE.Mesh(new THREE.ShapeGeometry(arrowShape), arrowM.clone()); m.rotation.set(-Math.PI / 2, 0, Math.atan2(-17, -10.5)); m.scale.setScalar(1.5); m.position.set(x, 0.08, z); guide.add(m); chevrons.push(m); }
+  const bigArrow = new THREE.Mesh(new THREE.ShapeGeometry(arrowShape), arrowM); bigArrow.scale.setScalar(1.6); bigArrow.rotation.set(0, -Math.PI / 2, Math.PI); bigArrow.position.set(20.5, 9, 0);   // pointing down at the gate
+  guide.add(bigArrow);
+
   const scripted = new Set();
   let focus = null;
   // Motes of light rising through the hall.
@@ -400,6 +409,7 @@ export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {}, 
     for (let i = 0; i < N; i++) { let y = mp[i * 3 + 1] + dt * ms[i] * 0.8; if (y > 22) y = 0; mp[i * 3 + 1] = y; mp[i * 3] += Math.sin(t * 0.7 + i) * dt * 0.08; }
     motes.geometry.attributes.position.needsUpdate = true;
     gateK += ((gateOpen ? 1 : 0) - gateK) * Math.min(1, dt * 1.2);
+    if (guide.visible) { chevrons.forEach((c, i) => (c.material.opacity = 0.5 + 0.5 * Math.max(0, Math.sin(t * 4 - i * 0.7)))); bigArrow.position.y = 9 + Math.sin(t * 3) * 0.5; }
     leaves.forEach((h, i) => (h.rotation.y = (i ? -1 : 1) * gateK * 1.6)); seaLight.material.opacity = gateK * 0.12;
     if (stage >= 8) { crown.rotation.z = t * 0.6; crown.position.y = 6.6 + Math.sin(t * 1.5) * 0.12; platBeam.material.opacity = 0.06 + Math.sin(t * 2) * 0.02; crest.rotation.z = Math.sin(t * 0.5) * 0.05; }
     const local = tmp.copy(cmdPos); local.x -= HX;
@@ -473,7 +483,7 @@ export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {}, 
     hemi.color.set(night > 0.5 ? 0x5a68b0 : 0xc9d2ff);
     for (const m of cloudMats) m.color.set(0xffffff).lerp(tint.set(0xffc49a), goldK * 0.6).lerp(tint.set(0x8a90a0), W.dim * 0.7).lerp(tint.set(0x2a3150), night * 0.85);
     rain.visible = W.rain > 0; snow.visible = W.snow > 0;
-    return 0.85 + night * 0.15;   // exposure for this hour
+    return 0.62 + night * 0.15;   // exposure for this hour (kept low: marble and gold glare otherwise)
   };
   const setWeather = (k, info) => { kind = k in WEATHER ? k : 'clear'; W = WEATHER[kind]; return applySky(info); };
   const fogFor = () => ({ color: tint.set(0x8f86c8).lerp(new THREE.Color(0xb8bcc4), W.dim).lerp(new THREE.Color(0x141830), night * 0.8).getHex(), density: 0.0035 + W.fog * 0.02 });
@@ -499,6 +509,7 @@ export function buildHeaven(scene, { owned = new Set(), story = {}, ranks = {}, 
     cage: CAGE.clone().add(new THREE.Vector3(HX, 0, 0)), cageLocal: CAGE.clone(),
     setCageOpen(v) { cageOpen = v; },
     follow(on) { following = on; },
+    setGuide(on) { guide.visible = on; },
     arrange(at, skip) { let i = 0; warriors.forEach((w) => { if (w.ghost || w === skip) return; const v = at(i++); w.hero.root.position.copy(v); w.yaw = Math.atan2(-6.5 - v.x, 4.5 - v.z); w.hero.root.rotation.y = w.yaw; }); },
     walkHome() { warriors.forEach((w) => { if (!w.ghost) { w.going = w.hero.root.position.clone(); w.goT = 0; } }); },
     sendHome() { warriors.forEach((w) => { w.hero.root.position.copy(w.home); w.yaw = w.base; w.hero.root.rotation.y = w.base; }); },

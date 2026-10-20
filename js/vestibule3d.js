@@ -134,7 +134,7 @@ export function buildVestibule(scene) {
     for (let i = 0; i < N; i++) { dp[i * 3 + 1] += dt * 0.12; dp[i * 3] += Math.sin(t + i) * dt * 0.05; if (dp[i * 3 + 1] > 9) dp[i * 3 + 1] = 0; }
     dust.geometry.attributes.position.needsUpdate = true;
     figures.forEach((h, i) => { h.update(t, dt, 0, false); h.root.position.y = 0.02 + Math.sin(t * 0.6 + i) * 0.02; });
-    beam.intensity = 80 + k * 90;
+    beam.intensity = 45 + k * 50;
     return k;
   }
 

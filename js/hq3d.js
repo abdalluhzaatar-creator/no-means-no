@@ -440,7 +440,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   const cageLucifer = () => { if (caged) return; const L = buildLucifer(); L.root.position.copy(heaven.cageLocal).setY(0.35); L.root.rotation.y = Math.PI / 2; heaven.group.add(L.root); L.hero.kneel(1e6); caged = L; };
   if (storyState.jailed && storyState.phase !== 'back') cageLucifer();   // on the way back he has already slipped out
   const following = () => storyState.phase === 'march' || storyState.phase === 'back';
-  heaven.follow(following());
+  heaven.follow(following()); heaven.setGuide(storyState.phase === 'march');
 
   // Cinematic tools: letterbox, subtitles, a scripted camera that can track a figure, simple timed animations.
   const bars = document.createElement('div'); bars.className = 'cine-bars'; bars.hidden = true; container.appendChild(bars);
@@ -513,8 +513,9 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
     sub.hidden = true;
     const wx = w.hero.root.position.x, wz = w.hero.root.position.z, pd = new THREE.Vector3(wx, 0, wz - (P.z)).normalize(), pl = new THREE.Vector3(pd.z, 0, -pd.x);
     walker.teleport(P.x, P.z, Math.atan2(pd.x, pd.z)); pointing = true;
+    say('القائد', 'احبسلي لوسيفير!', 0);
     shot(HV(pl.x * 4.6 + pd.x * 1.6, 3.3, P.z + pl.z * 4.6 + pd.z * 1.6), HV(pd.x * 3, 2.6, P.z + pd.z * 3), 1.6);   // side on: his arm out towards the warrior
-    await wait(2600);
+    await wait(2600); sub.hidden = true;
     heaven.script(w, true); w.walk = 1;
     const from = w.hero.root.position.clone(), to = new THREE.Vector3(1.6, 0, -0.2);
     shot(HV(-3.5, 5, -11), HV(2, 2, -3), 0.8); track(w.hero.root, new THREE.Vector3(0, 2, 0));
@@ -563,7 +564,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
     shot(HV(11, 5, 6), HV(23, 4, 0), 0.7);
     await wait(3000);
     heaven.setFocus(null);
-    storyState.speech = true; storyState.phase = 'march'; heaven.follow(true);
+    storyState.speech = true; storyState.phase = 'march'; heaven.follow(true); heaven.setGuide(true);
     onStory?.('march');
     endCine();
     walker.teleport(P.x, P.z + 3.2, Math.PI / 2);
@@ -672,6 +673,9 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
     await wait(4600);
     spyEl.hidden = true; camera.fov = fov0; camera.updateProjectionMatrix(); scene.fog.density = fog0;
     spyState = 'cmd'; shore.mapProp.visible = false; mapState = null;
+    shot(V.clone().addScaledVector(FW, 2.8).addScaledVector(LT, 0.6).setY(3.1), V.clone().setY(3.2), 2, true);   // his face, eyes on the island
+    await say('القائد', 'قريبًا… رح يكون إلي مكان بهاي الجزيرة.', 3600);
+    sub.hidden = true;
     // Excitement: hands up, and the camera rises above them.
     cheering = true; sfx.cheer(); cmd.salute?.(); ws.forEach((x, i) => setTimeout(() => x.h.salute(), i * 80));
     shot(V.clone().addScaledVector(FW, 3).setY(2.4), V.clone().setY(2.5), 3, true);
@@ -687,7 +691,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
     walker.teleport(toward.x, toward.z, Math.atan2(V.x - toward.x, V.z - toward.z)); cmd.wave();
     shot(toward.clone().add(new THREE.Vector3(3, 3.2, -4)), toward.clone().setY(2.8), 1.4);
     await say('القائد', 'يلّا… وَرايْ!', 2400);
-    storyState.phase = 'back'; onStory?.('back');
+    storyState.phase = 'back'; onStory?.('back'); heaven.setGuide(false);
     sub.hidden = true; cine.on = false;   // straight into the climb
     await runAscend();
   }
@@ -762,7 +766,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
       room = to;
       setRoomLights(to);
       if (to === 'dungeon') { walker.setGround(null); walker.teleport(DX, D.hl - 4, Math.PI, 0); walker.setBlocked(inDungeon); walker.setCameraClamp(clampDungeon); scene.fog.color.set(0x0a0806); scene.fog.density = 0.03; chains(); }
-      else if (to === 'gallery') { walker.setGround(null); if (from === 'heaven') walker.teleport(gallery.fromLight.x, gallery.fromLight.z, 0, 0); else walker.teleport(gallery.entrance.x, gallery.entrance.z, Math.PI, 0); walker.setBlocked(gallery.blocked); walker.setCameraClamp(gallery.clamp); scene.fog.color.set(0xd8c8a8); scene.fog.density = 0.016; renderer.toneMappingExposure = 0.85; }
+      else if (to === 'gallery') { walker.setGround(null); if (from === 'heaven') walker.teleport(gallery.fromLight.x, gallery.fromLight.z, 0, 0); else walker.teleport(gallery.entrance.x, gallery.entrance.z, Math.PI, 0); walker.setBlocked(gallery.blocked); walker.setCameraClamp(gallery.clamp); scene.fog.color.set(0xb8a888); scene.fog.density = 0.016; renderer.toneMappingExposure = 0.66; }
       else if (to === 'heaven') { walker.setGround(heaven.groundAt); if (from === 'shore') walker.teleport(heaven.gateOut.x - 3, 0, -Math.PI / 2); else walker.teleport(heaven.entrance.x, heaven.entrance.z, Math.PI, 0); walker.setBlocked(heaven.blocked); walker.setCameraClamp(heaven.clamp); heavenSky(); }
       else if (to === 'shore') { walker.setGround(shore.groundAt); const P0 = shore.pathDown[0]; walker.teleport(P0[0], SZ + P0[1], Math.PI); shore.following = following(); if (!shore.following) shore.sendToWork(); setTimeout(runDescend, 0); walker.setBlocked(shore.blocked); walker.setCameraClamp(shore.clamp); scene.fog.color.set(shore.fog); scene.fog.density = 0.004; renderer.toneMappingExposure = 0.9; }
       else {
@@ -870,13 +874,23 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   // Bloom for the Hall of Warriors.
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.55, 0.9);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.3, 0.5, 0.95);
   composer.addPass(bloom); composer.addPass(new OutputPass());
   const resize = () => { const w = container.clientWidth, h = container.clientHeight; renderer.setSize(w, h); composer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); };
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
   if (camera.aspect < 0.8) { camera.fov = 58; camera.updateProjectionMatrix(); }
 
   const tmpV = new THREE.Vector3();
+  // Reach: bend an arm (shoulder pitch/roll, elbow) so the hand lands on a world point.
+  const ikTmp = new THREE.Vector3();
+  const reach = (hero, i, target, st) => {
+    const a = hero.arms[i];
+    const err = () => { a.sh.rotation.x = st.x; a.sh.rotation.z = st.z; a.el.rotation.x = st.e; a.sh.updateMatrixWorld(true); return a.el.localToWorld(ikTmp.set(0, -0.32, 0)).distanceTo(target); };
+    let best = err(), step = 0.25;
+    for (let it = 0; it < 24; it++) { for (const k of ['x', 'z', 'e']) for (const d of [step, -step]) { st[k] += d; const e = err(); if (e < best) best = e; else st[k] -= d; } step *= 0.82; }
+    err();
+  };
+  const ikR = { x: -1.6, z: -0.3, e: -1.2 }, ikL = { x: -1.6, z: 0.3, e: -1.2 }, ikB0 = { x: -1.3, z: 0.2, e: -0.5 }, ikB1 = { x: -1.3, z: -0.2, e: -0.5 };
   const clock = new THREE.Clock(); let raf, lastSky = 0;
   const tick = () => {
     const raw = clock.getDelta(), dt = Math.min(raw, 0.05), rdt = Math.min(raw, 0.3), t = clock.elapsedTime;   // rdt: real time, for cinematics
@@ -919,32 +933,36 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
         sp.position.set(at.x, at.y - 0.02, at.z - SZ); sp.rotation.set(Math.PI / 2 - 0.3, cmd.root.rotation.y, 0, 'YXZ');
         if (spyState === 'cmd' && !cmdReach) { const a2 = cmd.arms[1]; a2.sh.rotation.x = -0.5; a2.el.rotation.x = -1.1; }
       } else if (spyState === 'eye') {
-        const f = cmd.root.rotation.y, fw = new THREE.Vector3(Math.sin(f), 0, Math.cos(f));
+        const f = cmd.root.rotation.y, fw = new THREE.Vector3(Math.sin(f), 0, Math.cos(f)), lt = new THREE.Vector3(Math.cos(f), 0, -Math.sin(f));
         cmd.head.getWorldPosition(tmpV);
-        // on the right eye, pointing out to sea
-        const lt = new THREE.Vector3(Math.cos(f), 0, -Math.sin(f));
+        // on the right eye, pointing out to sea, held in both hands
         sp.position.set(tmpV.x + fw.x * 0.27 - lt.x * 0.09, tmpV.y + 0.05, tmpV.z + fw.z * 0.27 - lt.z * 0.09 - SZ);
         sp.rotation.set(-0.06, f, 0, 'YXZ');
-        const r = cmd.arms[1], l = cmd.arms[0];
-        r.sh.rotation.x = -2.25; r.sh.rotation.z = -0.55; r.el.rotation.x = -1.55;
-        l.sh.rotation.x = -1.9; l.sh.rotation.z = 0.35; l.el.rotation.x = -1.2;
+        sp.updateMatrixWorld(true); cmd.root.updateMatrixWorld(true);
+        reach(cmd, 1, sp.localToWorld(new THREE.Vector3(0, -0.03, 0.16)), ikR);
+        reach(cmd, 0, sp.localToWorld(new THREE.Vector3(0, -0.04, 0.52)), ikL);
         cmd.head.parent.rotation.x = 0;
       }
-      // The map: carried at the chest, held up to show him, then a finger on the island.
+      // The map: held up by its lower corners, in front of the hands; then a finger on the island.
       const B = shore.workers[6], mp = shore.mapProp;
       if (mapState) {
-        const f = B.h.root.rotation.y, fw = new THREE.Vector3(Math.sin(f), 0, Math.cos(f)), bp = B.h.root.position;
+        const f = B.h.root.rotation.y, fw = new THREE.Vector3(Math.sin(f), 0, Math.cos(f)), lt = new THREE.Vector3(Math.cos(f), 0, -Math.sin(f)), bp = B.h.root.position;
         const show = mapState !== 'carry';
-        mp.position.set(bp.x + fw.x * (show ? 0.75 : 0.5), show ? 2.55 : 2.1, bp.z + fw.z * (show ? 0.75 : 0.5));
-        mp.rotation.set(show ? -0.35 : -1.1, f + Math.PI, 0, 'YXZ');
-        mp.scale.setScalar(show ? 1.5 : 1.2);
-        B.h.arms.forEach((a2) => { a2.sh.rotation.x = show ? -1.45 : -1.0; a2.sh.rotation.z = 0; a2.el.rotation.x = show ? -0.5 : -0.6; });
-        if (mapState === 'point') { const a2 = B.h.arms[1]; a2.sh.rotation.x = -1.7; a2.el.rotation.x = 0; }
-        if (show) cmd.head.parent.rotation.x = 0.35;   // he looks down at it
+        const W2 = 0.62, H2 = 0.44;   // half size of the map
+        const centre = new THREE.Vector3(bp.x + fw.x * (show ? 0.62 : 0.45), show ? 2.72 : 2.2, bp.z + fw.z * (show ? 0.62 : 0.45));
+        mp.position.copy(centre); mp.rotation.set(show ? -0.25 : -1.15, f + Math.PI, 0, 'YXZ'); mp.updateMatrixWorld(true);
+        B.h.root.updateMatrixWorld(true);
+        // hands just behind the map's bottom corners (the map faces away from him, towards the commander)
+        const cornerL = mp.localToWorld(new THREE.Vector3(-W2 * 0.85, -H2 * 0.9, -0.05));   // his left hand
+        const cornerR = mp.localToWorld(new THREE.Vector3(W2 * 0.85, -H2 * 0.9, -0.05));    // his right hand
+        reach(B.h, 0, cornerL, ikB0);
+        if (mapState === 'point') reach(B.h, 1, mp.localToWorld(new THREE.Vector3(-0.22, 0.1, 0.05)), ikB1);
+        else reach(B.h, 1, cornerR, ikB1);
+        if (show) cmd.head.parent.rotation.x = 0.3;   // he looks down at it
       } else if (spyState !== 'eye') cmd.head.parent.rotation.x = 0;
     }
-    if (room === 'gallery') { const k = gallery.tick(t, dt, cmd.root.position); bloom.strength = 0.55 + k * 0.6; scene.fog.density = 0.012 + k * 0.012; }
-    else bloom.strength = 0.5;
+    if (room === 'gallery') { const k = gallery.tick(t, dt, cmd.root.position); bloom.strength = 0.25 + k * 0.35; scene.fog.density = 0.012 + k * 0.012; renderer.toneMappingExposure = 0.66 - k * 0.12; }
+    else bloom.strength = 0.3;
     updatePrompts();
     for (const f of flames) {
       const k = 0.82 + Math.sin(t * 11 + f.ph) * 0.1 + Math.sin(t * 27 + f.ph) * 0.08;

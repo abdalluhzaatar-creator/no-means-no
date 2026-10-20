@@ -135,8 +135,33 @@ export function buildShore(scene, { parts = 12, tiers = {} } = {}) {
     const brass = std(0xc8a050, { metalness: 0.9, roughness: 0.3 }), leather = std(0x4a2e18, { roughness: 0.8 });
     for (const [r0, r1, l, z, m] of [[0.022, 0.026, 0.08, 0.04, brass], [0.03, 0.03, 0.2, 0.18, brass], [0.038, 0.038, 0.22, 0.38, leather], [0.046, 0.046, 0.2, 0.58, brass], [0.054, 0.05, 0.06, 0.71, brass]]) { const c = add(spyglass, new THREE.CylinderGeometry(r1, r0, l, 14), m, 0, 0, z); c.rotation.x = Math.PI / 2; }
     const lens = add(spyglass, new THREE.CircleGeometry(0.047, 16), std(0x8ac8ff, { metalness: 0.6, roughness: 0.05, emissive: 0x2a4a6a, emissiveIntensity: 0.4 }), 0, 0, 0.745); lens.castShadow = false; }
-  const mapTex = canvasTex(256, 180, (c, w, h) => { c.fillStyle = '#e8d6a8'; c.fillRect(0, 0, w, h); c.strokeStyle = '#8a6a3a'; c.lineWidth = 4; c.strokeRect(4, 4, w - 8, h - 8); c.fillStyle = '#7aa0a8'; c.fillRect(10, 10, w - 20, h - 20); c.fillStyle = '#c8b080'; c.beginPath(); c.ellipse(70, 110, 46, 34, 0.3, 0, 7); c.fill(); c.beginPath(); c.ellipse(186, 64, 58, 40, -0.2, 0, 7); c.fill(); c.strokeStyle = '#8a1a1a'; c.setLineDash([6, 6]); c.lineWidth = 3; c.beginPath(); c.moveTo(80, 100); c.quadraticCurveTo(130, 60, 176, 70); c.stroke(); c.fillStyle = '#8a1a1a'; c.font = 'bold 26px serif'; c.fillText('✕', 172, 78); });
-  const mapProp = add(g, new THREE.PlaneGeometry(0.9, 0.62), new THREE.MeshStandardMaterial({ map: mapTex, side: THREE.DoubleSide, roughness: 0.9 })); mapProp.visible = false; mapProp.castShadow = false;
+  // The map: an old parchment chart on two wooden rollers, faces the one it is shown to.
+  const mapTex = canvasTex(1024, 720, (c, w, h) => {
+    c.fillStyle = '#e9d6a6'; c.fillRect(0, 0, w, h);
+    for (let i = 0; i < 2600; i++) { c.fillStyle = `rgba(120,80,30,${Math.random() * 0.07})`; c.fillRect(Math.random() * w, Math.random() * h, 2 + Math.random() * 10, 2 + Math.random() * 10); }
+    const vg = c.createRadialGradient(w / 2, h / 2, h * 0.3, w / 2, h / 2, w * 0.62); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(90,50,10,.45)'); c.fillStyle = vg; c.fillRect(0, 0, w, h);
+    c.strokeStyle = '#6a4a20'; c.lineWidth = 6; c.strokeRect(28, 28, w - 56, h - 56); c.lineWidth = 2; c.strokeRect(40, 40, w - 80, h - 80);
+    // sea hatching
+    c.strokeStyle = 'rgba(60,90,110,.28)'; c.lineWidth = 2; for (let y = 70; y < h - 60; y += 22) { c.beginPath(); for (let x = 60; x < w - 60; x += 8) c.lineTo(x, y + Math.sin(x * 0.05 + y) * 3); c.stroke(); }
+    const island = (cx, cy, r, seed) => { c.beginPath(); for (let i = 0; i <= 48; i++) { const a = (i / 48) * Math.PI * 2, rr = r * (1 + Math.sin(a * 3 + seed) * 0.18 + Math.sin(a * 7 + seed * 2) * 0.08); c.lineTo(cx + Math.cos(a) * rr * 1.25, cy + Math.sin(a) * rr); } c.closePath(); c.fillStyle = '#d8c08a'; c.fill(); c.strokeStyle = '#5a3a18'; c.lineWidth = 4; c.stroke(); };
+    island(250, 470, 120, 1); island(760, 230, 150, 4);
+    c.fillStyle = '#6a5a3a'; for (const [x, y] of [[700, 200], [760, 170], [820, 220], [740, 260]]) { c.beginPath(); c.moveTo(x, y - 26); c.lineTo(x + 20, y + 8); c.lineTo(x - 20, y + 8); c.fill(); }
+    c.fillStyle = '#8a1a1a'; c.beginPath(); c.arc(250, 470, 10, 0, 7); c.fill();
+    // the route and the X
+    c.strokeStyle = '#8a1a1a'; c.setLineDash([16, 12]); c.lineWidth = 6; c.beginPath(); c.moveTo(300, 420); c.bezierCurveTo(420, 300, 560, 380, 690, 260); c.stroke(); c.setLineDash([]);
+    c.lineWidth = 9; c.beginPath(); c.moveTo(740, 205); c.lineTo(790, 255); c.moveTo(790, 205); c.lineTo(740, 255); c.stroke();
+    // a little ship on the route
+    c.fillStyle = '#5a3a18'; c.beginPath(); c.moveTo(470, 350); c.lineTo(530, 350); c.lineTo(515, 368); c.lineTo(485, 368); c.fill(); c.fillRect(498, 310, 4, 40); c.fillStyle = '#f4ead2'; c.beginPath(); c.moveTo(502, 312); c.lineTo(526, 340); c.lineTo(502, 340); c.fill();
+    // compass rose
+    c.save(); c.translate(150, 150); c.fillStyle = '#6a4a20'; for (let k = 0; k < 8; k++) { c.rotate(Math.PI / 4); c.beginPath(); c.moveTo(0, k % 2 ? -40 : -70); c.lineTo(10, 0); c.lineTo(-10, 0); c.fill(); } c.fillStyle = '#8a1a1a'; c.font = 'bold 34px serif'; c.textAlign = 'center'; c.fillText('N', 0, -78); c.restore();
+    c.direction = 'rtl'; c.textAlign = 'center'; c.fillStyle = '#4a2a10'; c.font = 'bold 40px "Amiri", Tajawal, serif';
+    c.fillText('جزيرة القادة', 770, 430); c.fillText('جزيرتنا', 250, 640);
+  });
+  const mapProp = new THREE.Group(); g.add(mapProp); mapProp.visible = false;
+  { const sheet = new THREE.PlaneGeometry(1.24, 0.88, 12, 4); const sp2 = sheet.attributes.position; for (let i = 0; i < sp2.count; i++) sp2.setZ(i, Math.sin((sp2.getX(i) / 1.24 + 0.5) * Math.PI) * 0.03); sheet.computeVertexNormals();
+    const m = new THREE.Mesh(sheet, new THREE.MeshStandardMaterial({ map: mapTex, side: THREE.DoubleSide, roughness: 0.9 })); mapProp.add(m);
+    const wood = std(0x5a3a1a, { roughness: 0.6 });
+    for (const y of [0.45, -0.45]) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.36, 10), wood); r.rotation.z = Math.PI / 2; r.position.y = y; mapProp.add(r); for (const sx of [-0.7, 0.7]) { const k = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), std(0xc8a050, { metalness: 0.8 })); k.position.set(sx, y, 0); mapProp.add(k); } } }
 
   // Lights for this room.
   const lights = new THREE.Group(); g.add(lights);
