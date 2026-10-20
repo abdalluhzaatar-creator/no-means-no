@@ -13,14 +13,16 @@ export function createWalker({ hero, camera, dom, container, ground = 0, blocked
   const focus = new THREE.Vector3().copy(hero.root.position).setY(hero.root.position.y + height);
 
   const onKey = (e) => {
-    if (e.target.closest?.('input, textarea, select') || !enabled) return;
+    // Key releases always count, so a key let go during a cutscene never stays "held".
+    if (e.target.closest?.('input, textarea, select') || (!enabled && e.type === 'keydown')) return;
     // Physical key position, so WASD works on any keyboard layout (e.g. Arabic).
     const k = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', Space: ' ' }[e.code] || e.key.toLowerCase();
     if (!['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) return;
     e.preventDefault();
     if (e.type === 'keydown') { keys.add(k); if (k === ' ') jump(); } else keys.delete(k);
   };
-  window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey);
+  const onBlur = () => keys.clear();
+  window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey); window.addEventListener('blur', onBlur);
   const jump = () => { if (grounded && enabled && !hero.busy?.()) { vy = 7.5; grounded = false; sfx.jump(); } };
 
   const pad = document.createElement('div'); pad.className = 'move-pad';
@@ -96,7 +98,7 @@ export function createWalker({ hero, camera, dom, container, ground = 0, blocked
     teleport(x, z, face, y = groundAt ? groundAt(x, z) : floor) { floor = y; hero.root.position.set(x, y, z); facing = face; cam.yaw = cam.tYaw = face + Math.PI; focus.set(x, y + height, z); },
     setBlocked(fn) { blocked = fn; },
     setCameraClamp(fn) { clampCam = fn; },
-    setEnabled(v) { enabled = v; pad.style.display = v ? '' : 'none'; },
-    dispose() { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey); dom.removeEventListener('wheel', onWheel); pad.remove(); },
+    setEnabled(v) { enabled = v; pad.style.display = v ? '' : 'none'; keys.clear(); joyEnd(); },
+    dispose() { window.removeEventListener('keydown', onKey); window.removeEventListener('keyup', onKey); window.removeEventListener('blur', onBlur); dom.removeEventListener('wheel', onWheel); pad.remove(); },
   };
 }
