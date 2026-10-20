@@ -310,7 +310,9 @@ t('the story: after the speech Lucifer is jailed, the island shows (closed) and 
   assert.equal(s.story.jailed, true);
   assert.equal(E.mapVisibility(s, isle), 'teaser');
   assert.equal(E.buy(s, 'region', 'leaders').ok, false, 'the island is reached by ship only');
-  for (let i = 0; i < E.SHIP.per; i++) E.reportTask(s, W, task(s, 'الصلاة').id, true, { date: day(2) });
+  for (let i = 0; i < 5; i++) E.reportTask(s, W, task(s, 'الصلاة').id, true, { date: day(2) });
+  E.reportTask(s, W, task(s, 'صفحة قرآن').id, true, { date: day(2) });
+  assert.equal(s.story.ship, 6, 'every task done adds to the ship');
   assert.equal(E.shipStage(s), 1);
   assert.equal(E.enterSandbox(s).regions.leaders, undefined);
 });
