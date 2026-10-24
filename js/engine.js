@@ -696,8 +696,10 @@ export function storyStep(s, phase) {
 // The island appears on the map once the commander has seen it through the spyglass.
 export const islandSeen = (s) => ['back', 'done'].includes(s.story?.phase);
 
+// A brand-new game (first visit or "start over"): it begins with the guided first steps.
 export function demoState() {
   const s = newState();
+  s.tour = 0;
   s.gold = 100;
   s.stats.goldEarned = 100;
   addLog(s, 'مرحبًا بك في No Means No', 100);

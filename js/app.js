@@ -1464,7 +1464,7 @@ $('#account').onclick = () => {
   const lo = $('#logout');
   if (lo) lo.onclick = () => { storage.logout(); location.reload(); };
   $('#reset').onclick = () => ask('سيُحذف كل التقدّم. متأكد؟', async () => {
-    state = E.demoState(); await storage.save(state); go('world'); FX.toast('بدأت من جديد');
+    state = E.demoState(); C.ensure(state); syncClock(); await storage.save(state); currentChar = null; go('world'); FX.toast('بدأت من جديد');
   });
 };
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#modal').dataset.closable === 'true') closeModal(); });
