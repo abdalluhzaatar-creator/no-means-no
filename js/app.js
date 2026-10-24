@@ -10,6 +10,7 @@ import * as FX from './effects.js';
 import * as SND from './audio.js';
 import { CITIES, METHODS, prayerDay, windowState, fmtTime } from './prayer.js';
 import { createTour } from './tour.js';
+import { playAttack } from './attack.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -200,9 +201,20 @@ function closeDays() {
   if (state.lastDay !== before) scheduleSave();
   if (!rep.days) return;
   const big = rep.wars.length || rep.raids.length || rep.fallen.length || rep.dropped.length || rep.restored.length || rep.season || rep.started.length;
-  if (big) { setTimeout(() => showNightReport(rep), 600); return; }
-  const last = rep.stars.filter((x) => x.date === rep.stars.at(-1)?.date);
-  if (last.length) FX.banner('نجوم مبارح', last.map((x) => `${x.name} ${starTxt(x.stars)}`).join(' · '), '⭐');
+  const after = () => { if (big) showNightReport(rep); };
+  // The night attack of the last day closed (its result is kept so it can be watched again).
+  const lastDate = rep.stars.at(-1)?.date, fights = rep.stars.filter((x) => x.date === lastDate);
+  if (!fights.length) { if (big) setTimeout(after, 600); return; }
+  state.lastAttack = { date: lastDate, fights, raid: rep.raids.find((r) => r.date === lastDate) || null };
+  scheduleSave();
+  setTimeout(() => showAttack(state.lastAttack, after), 400);
+}
+function showAttack(data, then) {
+  if (!data) return then?.();
+  playAttack({ ...data, shields: state.shields }, {
+    warrior: (id) => { const c = E.findCharacter(id), ch = state.characters[id]; return c && ch ? characterSVG(c, artLevel(ch), { size: 180 }) : ''; },
+    sfx: SND.sfx, onDone: then,
+  });
 }
 function showNightReport(rep) {
   const lastDate = rep.stars.at(-1)?.date;
@@ -226,8 +238,10 @@ function showNightReport(rep) {
       ${rep.season ? li('🏆', `جائزة الموسم — دوري ${esc(rep.season.league)}`, `+${rep.season.gold} 🪙`) : ''}
     </ul>
     ${rep.wars.length ? '<p class="luci-quote">😈 «أنا ما بخاف إنك تخسر حرب… بخاف إنك تكذب على حالك وتسمّيها انتصار.»</p>' : ''}
-    <div class="row wrap"><button class="btn primary" id="nr-ok">ماشي</button><button class="btn ghost" id="nr-rules">📜 القوانين</button></div>
+    <div class="row wrap"><button class="btn primary" id="nr-ok">ماشي</button><button class="btn ghost" id="nr-attack">⚔ الهجوم مرة ثانية</button><button class="btn ghost" id="nr-rules">📜 القوانين</button></div>
   </div>`);
+  $('#nr-attack').hidden = !state.lastAttack;
+  $('#nr-attack').onclick = () => { closeModal(); showAttack(state.lastAttack, () => showNightReport(rep)); };
   $('#nr-ok').onclick = () => { closeModal(); if (rulesPending) { rulesPending = false; showRules(); } };
   $('#nr-rules').onclick = () => { rulesPending = false; showRules(); };
 }
@@ -813,6 +827,7 @@ function warLine(id) {
     ${w.losses ? `<p class="road-warn">🏳 ${w.losses} من ${E.RULES.dropAfter} حروب خسارة ورا بعض${w.losses === E.RULES.dropAfter - 1 ? ' — خسارة كمان وبتنزل رتبة!' : ''}</p>` : ''}
     ${w.restore ? '<p class="road-ready">⬆ اربح هالحرب وبترجعلك رتبتك.</p>' : ''}
     ${rd.canPromote ? '<p class="road-ready">🗝 معك مفتاح! روح للقائد بمقر القيادة ← 🎖 رتب الأبعاد وترقّى.</p>' : ''}
+    ${state.lastAttack ? '<button class="btn ghost small road-replay" data-replay-attack>▶ شوف هجوم مبارح</button>' : ''}
   </div>`;
 }
 const roadLine = warLine;
@@ -1410,6 +1425,7 @@ function bind() {
   on('data-open-atmo', showAtmosphere);
   on('data-cup-picker', showCupPicker);
   on('data-war-map', showWarMap);
+  on('data-replay-attack', () => showAttack(state.lastAttack));
   on('data-toggle-report', () => { reportOpen = !reportOpen; render(); });
   on('data-view-mode', () => document.body.classList.toggle('view-mode'));
   on('data-cup-rules', showCupRules);

@@ -75,7 +75,7 @@ export function buildVestibule(scene) {
   const PALS = Array.from({ length: 8 }, () => ({ robe: '#000', accent: '#000', skin: '#000', glow: '#000' }));
   const black = new THREE.MeshBasicMaterial({ color: 0x050403, fog: false });
   const figures = PALS.map((pal, i) => {
-    const h = buildWorshipper(pal); arm(h, pal, false);
+    const h = buildWorshipper(pal); arm(h, pal, false, 5);
     h.root.traverse((m) => { if (m.isMesh) { m.material = black; m.castShadow = false; } });
     const k = i - 3.5;
     h.root.position.set(k * 1.55, 0.02, -6 - Math.abs(k) * 0.55); h.root.rotation.y = -k * 0.08; h.root.scale.multiplyScalar(1.08);

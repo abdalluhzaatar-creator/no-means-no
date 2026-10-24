@@ -528,14 +528,15 @@ export function closeDays(s, now = today()) {
       if (st > 0) active = true;
       if (ch.war && ch.war.start !== warStart(d)) { settleWar(s, def, ch, rep); ch.war = null; }   // a war left open by an absence
       if (!ch.war && weekday(d) === 6) { ch.war = newWar(ch, d); if (ch.war.first) rep.started.push({ name: def.name, king: KINGS[def.regionId] }); }   // wars begin on Saturday
-      if (!ch.war) { rep.stars.push({ name: def.name, date: d, stars: st, training: true }); continue; }
+      const fight = { id: def.id, name: def.name, king: KINGS[def.regionId], date: d, stars: st, share };
+      if (!ch.war) { rep.stars.push({ ...fight, training: true }); continue; }
       if (st === 0 && !ch.war.shield && (s.shields || 0) > 0) {   // the shield: a zero day becomes ⭐ (once a week per dimension)
-        s.shields--; ch.war.shield = true; st = 1; rep.shielded++;
+        s.shields--; ch.war.shield = true; st = 1; rep.shielded++; fight.shield = true;
         addLog(s, `🛡 الدرع حمى ${def.name} (${d})`);
       }
       ch.war.stars[dayDiff(ch.war.start, d)] = st;
       s.medals = (s.medals || 0) + st * RULES.medalsPerStar;
-      rep.stars.push({ name: def.name, date: d, stars: st });
+      rep.stars.push({ ...fight, stars: st });
       if (st === 0) {
         raid = true;
         ch.zeroRun = (ch.zeroRun || 0) + 1;

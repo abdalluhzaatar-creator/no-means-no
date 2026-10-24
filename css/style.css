@@ -705,3 +705,54 @@ body.cine .hud, body.cine .move-pad, body.cine .door-btn, body.cine .cell-captio
 /* The war line always shows under the tasks; the task list scrolls instead. */
 .quests .road { flex-shrink: 0; }
 .quests .tasks { min-height: 0; }
+
+/* ---------- The night attack (attack.js) ---------- */
+.atk { position: fixed; inset: 0; z-index: 50; overflow: hidden; color: #fff; font-family: 'Tajawal', system-ui, sans-serif; animation: atk-in .4s; }
+@keyframes atk-in { from { opacity: 0; } }
+.atk-sky { position: absolute; inset: 0; background: radial-gradient(ellipse at 70% 20%, #3a3266 0%, #171433 45%, #07060f 100%); }
+.atk-moon { position: absolute; top: 9%; left: 12%; width: 70px; height: 70px; border-radius: 50%; background: #fff6d8; box-shadow: 0 0 60px 18px #fff1c255; }
+.atk-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 28%; background: linear-gradient(#2a2418, #120e08); border-top: 3px solid #3d3322; }
+.atk-castle { position: absolute; right: 6%; bottom: 24%; width: min(36vw, 300px); transform-origin: 50% 100%; transition: transform .6s, filter .6s; }
+.atk-castle-svg { width: 100%; display: block; filter: drop-shadow(0 0 18px #ff3c2a55); }
+.atk-castle.hit { animation: atk-shake .13s; }
+@keyframes atk-shake { 30% { transform: translateX(-8px) rotate(-1deg); } 70% { transform: translateX(8px) rotate(1deg); } }
+.atk-crack { opacity: 0; transition: opacity .2s; }
+.atk-castle.c1 .c1, .atk-castle.c2 .c1, .atk-castle.c2 .c2, .atk-castle.c3 .atk-crack { opacity: 1; }
+.atk-castle.down { transform: scaleY(.35) translateY(20px); filter: grayscale(1) brightness(.6); }
+.atk-win { animation: atk-flicker 1.4s infinite; }
+@keyframes atk-flicker { 50% { opacity: .55; } }
+.atk-king { position: absolute; top: -34px; left: 50%; transform: translateX(-50%); white-space: nowrap; background: #8e1b2a; border: 2px solid #ff8c7a; border-radius: 10px; padding: 2px 12px; font-size: .95rem; }
+.atk-warrior { position: absolute; left: 4%; bottom: 22%; width: min(26vw, 190px); transition: transform .7s cubic-bezier(.4, 1.6, .5, 1); filter: drop-shadow(0 8px 10px #0008); }
+.atk-warrior svg { width: 100%; height: auto; display: block; }
+.atk-warrior.charge { transform: translateX(min(34vw, 380px)); }
+.atk-warrior.back { transform: translateX(min(6vw, 60px)) rotate(-6deg); transition-duration: .45s; }
+.atk-flash { position: absolute; inset: 0; background: #fff3c4; opacity: 0; pointer-events: none; transition: opacity .12s; }
+.atk-flash.on { opacity: .45; }
+.atk-luci { position: absolute; top: 30%; left: -20%; width: min(30vw, 150px); filter: drop-shadow(0 0 20px #ff2a2a); opacity: 0; }
+.atk-luci svg { width: 100%; display: block; }
+.atk.raid .atk-luci { animation: atk-raid 1.9s ease-in-out forwards; }
+@keyframes atk-raid { 0% { left: 110%; opacity: 0; } 15% { opacity: 1; } 50% { left: 10%; top: 50%; } 100% { left: -30%; top: 15%; opacity: 1; } }
+.atk-hud { position: absolute; top: 6%; left: 50%; transform: translateX(-50%); text-align: center; width: min(92vw, 560px); text-shadow: 0 2px 8px #000; }
+.atk-title { font-size: 1.35rem; font-weight: 800; }
+.atk-stars { display: flex; justify-content: center; gap: 10px; margin: 10px 0 4px; }
+.atk-stars i { width: 52px; height: 52px; clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); background: #ffffff2a; transition: transform .25s; }
+.atk-stars i.on { background: linear-gradient(#fff3a0, #ffb400); transform: scale(1.25); animation: atk-pop .35s; }
+.atk-stars i.shield { background: linear-gradient(#cfe9ff, #5fa8ff); }
+@keyframes atk-pop { 0% { transform: scale(2.2); opacity: 0; } }
+.atk-pct { font-size: 1.8rem; font-weight: 800; color: #ffe07a; min-height: 2.2rem; }
+.atk-cap { font-size: 1.05rem; min-height: 1.6rem; }
+.atk.won .atk-cap { color: #ffe07a; font-weight: 800; }
+.atk.pushed .atk-cap, .atk.raid .atk-cap { color: #ffb4a8; font-weight: 700; }
+.atk-skip { position: absolute; bottom: 18px; inset-inline-start: 18px; background: #0008; color: #fff; border: 1px solid #fff5; border-radius: 99px; padding: 8px 16px; font: inherit; cursor: pointer; }
+.atk-skip[hidden] { display: none; }
+.atk-sum { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(88vw, 380px); background: #fffaf0; color: #2a1c10; border: 3px solid #ffd36b; border-radius: 18px; padding: 16px 18px; text-align: center; animation: pop .3s; }
+.atk-sum h3 { margin: 0 0 10px; }
+.atk-sum p { display: flex; justify-content: space-between; margin: 6px 0; }
+.atk-sum b { letter-spacing: 2px; }
+.atk-ok { margin-top: 10px; background: #3f7d6e; color: #fff; border: 0; border-radius: 12px; padding: 9px 26px; font: inherit; font-weight: 800; cursor: pointer; }
+@media (max-width: 600px) {
+  .atk-castle { width: 44vw; bottom: 26%; } .atk-warrior { width: 34vw; bottom: 25%; }
+  .atk-moon { top: 24%; left: 8%; width: 44px; height: 44px; }
+  .atk-warrior.charge { transform: translateX(26vw); } .atk-stars i { width: 42px; height: 42px; }
+}
+.road-replay { margin-top: 6px; }
