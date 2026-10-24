@@ -344,10 +344,10 @@ export function liveProgress(ch, date = today()) {
 // ---------- Stars and the weekly war ----------
 // How much of a dimension's day is done (0..1): every habit counts by its share of
 // times (prayer 4/5 = 0.8). Habits added that day don't count. null = nothing to fight with.
-export function dayShare(s, id, date = today()) {
+export function dayShare(s, id, date = today(), { all = false } = {}) {
   const def = findCharacter(id), ch = s.characters[id];
   if (!def || !ch) return null;
-  const list = activeTasks(def, ch).filter((t) => t.added !== date);
+  const list = activeTasks(def, ch).filter((t) => all || t.added !== date);
   if (!list.length) return null;
   return list.reduce((a, t) => a + Math.min(1, countToday(taskProgress(s, id, t.id), date) / timesOf(t)), 0) / list.length;
 }
@@ -362,7 +362,7 @@ export const warNeed = (w) => (w.first ? RULES.firstWarWin : RULES.warWin);
 // training: the dimension's first war starts on the coming Saturday (inDays away).
 export function warView(s, id, date = today()) {
   const ch = s.characters[id];
-  const share = dayShare(s, id, date);
+  const share = dayShare(s, id, date, { all: true });   // today's stars as the player sees them (a habit added today included)
   if (!ch || share == null) return null;
   const king = KINGS[findCharacter(id).regionId], now = starsOf(share);
   // On Saturday the new war is already on (it is stored when Saturday closes).

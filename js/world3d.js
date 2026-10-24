@@ -677,6 +677,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   camera.position.set(focus.x + 40, 80, focus.z + 75);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.copy(focus);
+  if (window.__nmnDebug) window.__worldLabels = () => labels.map((l) => [l.el.textContent, l.v.x, l.v.y, l.v.z]);
   if (window.__nmnDebug) window.__worldCam = (x, y, z, tx, tz) => { camera.position.set(x, y, z); controls.target.set(tx, 0, tz); controls.update(); };
   controls.enableDamping = true; controls.dampingFactor = 0.08;
   controls.screenSpacePanning = false;
@@ -813,8 +814,23 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
 
   const clock = new THREE.Clock(); const v = new THREE.Vector3();
   let raf, lastSky = 0, nextBolt = 3;
+  // Fly the camera to a place (used by the guided first steps).
+  let fly = null;
+  const flyTo = (id) => {
+    const s = shown.find((x) => x.def.id === id);
+    if (!s) return;
+    const to = new THREE.Vector3(s.x, 6, s.z);
+    if (fly?.id === id || controls.target.distanceTo(to) < 4) return;   // already there, or on the way
+    const off = camera.position.clone().sub(controls.target).setLength(110);
+    fly = { id, at: performance.now(), k: 0, t0: controls.target.clone(), c0: camera.position.clone(), t1: to, c1: to.clone().add(off.setY(Math.max(60, off.y))) };
+  };
   const tick = () => {
     const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+    if (fly) {
+      fly.k = Math.min(1, (performance.now() - fly.at) / 1400); const e = fly.k * fly.k * (3 - 2 * fly.k);   // by the clock, whatever the frame rate
+      controls.target.lerpVectors(fly.t0, fly.t1, e); camera.position.lerpVectors(fly.c0, fly.c1, e);
+      if (fly.k >= 1) fly = null;
+    }
     controls.update();
     scene.fog.density = fogBase * Math.min(1, 300 / Math.max(1, camera.position.distanceTo(controls.target)));   // thinner when zoomed out, so far islands show
     waveTex.offset.set(t * 0.004, t * 0.006);
@@ -873,5 +889,6 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
   };
   dispose.setWeather = (k) => { wxKind = k; WX = W_TAB[k] || W_TAB.clear; applySky(); };
   dispose.refreshSky = applySky;
+  dispose.flyTo = flyTo;
   return dispose;
 }

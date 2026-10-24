@@ -688,3 +688,20 @@ body.cine .hud, body.cine .move-pad, body.cine .door-btn, body.cine .cell-captio
 .night-stars span { white-space: nowrap; }
 .luci-quote { margin: 10px 0 4px; padding: 8px 12px; border-radius: 10px; background: #2a1016; color: #ffb4a8; font-size: .92em; }
 @media (max-width: 480px) { .medals-box .lg-name { display: none; } }
+
+/* Guided first steps (tour.js): spotlight, pointing hand, one-line bubble. Clicks pass through. */
+.coach { position: fixed; inset: 0; z-index: 45; pointer-events: none; }
+.coach[hidden] { display: none; }
+.coach-spot { position: fixed; border-radius: 14px; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .45), 0 0 0 3px #ffd36b, 0 0 22px 6px rgba(255, 211, 107, .6); transition: all .25s; }
+.coach-hand { position: fixed; font-size: 34px; animation: coach-bob .9s ease-in-out infinite; filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .5)); }
+.coach-bubble { position: fixed; pointer-events: auto; background: #fffaf0; color: #2a1c10; border: 2px solid #ffd36b; border-radius: 16px; padding: 12px 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); font-size: .98rem; line-height: 1.55; }
+.coach-bubble p { margin: 0 0 8px; }
+.coach-row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.coach-next { background: #3f7d6e; color: #fff; border: 0; border-radius: 10px; padding: 7px 14px; font: inherit; font-weight: 700; cursor: pointer; }
+.coach-next[hidden] { display: none; }
+.coach-skip { background: none; border: 0; color: #8a7457; font: inherit; font-size: .85rem; cursor: pointer; text-decoration: underline; }
+.coach-skip[hidden] { display: none; }
+@keyframes coach-bob { 50% { transform: translateY(-8px); } }
+/* The war line always shows under the tasks; the task list scrolls instead. */
+.quests .road { flex-shrink: 0; }
+.quests .tasks { min-height: 0; }

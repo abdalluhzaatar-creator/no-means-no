@@ -9,12 +9,13 @@ import { characterSVG, regionSVG, worldMapSVG } from './scenes.js';
 import * as FX from './effects.js';
 import * as SND from './audio.js';
 import { CITIES, METHODS, prayerDay, windowState, fmtTime } from './prayer.js';
+import { createTour } from './tour.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const goldTxt = (n) => `<span class="gold-inline">🪙 ${n}</span>`;
 
-let storage, state, screen = 'world';
+let storage, state, screen = 'world', tour = null;
 
 // ---------- Save ----------
 let saveTimer;
@@ -62,7 +63,15 @@ async function loadGame() {
   render();
   // Keep following the clock: close finished days and refresh the prayer windows.
   setInterval(() => { closeDays(); autoMissPrayers(); if ($('#modal').hidden) render(); }, 30000);
-  if (!raw) setTimeout(() => FX.banner('أهلًا بك', 'ادخل إلى البعد الروحي من العالم وحدّد مهامك اليومية.'), 400);
+  // The guided first steps: new players get them; players who already set habits don't.
+  if (state.tour == null) { state.tour = raw && CHARACTERS.some((c) => state.characters[c.id] && E.activeTasks(c, state.characters[c.id]).length) ? 'done' : 0; scheduleSave(); }
+  tour?.dispose();
+  tour = createTour({
+    ctx: () => ({ screen, state, modal: !$('#modal').hidden, warsBegun: warsBegun(), fly: (id) => disposeWorld?.flyTo?.(id),
+      hasHabit: !!currentChar && !!state.characters[currentChar] && E.activeTasks(E.findCharacter(currentChar), state.characters[currentChar]).length > 0 }),
+    save: scheduleSave,
+    onFinish: () => FX.banner('🫡 جاهز يا قائد', 'خلّص عاداتك كل يوم — والسبت بتبلّش أول حرب.', '🫡'),
+  });
   // The rules changed (v4): show them once.
   // The rules changed (v5: stars and weekly wars): show them once to players who knew the old ones.
   if (raw && (state.seenRules || 0) < 5) { state.seenRules = 5; scheduleSave(); rulesPending = true; setTimeout(() => { if ($('#modal').hidden && rulesPending) { rulesPending = false; showRules(); } }, 900); }
@@ -672,6 +681,10 @@ function showSettings() {
       <h3>🌤 الوقت والجو</h3>
       <button class="btn" data-open-atmo>تغيير الوقت والطقس</button>
     </section>
+    <section class="set-block">
+      <h3>🎓 الدليل</h3>
+      <button class="btn" id="tour-again">اعرض الدليل من جديد</button>
+    </section>
     <section class="set-block sandbox-block">
       <h3>🧪 وضع التجربة</h3>
       ${state.sandbox
@@ -684,6 +697,7 @@ function showSettings() {
         : `<p class="muted small-text">بيفتحلك كل الأبعاد والأماكن، وبيعطيك <b>🗝 ${E.SANDBOX.keys}</b> مفتاح و<b>🪙 ${E.SANDBOX.gold.toLocaleString('en')}</b>. ما في إشي مترقّي — إنت بترقّي وبتشوف. تقدّمك الحقيقي بينحفظ وبيرجع لما تطلع.</p>
            <button class="btn primary" id="sb-enter">🧪 افتح كل إشي</button>`}
     </section>`);
+  if ($('#tour-again')) $('#tour-again').onclick = () => { tour?.restart(); closeModal(); go('world'); };
   const swap = (next, msg) => { state = next; C.ensure(state); syncClock(); closeDays(); scheduleSave(); closeModal(); go('world'); render(); FX.toast(msg); };
   if ($('#sb-enter')) $('#sb-enter').onclick = () => swap(E.enterSandbox(state), '🧪 وضع التجربة: كل إشي مفتوح');
   if ($('#sb-leave')) $('#sb-leave').onclick = () => ask('ترجع لتقدّمك الحقيقي؟ كل إشي عملته بالتجربة بيروح.', () => swap(E.leaveSandbox(state), '↩ رجعت لتقدّمك الحقيقي'));
@@ -786,7 +800,7 @@ function warLine(id) {
   const rd = E.road(state, id), w = rd?.war;
   if (!w) return '';
   if (w.training) return `<div class="road">
-    <p>🌱 <b>تدريب</b> — اليوم ${starTxt(w.today)}. أول حرب ضد <b>${esc(w.king)}</b> بتبلّش ${w.inDays === 1 ? 'بكرا السبت' : `بعد ${w.inDays} أيام (السبت)`}.</p></div>`;
+    <p>🌱 <b>تدريب</b> — اليوم ${starTxt(w.today)}. أول حرب ضد <b>${esc(w.king)}</b> بتبلّش ${w.inDays === 1 ? 'بكرا السبت' : w.inDays === 2 ? 'بعد يومين (السبت)' : `بعد ${w.inDays} أيام (السبت)`}.</p></div>`;
   const pct = Math.min(100, Math.round((w.total / w.need) * 100));
   const state_ = w.fallen ? '<p class="road-warn">⚫ الجبهة سقطت — حرب هالأسبوع خسرانة. الأسبوع الجاي حرب جديدة.</p>'
     : w.won ? '<p class="road-ready">🏆 جمعت النجوم! الفوز بيتسجّل يوم الجمعة.</p>'
