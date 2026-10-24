@@ -30,7 +30,10 @@ export const LEAGUES = [
 export const leagueOf = (medals = 0) => { let i = 0; LEAGUES.forEach((l, k) => { if (medals >= l.min) i = k; }); return { ...LEAGUES[i], index: i, next: LEAGUES[i + 1] || null, season: 100 * (i + 1) }; };
 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-export const today = (d = new Date()) => ymd(new Date(+d - RULES.dayEnds * 3600000));
+// Test mode can move its own calendar forward (setDayShift) to try a day's close at once.
+let dayShift = 0;
+export const setDayShift = (n) => { dayShift = n || 0; };
+export const today = (d = new Date()) => ymd(new Date(+d - RULES.dayEnds * 3600000 + dayShift * 86400000));
 const addDays = (date, n) => { const d = new Date(date + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const nextDay = (date) => addDays(date, 1);
 const weekday = (date) => new Date(date + 'T00:00:00Z').getUTCDay();   // 5 = Friday, 6 = Saturday
@@ -251,7 +254,7 @@ export function setRankPlan(s, id, rankIndex, input) {
       return t;
     }
     // `added`: a habit added today is not held against you when this day closes.
-    const t = { id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title, times, reward: RULES.reward, added: today() };
+    const t = { id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title, times, reward: RULES.reward, added: s.sandbox ? null : today() };   // in test mode a new habit counts at once
     if (icon) t.icon = icon;
     // A once-a-day line naming one of the five prayers is tied to that prayer's time (once per plan).
     const pr = times === 1 ? prayerIn(title) : undefined;

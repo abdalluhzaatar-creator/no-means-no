@@ -52,6 +52,7 @@ async function loadGame() {
   let raw = null;
   try { raw = await storage.load(); } catch (e) { console.error(e); FX.toast('تعذّر تحميل الحفظ', 'err'); }
   state = raw ? E.migrate(raw) : E.demoState();
+  syncClock();
   C.ensure(state);
   if (!raw) scheduleSave();
   $('#account').textContent = storage.accountName ? `👤 ${storage.accountName}` : '👤 حسابك';
@@ -111,10 +112,14 @@ function ask(text, onYes) {
 // Screens: 'world' (default), 'character' (inside one character's place), 'shop'.
 let currentChar = null;
 
+const DAY_NAMES = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+// Test mode's own calendar (days moved forward with ⏭); the real game always runs on the real date.
+const syncClock = () => E.setDayShift(state?.sandbox?.shift || 0);
 function sandboxBadge() {
   document.body.classList.toggle('sandbox', !!state?.sandbox);
   let b = document.getElementById('sandbox-badge');
-  if (state?.sandbox && !b) { b = document.createElement('button'); b.id = 'sandbox-badge'; b.className = 'sandbox-badge'; b.textContent = '🧪 وضع التجربة'; b.onclick = showSettings; document.body.appendChild(b); }
+  if (state?.sandbox && !b) { b = document.createElement('button'); b.id = 'sandbox-badge'; b.className = 'sandbox-badge'; b.onclick = showSettings; document.body.appendChild(b); }
+  if (b && state?.sandbox) b.textContent = state.sandbox.shift ? `🧪 وضع التجربة · ${DAY_NAMES[new Date(dayFor() + 'T00:00:00Z').getUTCDay()]} (+${state.sandbox.shift} يوم)` : '🧪 وضع التجربة';
   if (!state?.sandbox && b) b.remove();
 }
 function render() {
@@ -673,13 +678,19 @@ function showSettings() {
         ? `<p class="muted small-text">إنت هلأ بوضع التجربة. تقدّمك الحقيقي محفوظ وبيرجع لما تطلع.</p>
            <div class="row wrap"><button class="btn primary" id="sb-refill">🔄 عبّي المفاتيح والمصاري</button><button class="btn" id="sb-leave">↩ ارجع لتقدّمي الحقيقي</button></div>
            <p class="muted small-text">جرّب كيف كل إشي مربوط ببعض:</p>
+           <p class="muted small-text">⏭ جرّب الحرب: سجّل عاداتك، وبعدين خلّص اليوم وشوف النجوم والغارة وتقرير الليلة. ٧ مرات = أسبوع حرب كامل.</p>
+           <div class="row wrap"><button class="btn primary" id="sb-day">⏭ خلّص اليوم</button><button class="btn" id="sb-week">⏭⏭ خلّص لآخر الأسبوع</button></div>
            <div class="row wrap"><button class="btn" id="sb-cmd">🫡 رقّي القائد</button><button class="btn" id="sb-dims">🎖 رقّي المحاربين</button><button class="btn" id="sb-ship">🚢 كمّل السفينة</button><button class="btn" id="sb-story">📜 القصة من الأول</button></div>`
         : `<p class="muted small-text">بيفتحلك كل الأبعاد والأماكن، وبيعطيك <b>🗝 ${E.SANDBOX.keys}</b> مفتاح و<b>🪙 ${E.SANDBOX.gold.toLocaleString('en')}</b>. ما في إشي مترقّي — إنت بترقّي وبتشوف. تقدّمك الحقيقي بينحفظ وبيرجع لما تطلع.</p>
            <button class="btn primary" id="sb-enter">🧪 افتح كل إشي</button>`}
     </section>`);
-  const swap = (next, msg) => { state = next; C.ensure(state); scheduleSave(); closeModal(); go('world'); render(); FX.toast(msg); };
+  const swap = (next, msg) => { state = next; C.ensure(state); syncClock(); closeDays(); scheduleSave(); closeModal(); go('world'); render(); FX.toast(msg); };
   if ($('#sb-enter')) $('#sb-enter').onclick = () => swap(E.enterSandbox(state), '🧪 وضع التجربة: كل إشي مفتوح');
   if ($('#sb-leave')) $('#sb-leave').onclick = () => ask('ترجع لتقدّمك الحقيقي؟ كل إشي عملته بالتجربة بيروح.', () => swap(E.leaveSandbox(state), '↩ رجعت لتقدّمك الحقيقي'));
+  // Move test mode's calendar: the day (or the week, up to Friday) closes as it would at 3 at night.
+  const skip = (n) => { closeModal(); state.sandbox.shift = (state.sandbox.shift || 0) + n; syncClock(); closeDays(); scheduleSave(); render(); oasis?.scene.update(placeState()); };
+  if ($('#sb-day')) $('#sb-day').onclick = () => skip(1);
+  if ($('#sb-week')) $('#sb-week').onclick = () => { const d = new Date(dayFor() + 'T00:00:00Z').getUTCDay(); skip(((5 - d + 7) % 7) + 1); };
   if ($('#sb-refill')) $('#sb-refill').onclick = () => { E.refillSandbox(state); scheduleSave(); render(); FX.toast('🔄 تعبّوا'); };
   if ($('#sb-cmd')) $('#sb-cmd').onclick = () => { state.stats.keysEarned = (state.stats.keysEarned || 0) + KEYS_PER_RANK; scheduleSave(); closeModal(); checkCommander(); render(); hqScene?.update({ rankIndex: commander(state).rankIndex }); FX.toast(`🫡 القائد صار ${commander(state).rank}`); };
   if ($('#sb-dims')) $('#sb-dims').onclick = () => showDimRanks();
