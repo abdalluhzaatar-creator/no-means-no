@@ -698,9 +698,12 @@ export function storyStep(s, phase) {
 export const islandSeen = (s) => ['back', 'done'].includes(s.story?.phase);
 
 // A brand-new game (first visit or "start over"): it begins with the guided first steps.
+// A brand-new game (first visit or "start over") opens inside the spiritual dimension's
+// base with the guide (onboard.js): 300 gems to start, the base empty.
 export function demoState() {
   const s = newState();
-  s.tour = 0;
+  s.tour = 'done';
+  s.onboard = 'intro'; s.gems = 300; s.nour = 0; s.base = { buildings: [] };
   s.gold = 100;
   s.stats.goldEarned = 100;
   addLog(s, 'مرحبًا بك في No Means No', 100);
