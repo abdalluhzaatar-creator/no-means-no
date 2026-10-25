@@ -830,3 +830,25 @@ body.in-base .topbar, body.in-base #sandbox-badge { display: none; }
 .base-host { position: fixed; inset: 0; }
 .ob [hidden] { display: none !important; }
 @media (max-width: 600px) { .ob-bstars { top: 54px; } .ob-pct { top: 100px; } .ob-tip { top: 140px; } }
+/* Talking characters (portrait3d.js): big at the screen edge, the words in a box beside them */
+.ob-portrait { position: absolute; bottom: 0; z-index: 4; width: min(40vw, 360px); height: min(62vh, 480px); pointer-events: none; transition: transform .38s cubic-bezier(.3, 1.4, .5, 1), opacity .3s; opacity: 0; }
+.ob-portrait canvas { width: 100%; height: 100%; display: block; }
+.ob-portrait.guide { left: 0; transform: translateX(-110%); }
+.ob-portrait.king { right: 0; transform: translateX(110%); }
+.ob-portrait.on { transform: none; opacity: 1; }
+.ob-talk { position: absolute; z-index: 5; bottom: 22px; background: #fffdf6; border: 3px solid #d9b45a; border-radius: 18px; padding: 12px 18px 10px; box-shadow: 0 12px 28px #0006; animation: pop .25s; }
+.ob-talk.guide { left: min(30vw, 270px); right: 18px; }
+.ob-talk.king { right: min(30vw, 270px); left: 18px; background: #2a1638; color: #f2e4ff; border-color: #a35cff; }
+.ob-talk .ob-who { display: block; font-size: .85rem; font-weight: 800; color: #8a6a2a; }
+.ob-talk.king .ob-who { color: #d4a8ff; }
+.ob-talk p { margin: 4px 0 6px; font-size: 1.15rem; font-weight: 700; line-height: 1.55; }
+.ob-talk .ob-tap { color: #a08a5a; font-size: .78rem; animation: ob-blink 1.2s infinite; }
+.ob-talk.king .ob-tap { color: #b89ad8; }
+.ob-hint { position: absolute; z-index: 4; top: 58px; left: 50%; transform: translateX(-50%); width: max-content; max-width: min(92vw, 560px); background: #1d1a2cdd; color: #fff; border: 2px solid #ffd36b; border-radius: 14px; padding: 8px 16px; font-weight: 800; text-align: center; box-shadow: 0 8px 20px #0005; }
+@media (max-width: 600px) {
+  .ob-portrait { width: 62vw; height: 44vh; bottom: 118px; }
+  .ob-talk.guide, .ob-talk.king { left: 12px; right: 12px; bottom: 14px; }
+  .ob-attack { bottom: 150px; }
+}
+.ob-attack { inset-inline-end: auto; right: 24px; }   /* the guide stands on the left: keep the button clear of him */
+.ob-attack { bottom: 150px; }   /* above the dialogue box */

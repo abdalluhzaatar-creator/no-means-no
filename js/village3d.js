@@ -6,7 +6,7 @@
 import * as THREE from './vendor/three.module.min.js';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { palm, cypress, orangeTree, flowerBed, lantern, fountain, minaret } from './oasis3d.js';
-import { buildGuide, buildVoidKing, buildArcher, makeArrow, makeSoul, hpBars } from './units3d.js';
+import { buildVoidKing, buildArcher, makeArrow, makeSoul, hpBars } from './units3d.js';
 import { glowTex } from './env3d.js';
 
 export const GRID = 40;                  // cells per side (one cell = 1 unit)
@@ -94,9 +94,8 @@ export function mountVillage(container, { buildings = [], onTapGround } = {}) {
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
 
   const bars = hpBars(container);
-  // People: the guide stands by the fountain.
-  const guide = buildGuide(); guide.root.position.set(5, 0, 7); guide.root.rotation.y = 0.75; scene.add(guide.root);
-  const units = [guide];
+  // Everyone moving in the base (the guide and the King of the Void speak from the screen's edge, not from here).
+  const units = [];
 
   // ---------- buildings ----------
   const placed = [];
@@ -184,8 +183,19 @@ export function mountVillage(container, { buildings = [], onTapGround } = {}) {
   // ---------- the King of the Void and the defence ----------
   const KING_AT = new THREE.Vector3(-15, 0, 12);
   let king = null;
-  const showKing = () => { if (king) return king; king = buildVoidKing({ big: true }); king.root.position.copy(KING_AT); king.root.rotation.y = 0.9; scene.add(king.root); units.push(king); burst(KING_AT.x, 1.5, KING_AT.z, 0xa060ff, 60, 4); return king; };
-  const hideKing = () => { if (!king) return; const k = king; fades.push({ h: k, t0: performance.now(), ms: 900, after: () => { scene.remove(k.root); units.splice(units.indexOf(k), 1); } }); king = null; };
+  // The void portal at the base's edge: the King of the Void's army comes out of it.
+  const showKing = () => {
+    if (king) return king;
+    const g = new THREE.Group(); g.position.copy(KING_AT); scene.add(g);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.18, 12, 40), new THREE.MeshBasicMaterial({ color: 0xb06aff, toneMapped: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.1; g.add(ring);
+    const hole = new THREE.Mesh(new THREE.CircleGeometry(1.5, 40), new THREE.MeshBasicMaterial({ color: 0x0a0414 })); hole.rotation.x = -Math.PI / 2; hole.position.y = 0.06; g.add(hole);
+    const haze = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: 0x8a3aff, transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending })); haze.scale.set(5, 4, 1); haze.position.y = 1.4; g.add(haze);
+    g.scale.setScalar(0.01); popIn.push({ g, t0: performance.now() });
+    burst(KING_AT.x, 1.5, KING_AT.z, 0xa060ff, 60, 4);
+    king = { root: g, ring };
+    return king;
+  };
+  const hideKing = () => { if (!king) return; const k = king; const t0 = performance.now(); const shrink = () => { const e = Math.min(1, (performance.now() - t0) / 700); k.root.scale.setScalar(Math.max(0.01, 1 - e)); if (e < 1) requestAnimationFrame(shrink); else scene.remove(k.root); }; shrink(); king = null; };
   const fades = [];
   let fight = null;
   const defend = () => new Promise((resolve) => {
@@ -241,7 +251,8 @@ export function mountVillage(container, { buildings = [], onTapGround } = {}) {
     const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime, now = performance.now();
     if (fly) { const k = Math.min(1, (now - fly.t0) / fly.ms), e = k * k * (3 - 2 * k); controls.target.lerpVectors(fly.a, fly.b, e); const d = fly.da + (fly.db - fly.da) * e; camera.position.copy(controls.target).addScaledVector(VIEW.clone().normalize(), d); if (k >= 1) { const r = fly.res; fly = null; r(); } }
     controls.update();
-    for (const u of units) u.update(t, dt, u === guide ? 0 : (fight?.foes.find((e) => e.h === u)?.walk || 0), false);
+    for (const u of units) u.update(t, dt, fight?.foes.find((e) => e.h === u)?.walk || 0, false);
+    if (king) king.ring.rotation.z = t * 1.5;
     if (archer?.aimK) { archer.aimK = Math.max(0, archer.aimK - dt * 2.5); archer.a.aim(Math.min(1, archer.aimK * 1.6)); }
     tickers.forEach((o) => o.userData.tick?.(t));
     for (const p of popIn.splice(0)) { const k = Math.min(1, (now - p.t0) / 500); p.g.scale.setScalar(0.01 + 0.99 * (1 - (1 - k) ** 3) * (1 + Math.sin(k * Math.PI) * 0.15)); if (k < 1) popIn.push(p); }
@@ -272,7 +283,7 @@ export function mountVillage(container, { buildings = [], onTapGround } = {}) {
     scene, camera,
     // Where a 3D point (or object, with a height above it) shows on the screen.
     screenOf(obj, y = 0) { (obj.isVector3 ? v.copy(obj) : v.copy(obj.position)).add(new THREE.Vector3(0, y, 0)).project(camera); return { x: (v.x * 0.5 + 0.5) * container.clientWidth, y: (-v.y * 0.5 + 0.5) * container.clientHeight, front: v.z < 1 }; },
-    guide, flyTo, look,
+    flyTo, look,
     get king() { return king; }, showKing, hideKing,
     get archer() { return archer; }, get archerHp() { return archerBar?.hp ?? 0; },
     // Placing: a ghost with 3×3 cells under it; onMove(ok) tells whether the spot is free.

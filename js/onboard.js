@@ -6,6 +6,7 @@
 // Void Kings' camp with two archers and wins ⭐⭐⭐, 500 gold and 500 light.
 // Checkpoints are saved (st.onboard): 'intro' → 'built' → 'defended' → 'done'.
 import { mountVillage } from './village3d.js';
+import { createPortraits } from './portrait3d.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const GEMS_START = 300, SPEEDUP = 1, BUILD_S = 10, REWARD = { gold: 500, nour: 500 };
@@ -17,7 +18,8 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
   root.innerHTML = `
     <div class="ob-view"></div>
     <div class="ob-res"><span>🪙 <b data-r="gold"></b></span><span>✨ <b data-r="nour"></b></span><span class="gem">💎 <b data-r="gems"></b></span></div>
-    <div class="ob-bubble" hidden><b class="ob-who"></b><p></p><small class="ob-tap">انقر للمتابعة ▼</small></div>
+    <div class="ob-talk" hidden><b class="ob-who"></b><p></p><small class="ob-tap">انقر للمتابعة ▼</small></div>
+    <div class="ob-hint" hidden></div>
     <button class="ob-hammer" hidden>🔨</button>
     <div class="ob-shop" hidden><h3>🔨 ابنِ</h3><button class="ob-card" data-b="archer"><span class="ob-ico">🏹</span><b>رامي السهام</b><small>يحمي البعد من ملوك الفراغ</small><em>مجاني</em></button></div>
     <div class="ob-confirm" hidden><button class="ob-no">✕</button><button class="ob-yes">✓</button></div>
@@ -31,44 +33,46 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
     </div>
     <div class="ob-win" hidden></div>`;
   const q = (s) => root.querySelector(s);
-  const view = q('.ob-view'), bubble = q('.ob-bubble');
+  const view = q('.ob-view'), bubble = q('.ob-talk'), hintEl = q('.ob-hint');
+  const portraits = createPortraits(root);
   const res = () => { for (const el of root.querySelectorAll('[data-r]')) el.textContent = (st[el.dataset.r] || 0).toLocaleString('en'); };
   res();
   const checkpoint = (k) => { st.onboard = k; save(); };
-  let village = null, camp = null, raf = 0, anchor = null, alive = true;
+  let village = null, camp = null, raf = 0, alive = true, handEl = null;
 
-  // ---------- speech bubbles: anchored above whoever speaks; a tap moves on ----------
+  // Things that follow the world (the ✓ ✕ buttons, the build timer) and the hand that
+  // points at a button, kept in place every frame.
   const place = () => {
     if (!alive) return;
-    if (anchor && village && !bubble.hidden) {
-      const p = village.screenOf(anchor.obj, anchor.y);
-      const W = bubble.offsetWidth, H = bubble.offsetHeight;
-      bubble.style.left = `${Math.max(8, Math.min(innerWidth - W - 8, p.x - W / 2))}px`;
-      bubble.style.top = `${Math.max(56, Math.min(innerHeight - H - 8, p.y - H - 14))}px`;
-    }
     const pl = village?.placing;
     if (pl && !q('.ob-confirm').hidden) { const p = village.screenOf(pl.g.position, 4.2); const c = q('.ob-confirm'); c.style.left = `${p.x - c.offsetWidth / 2}px`; c.style.top = `${p.y - c.offsetHeight}px`; }
     if (village?.site && !q('.ob-timer').hidden) { const p = village.screenOf(village.site.g.position, 3.4); const c = q('.ob-timer'); c.style.left = `${p.x - c.offsetWidth / 2}px`; c.style.top = `${p.y - c.offsetHeight}px`; }
+    if (handEl) { const h = q('.ob-hand'), r = handEl.getBoundingClientRect(); h.style.left = `${r.left + r.width / 2 - 18}px`; h.style.top = `${r.bottom - 6}px`; }
     raf = requestAnimationFrame(place);
   };
   raf = requestAnimationFrame(place);
-  const speakers = () => ({ guide: { obj: village.guide.root, y: 2.6, name: 'الحكيم' }, king: { obj: village.king?.root, y: 4.6, name: 'ملك الفراغ' } });
+  // ---------- talking: the speaker pops in big at the screen's edge, the words in a box beside ----------
+  const NAMES = { guide: 'الحكيم', king: 'ملك الفراغ' };
+  let leave = 0;   // the speaker leaves only if no one speaks right after
   const show = (who, text, { tap = true } = {}) => {
-    const s = speakers()[who]; anchor = s;
-    bubble.className = `ob-bubble ${who}`; bubble.hidden = false;
-    q('.ob-who').textContent = s.name; bubble.querySelector('p').textContent = text;
+    clearTimeout(leave); portraits.show(who);
+    bubble.className = `ob-talk ${who}`; bubble.hidden = false;
+    q('.ob-who').textContent = NAMES[who]; bubble.querySelector('p').textContent = text;
     q('.ob-tap').hidden = !tap;
     sfx.open?.();
   };
-  const hide = () => { bubble.hidden = true; anchor = null; };
+  const hide = () => { bubble.hidden = true; hintEl.hidden = true; clearTimeout(leave); leave = setTimeout(() => portraits.hide(), 150); };
+  // A short instruction at the top while the player works in the base (no one in the way).
+  const hint = (text) => { hintEl.textContent = text; hintEl.hidden = false; };
   // say(): show, then wait for a tap anywhere.
   const say = (who, text) => new Promise((resolve) => {
     show(who, text);
     const catcher = document.createElement('div'); catcher.className = 'ob-catch'; root.appendChild(catcher);
     setTimeout(() => { catcher.onclick = () => { catcher.remove(); hide(); sfx.click?.(); resolve(); }; }, 350);
   });
-  const hand = (el, on = true) => { const h = q('.ob-hand'); h.hidden = !on; if (!on) return; const r = el.getBoundingClientRect(); h.style.left = `${r.left + r.width / 2 - 18}px`; h.style.top = `${r.bottom - 6}px`; };
-  const handAt = (x, y) => { const h = q('.ob-hand'); h.hidden = false; h.style.left = `${x - 18}px`; h.style.top = `${y}px`; };
+  // The pointing hand: on a button (it follows it), or at a point on the screen.
+  const hand = (el, on = true) => { const h = q('.ob-hand'); h.hidden = !on; handEl = on ? el : null; };
+  const handAt = (x, y) => { const h = q('.ob-hand'); handEl = null; h.hidden = false; h.style.left = `${x - 18}px`; h.style.top = `${y}px`; };
   const click = (el) => new Promise((r) => { el.onclick = () => { el.onclick = null; sfx.click?.(); r(); }; });
 
   const openVillage = () => { village?.dispose(); view.innerHTML = ''; village = mountVillage(view, { buildings: st.base.buildings }); return village; };
@@ -90,10 +94,10 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
   const buildArcher = async () => {
     for (;;) {
       const ham = q('.ob-hammer'); ham.hidden = false; hand(ham);
-      await click(ham); q('.ob-hand').hidden = true;
+      await click(ham); hand(null, false);
       const shop = q('.ob-shop'); shop.hidden = false; const card = q('.ob-card'); hand(card);
-      await click(card); shop.hidden = true; ham.hidden = true; q('.ob-hand').hidden = true;
-      show('guide', 'ضع رامي السهام بمكان يحمي البعد الروحي. اسحبه بإصبعك، ولما تكون المربعات خضرا اكبس ✓', { tap: false });
+      await click(card); shop.hidden = true; ham.hidden = true; hand(null, false);
+      hint('ضع رامي السهام بمكان يحمي البعد الروحي — اسحبه، ولما تصير المربعات خضرا اكبس ✓');
       const conf = q('.ob-confirm'), yes = q('.ob-yes'), no = q('.ob-no');
       village.flyTo(START_CELL[0] - 18.5, START_CELL[1] - 18.5, 0.7, 700);
       village.startPlacing(START_CELL[0], START_CELL[1], (ok) => { yes.disabled = !ok; conf.classList.toggle('bad', !ok); });
@@ -116,7 +120,7 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
       const loop = () => { const left = Math.max(0, BUILD_S - (performance.now() - t0) / 1000); bar.style.width = `${(1 - left / BUILD_S) * 100}%`; txt.textContent = `${Math.ceil(left)} ث`; if (left <= 0) return resolve(); if (!timer.hidden) requestAnimationFrame(loop); };
       loop();
     });
-    timer.hidden = true; q('.ob-hand').hidden = true;
+    timer.hidden = true; hand(null, false);
     village.finishSite(); sfx.unlock?.();
     st.base.buildings = village.buildings(); checkpoint('built');
     await wait(900);
@@ -140,7 +144,7 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
   const attack = async () => {
     show('guide', 'هيا نهجم على معسكر ملوك الفراغ!', { tap: false });
     const btn = q('.ob-attack'); btn.hidden = false; hand(btn);
-    await click(btn); btn.hidden = true; q('.ob-hand').hidden = true; hide();
+    await click(btn); btn.hidden = true; hand(null, false); hide();
     const load = q('.ob-load'); load.hidden = false; sfx.whoosh?.();
     await wait(1600);
     village.dispose(); village = null; view.innerHTML = '';
@@ -153,18 +157,17 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
     const done = new Promise((resolve) => {
       camp = mountCamp(view, {
         troops: [{ type: 'archer', count: 2 }],
-        onDeploy: (counts) => { deployed++; draw(counts); sfx.jump?.(); if (deployed === 1) { const p = camp.hintPoint(1); handAt(p.x, p.y); tip.textContent = 'كمان مرة: نزّل رامي السهام الثاني'; } else { q('.ob-hand').hidden = true; tip.hidden = true; } },
+        onDeploy: (counts) => { deployed++; draw(counts); sfx.jump?.(); if (deployed === 1) { const p = camp.hintPoint(1); handAt(p.x, p.y); } else hand(null, false); },
         onStar: (n) => { stars[n - 1].className = 'on'; sfx.key?.(); },
         onPercent: (p) => { pctEl.textContent = `${p}%`; },
         onEnd: resolve,
       });
     });
     load.hidden = true; battle.hidden = false;
-    const tip = document.createElement('div'); tip.className = 'ob-tip'; tip.textContent = 'انقر هنا عشان تنزّل رامي السهام'; root.appendChild(tip);
     await wait(500);
     const p = camp.hintPoint(); handAt(p.x, p.y); q('.ob-hand').classList.add('tapping');
     const result = await done;
-    q('.ob-hand').hidden = true; tip.remove();
+    hand(null, false);
     // ---------- 6 · victory and the reward ----------
     st.gold = (st.gold || 0) + REWARD.gold; st.nour = (st.nour || 0) + REWARD.nour; res();
     checkpoint('done');
@@ -191,6 +194,6 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
   })();
 
   return {
-    dispose() { alive = false; cancelAnimationFrame(raf); village?.dispose(); camp?.dispose(); root.remove(); },
+    dispose() { alive = false; cancelAnimationFrame(raf); portraits.dispose(); village?.dispose(); camp?.dispose(); root.remove(); },
   };
 }

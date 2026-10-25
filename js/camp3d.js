@@ -5,6 +5,7 @@
 // the void kings jump up and rush the archers.
 // Stars: ⭐ every void king down · ⭐⭐ the tent destroyed · ⭐⭐⭐ the whole camp (100%).
 import * as THREE from './vendor/three.module.min.js';
+import { OrbitControls } from './vendor/OrbitControls.js';
 import { buildVoidKing, buildArcher, makeArrow, makeSoul, hpBars } from './units3d.js';
 import { glowTex } from './env3d.js';
 
@@ -61,8 +62,19 @@ export function mountCamp(container, { troops = [{ type: 'archer', count: 2 }], 
   for (let i = 0; i < 40; i++) { const r = new THREE.Mesh(new THREE.DodecahedronGeometry(0.3 + Math.random() * 0.8), std(0x5a5560)); const a = Math.random() * Math.PI * 2, d = 13 + Math.random() * 20; r.position.set(Math.cos(a) * d, 0.1, Math.sin(a) * d); r.castShadow = true; scene.add(r); }
   for (let i = 0; i < 30; i++) { const tr = new THREE.Mesh(new THREE.ConeGeometry(0.8 + Math.random() * 0.5, 3 + Math.random() * 2, 7), std(0x2e3a2a)); const a = Math.random() * Math.PI * 2, d = 18 + Math.random() * 16; tr.position.set(Math.cos(a) * d, 1.6, Math.sin(a) * d); scene.add(tr); }
 
-  const camera0 = new THREE.Vector3(0, 21, 19);
-  const resize = () => { const w = container.clientWidth, h = container.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.fov = w / h < 0.8 ? 58 : 38; camera.updateProjectionMatrix(); const back = w / h < 0.8 ? 1.05 : 1; camera.position.copy(camera0).multiplyScalar(back); camera.lookAt(0, 0, 1.5); };
+  // Close on the camp (it fills the screen); drag to move, pinch / wheel to zoom, like Clash.
+  const LOOK = new THREE.Vector3(0, 0, 4.5), camera0 = new THREE.Vector3(0, 13.5, 12.5);
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableRotate = false; controls.screenSpacePanning = false; controls.enableDamping = true; controls.dampingFactor = 0.1;
+  controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+  controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+  controls.minDistance = 9; controls.maxDistance = 34;
+  let framed = false;
+  const resize = () => {
+    const w = container.clientWidth, h = container.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.fov = w / h < 0.8 ? 60 : 40; camera.updateProjectionMatrix();
+    if (!framed) { framed = true; controls.target.copy(LOOK); camera.position.copy(LOOK).add(camera0.clone().multiplyScalar(w / h < 0.8 ? 1.12 : 1)); controls.update(); }
+  };
+  controls.addEventListener('change', () => { const t = controls.target; const d = Math.hypot(t.x, t.z - 4.5); if (d > 12) { const k = 12 / d, nx = t.x * k, nz = 4.5 + (t.z - 4.5) * k; camera.position.x += nx - t.x; camera.position.z += nz - t.z; t.x = nx; t.z = nz; } });
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
   const bars = hpBars(container);
 
@@ -194,6 +206,7 @@ export function mountCamp(container, { troops = [{ type: 'archer', count: 2 }], 
       const lost = army.length && army.every((u) => u.hp <= 0) && cards.every((c) => c.count <= 0);
       if (allDown || lost) { ended = true; setTimeout(() => onEnd?.({ stars, pct }), allDown ? 1400 : 900); }
     }
+    controls.update();
     renderer.render(scene, camera);
     bars.place(camera, container.clientWidth, container.clientHeight);
     raf = requestAnimationFrame(tick);
@@ -206,7 +219,7 @@ export function mountCamp(container, { troops = [{ type: 'archer', count: 2 }], 
     // A good spot to tap first (shown by the tutorial hand): outside the ring, in front.
     // Beside the camp (left for the first tap, right for the second), clear of the card bar.
     // On a tall phone screen there is room in front of the camp instead.
-    hintPoint(n = 0) { if (camera.aspect < 0.8) v.set(n ? 2.2 : -2.2, 0, EDGE + 2.2); else v.set(n ? EDGE + 2.4 : -(EDGE + 2.4), 0, 2.5); v.project(camera); return { x: (v.x * 0.5 + 0.5) * container.clientWidth, y: (-v.y * 0.5 + 0.5) * container.clientHeight }; },
-    dispose() { cancelAnimationFrame(raf); ro.disconnect(); bars.dispose(); scene.traverse((o) => o.geometry?.dispose?.()); renderer.dispose(); renderer.forceContextLoss?.(); el.remove(); },
+    hintPoint(n = 0) { if (camera.aspect < 0.8) v.set(n ? 2.2 : -2.2, 0, EDGE + 2.5); else v.set(n ? 3.4 : -3.4, 0, EDGE + 1.1); v.project(camera); return { x: (v.x * 0.5 + 0.5) * container.clientWidth, y: (-v.y * 0.5 + 0.5) * container.clientHeight }; },
+    dispose() { cancelAnimationFrame(raf); ro.disconnect(); controls.dispose(); bars.dispose(); scene.traverse((o) => o.geometry?.dispose?.()); renderer.dispose(); renderer.forceContextLoss?.(); el.remove(); },
   };
 }
