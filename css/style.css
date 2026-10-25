@@ -858,3 +858,10 @@ body.in-base .topbar, body.in-base #sandbox-badge { display: none; }
 .ob-pop-btn:disabled { filter: grayscale(1); opacity: .6; cursor: not-allowed; }
 .ob-done-bar button { white-space: nowrap; }
 @media (max-width: 600px) { .ob-done-bar { gap: 6px; } .ob-done-bar button { padding: 8px 12px; font-size: .9rem; } }
+/* Clearing an obstacle: a small timer over it; numbers that float up (gems, collected gold). */
+.ob-clear { position: absolute; z-index: 3; pointer-events: none; }
+.ob-clear .ob-time { min-width: 90px; }
+.ob-pop { max-width: 240px; text-align: center; }
+.ob-pop .ob-move { color: #3f7d6e; font-weight: 700; }
+.ob-float { position: absolute; z-index: 7; transform: translate(-50%, -50%); pointer-events: none; font-weight: 900; font-size: 1.25rem; color: #fff; text-shadow: 0 2px 0 #0008, 0 0 6px #0006; animation: obfloat 1.4s ease-out forwards; }
+@keyframes obfloat { from { opacity: 0; margin-top: 10px; } 15% { opacity: 1; } to { opacity: 0; margin-top: -60px; } }

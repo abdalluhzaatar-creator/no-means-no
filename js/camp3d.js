@@ -3,7 +3,7 @@
 // of crates. The player taps the ground (outside the camp's edge) to drop the troops
 // from the selected card. Archers shoot the nearest enemy, then the camp's buildings;
 // the void kings jump up and rush the archers.
-// Stars: ⭐ every void king down · ⭐⭐ the tent destroyed · ⭐⭐⭐ the whole camp (100%).
+// Stars, as in Clash: one for 50% destroyed, one for the tent (the camp's Town Hall), one for 100%.
 import * as THREE from './vendor/three.module.min.js';
 import { OrbitControls } from './vendor/OrbitControls.js';
 import { buildVoidKing, buildArcher, makeArrow, makeSoul, hpBars } from './units3d.js';
@@ -135,24 +135,27 @@ export function mountCamp(container, { troops = [{ type: 'archer', count: 2 }], 
   const flights = [], souls = [], fades = [];
   let stars = 0, ended = false, pct = 0;
   const giveStar = (n) => { while (stars < n) { stars++; onStar?.(stars); } };
+  const won = { half: false, tent: false, full: false };
+  const checkStars = () => giveStar(+won.half + +won.tent + +won.full);
   const damageBuilding = (b, d) => {
     if (!b.alive) return;
     b.hp -= d; b.bar.set(b.hp); burst(b.obj.position.x, 1.2, b.obj.position.z, 0xffc060, 8, 2.5);
     if (b.hp <= 0) {
       b.alive = false; b.bar.remove(); burst(b.obj.position.x, 1, b.obj.position.z, 0x9a8a70, 50, 4);
       fades.push({ obj: b.obj, t0: performance.now(), ms: 700, sink: true });
-      if (b.name === 'tent' && stars >= 1) giveStar(2);
+      if (b.name === 'tent') won.tent = true;
     }
     const left = blds.reduce((a, x) => a + Math.max(0, x.alive ? x.hp : 0), 0);
     pct = Math.round((1 - left / totalHp) * 100); onPercent?.(pct);
-    if (pct >= 100) { if (foes.every((f) => !f.alive)) giveStar(3); }
+    if (pct >= 50) won.half = true;
+    if (pct >= 100) won.full = true;
+    checkStars();
   };
   const killFoe = (f, now) => {
     f.alive = false; f.bar?.remove();
     burst(f.h.root.position.x, 0.8, f.h.root.position.z, 0xc9a0ff, 14, 2.5);
     const s = makeSoul(); s.position.copy(f.h.root.position).setY(0.8); scene.add(s); souls.push({ s, t0: now });
     fades.push({ h: f.h, t0: now, ms: 500 });
-    if (foes.every((x) => !x.alive)) { giveStar(1); if (!blds.find((b) => b.name === 'tent').alive) giveStar(2); if (pct >= 100) giveStar(3); }
   };
   const nearest = (from, list) => { let best = null, bd = 1e9; for (const x of list) { const p = x.h ? x.h.root.position : x.obj.position; const d = Math.hypot(p.x - from.x, p.z - from.z) - (x.r || 0); if (d < bd) { bd = d; best = x; } } return [best, bd]; };
   const RANGE = 6.5, SPEED = 2.4, FOE_SPEED = 2.8;
