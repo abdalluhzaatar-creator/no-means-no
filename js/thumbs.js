@@ -16,12 +16,7 @@ const setup = () => {
 };
 const make = (key) => {
   if (key === 'troop:archer') { const a = buildArcher(); a.update?.(0, 0, 0, false); return a.root; }
-  if (key === 'archer') {
-    const g = new THREE.Group();
-    const base = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.5, 2.8), new THREE.MeshStandardMaterial({ color: 0xcdb88e })); base.position.y = 0.25; g.add(base);
-    const top = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.12, 2.4), new THREE.MeshStandardMaterial({ color: 0x8a6a44 })); top.position.y = 0.56; g.add(top);
-    const a = buildArcher(); a.root.position.y = 0.62; a.root.rotation.y = Math.PI * 0.25; g.add(a.root); return g;
-  }
+  if (key === 'archer') { const g = buildingModel('archer'), a = buildArcher(); a.root.position.y = g.userData.deckY; a.root.rotation.y = Math.PI * 0.25; g.add(a.root); return g; }
   return buildingModel(key);
 };
 // A data: URL picture of a building type ('goldmine', 'archer' …) or a troop ('troop:archer').

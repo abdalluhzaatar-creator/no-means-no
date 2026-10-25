@@ -4,6 +4,7 @@
 // a village starts with. Each model stands on the ground at (0, 0, 0), centred on its cells.
 import * as THREE from './vendor/three.module.min.js';
 import { GRID } from './base.js';
+import { makeBuilding } from './buildings3d.js';
 import { foliage, leafMat, leafCards, cardMat, rockGeo, rockMat, leafyTree, pineTree, bushPlant, stones, logPile } from './nature3d.js';
 
 const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...o });
@@ -150,116 +151,8 @@ export function obstacleModel(kind, id) {
   const h = hash(id), r = rng(h), g = OB[kind](r, (h % 97) + 1); g.rotation.y = r() * Math.PI * 2; return g;
 }
 
-// ---------- buildings ----------
-const wood = () => flat(0xa8743e), dark = () => std(0x3a2a1e), stone = () => flat(0xc9c2b2), roof = () => flat(0xc84a32);
-const gold = () => std(0xe0b030, { metalness: 0.75, roughness: 0.3 });
-// The Town Hall: a square hall with a dome (4×4 cells).
-function townhall() {
-  const g = new THREE.Group();
-  const plaster = std(0xf3ece0, { roughness: 0.75 }), st = std(0xeadfc8), teal = std(0x2f7a8a, { roughness: 0.3, metalness: 0.25 }), gd = std(0xd4a53a, { metalness: 0.9, roughness: 0.25 }), dk = std(0x2d2a28);
-  mesh(g, new THREE.BoxGeometry(3.9, 0.35, 3.9), st, 0, 0.17, 0);
-  mesh(g, new THREE.BoxGeometry(3.4, 2.4, 3.4), plaster, 0, 1.55, 0);
-  mesh(g, new THREE.BoxGeometry(3.6, 0.22, 3.6), teal, 0, 2.85, 0);
-  for (const [x, z] of [[-1.62, -1.62], [1.62, -1.62], [-1.62, 1.62], [1.62, 1.62]]) { mesh(g, new THREE.BoxGeometry(0.42, 0.5, 0.42), st, x, 3.15, z); mesh(g, new THREE.ConeGeometry(0.2, 0.4, 4), gd, x, 3.6, z); }
-  mesh(g, new THREE.CylinderGeometry(1.25, 1.35, 0.45, 24), plaster, 0, 3.18, 0);
-  mesh(g, new THREE.SphereGeometry(1.25, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), teal, 0, 3.4, 0);
-  mesh(g, new THREE.SphereGeometry(0.12, 12, 8), gd, 0, 4.7, 0);
-  mesh(g, new THREE.ConeGeometry(0.07, 0.5, 20), gd, 0, 5, 0);
-  for (let k = 0; k < 4; k++) {
-    const side = new THREE.Group(); side.rotation.y = (k * Math.PI) / 2; g.add(side);
-    mesh(side, new THREE.BoxGeometry(0.9, 1.3, 0.06), dk, 0, 0.95, 1.72, false);
-    const arch = mesh(side, new THREE.CylinderGeometry(0.45, 0.45, 0.06, 16, 1, false, -Math.PI / 2, Math.PI), dk, 0, 1.6, 1.72, false); arch.rotation.x = Math.PI / 2;
-    mesh(side, new THREE.TorusGeometry(0.5, 0.05, 6, 16, Math.PI), gd, 0, 1.6, 1.74, false);
-    for (const x of [-1.1, 1.1]) mesh(side, new THREE.BoxGeometry(0.4, 0.6, 0.05), teal, x, 1.9, 1.72, false);
-  }
-  return g;
-}
-// The builder's hut (2×2): a little wooden hut with a red roof and a hammer by the door.
-function builder() {
-  const g = new THREE.Group();
-  mesh(g, new THREE.BoxGeometry(1.8, 0.16, 1.8), stone(), 0, 0.08, 0);
-  mesh(g, new THREE.BoxGeometry(1.3, 1.0, 1.3), wood(), 0, 0.66, 0);
-  const r = mesh(g, new THREE.ConeGeometry(1.15, 0.85, 4), roof(), 0, 1.58, 0); r.rotation.y = Math.PI / 4;
-  mesh(g, new THREE.BoxGeometry(0.45, 0.65, 0.04), dark(), 0, 0.5, 0.67, false);
-  mesh(g, new THREE.BoxGeometry(0.08, 0.6, 0.08), flat(0x7a5230), 0.55, 0.45, 0.8);
-  mesh(g, new THREE.BoxGeometry(0.32, 0.16, 0.16), flat(0x707070), 0.55, 0.78, 0.8);
-  return g;
-}
-// The gold mine (3×3): a tunnel in a stone mound, a turning wheel, a cart full of gold.
-function goldmine() {
-  const g = new THREE.Group();
-  const mound = mesh(g, new THREE.SphereGeometry(1.3, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), flat(0xa89a80), 0, 0.15, -0.3); mound.scale.y = 0.9;
-  mesh(g, new THREE.BoxGeometry(2.7, 0.15, 2.7), stone(), 0, 0.075, 0);
-  mesh(g, new THREE.BoxGeometry(0.8, 0.9, 0.3), dark(), 0, 0.55, 0.85, false);
-  for (const x of [-0.5, 0.5]) mesh(g, new THREE.BoxGeometry(0.14, 1.2, 0.14), wood(), x, 0.6, 1.0);
-  mesh(g, new THREE.BoxGeometry(1.2, 0.14, 0.18), wood(), 0, 1.25, 1.0);
-  const wheel = mesh(g, new THREE.TorusGeometry(0.45, 0.07, 6, 14), wood(), 0, 1.75, 0.3);
-  for (let k = 0; k < 3; k++) { const s = mesh(wheel, new THREE.BoxGeometry(0.9, 0.06, 0.06), wood()); s.rotation.z = (k * Math.PI) / 3; s.position.set(0, 0, 0); }
-  mesh(g, new THREE.BoxGeometry(0.1, 1.0, 0.1), wood(), 0, 1.25, 0.3);
-  mesh(g, new THREE.BoxGeometry(0.7, 0.4, 0.5), flat(0x6b4a2a), 0.8, 0.35, 0.95);
-  for (const [x, z] of [[0.7, 0.9], [0.9, 1.0], [0.8, 0.85]]) mesh(g, new THREE.SphereGeometry(0.18, 12, 8), gold(), x, 0.62, z);
-  g.userData.tick = (t) => { wheel.rotation.z = t * 1.5; };
-  return g;
-}
-// The light well (3×3): a marble basin with a bright orb of light turning over it.
-function nourwell() {
-  const g = new THREE.Group(), marble = std(0xf3efe6, { roughness: 0.4 }), gd = gold();
-  mesh(g, new THREE.CylinderGeometry(1.25, 1.35, 0.45, 20), marble, 0, 0.22, 0);
-  mesh(g, new THREE.CylinderGeometry(1.0, 1.0, 0.1, 20), std(0x2f7a8a, { roughness: 0.25 }), 0, 0.46, 0);
-  for (let k = 0; k < 4; k++) { const a = (k / 4) * Math.PI * 2 + Math.PI / 4; mesh(g, new THREE.CylinderGeometry(0.1, 0.12, 1.3, 16), marble, Math.cos(a) * 1.05, 1.05, Math.sin(a) * 1.05); mesh(g, new THREE.SphereGeometry(0.13, 8, 6), gd, Math.cos(a) * 1.05, 1.75, Math.sin(a) * 1.05); }
-  const orb = mesh(g, new THREE.SphereGeometry(0.42, 18, 12), new THREE.MeshStandardMaterial({ color: 0xfff6c8, emissive: 0xffe58a, emissiveIntensity: 1.6 }), 0, 1.5, 0, false);
-  const ring = mesh(g, new THREE.TorusGeometry(0.65, 0.04, 6, 30), gd, 0, 1.5, 0, false);
-  g.userData.tick = (t) => { orb.position.y = 1.5 + Math.sin(t * 2) * 0.12; ring.rotation.x = t; ring.rotation.y = t * 0.7; };
-  return g;
-}
-// The gold storage (3×3): an open wooden bin; the gold in it rises as the player has more.
-function goldstore() {
-  const g = new THREE.Group(), w = wood(), band = std(0x707070, { metalness: 0.6 });
-  mesh(g, new THREE.BoxGeometry(2.6, 0.2, 2.6), stone(), 0, 0.1, 0);
-  for (const [x, z, sx, sz] of [[0, 1.1, 2.3, 0.14], [0, -1.1, 2.3, 0.14], [1.1, 0, 0.14, 2.3], [-1.1, 0, 0.14, 2.3]]) { mesh(g, new THREE.BoxGeometry(sx, 1.0, sz), w, x, 0.7, z); mesh(g, new THREE.BoxGeometry(sx + 0.02, 0.1, sz + 0.02), band, x, 0.95, z); }
-  for (const [x, z] of [[1.1, 1.1], [-1.1, 1.1], [1.1, -1.1], [-1.1, -1.1]]) mesh(g, new THREE.BoxGeometry(0.24, 1.25, 0.24), flat(0x7a5230), x, 0.72, z);
-  const pile = mesh(g, new THREE.SphereGeometry(1.0, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), gold(), 0, 0.3, 0); pile.scale.set(1.05, 0.5, 1.05);
-  g.userData.fill = (f) => { pile.scale.y = 0.08 + f * 0.95; pile.visible = f > 0.01; };
-  return g;
-}
-// The light storage (3×3): a glass tank on a marble stand, filled with light as the player has more.
-function nourstore() {
-  const g = new THREE.Group(), marble = std(0xf3efe6, { roughness: 0.4 }), gd = gold();
-  mesh(g, new THREE.CylinderGeometry(1.3, 1.4, 0.35, 20), marble, 0, 0.17, 0);
-  const light = mesh(g, new THREE.CylinderGeometry(0.9, 0.9, 1, 20), new THREE.MeshStandardMaterial({ color: 0xfff2b0, emissive: 0xffd960, emissiveIntensity: 0.9, transparent: true, opacity: 0.9 }), 0, 0.85, 0, false);
-  mesh(g, new THREE.CylinderGeometry(1.0, 1.0, 1.9, 20, 1, true), new THREE.MeshStandardMaterial({ color: 0xcfeefa, transparent: true, opacity: 0.28, roughness: 0.05, side: THREE.DoubleSide, depthWrite: false }), 0, 1.3, 0, false);
-  for (const y of [0.4, 2.25]) mesh(g, new THREE.TorusGeometry(1.0, 0.07, 6, 28), gd, 0, y, 0).rotation.x = Math.PI / 2;
-  mesh(g, new THREE.SphereGeometry(0.5, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), gd, 0, 2.25, 0);
-  g.userData.fill = (f) => { const h = 0.05 + f * 1.75; light.scale.y = h; light.position.y = 0.37 + h / 2; };
-  return g;
-}
-// The barracks (3×3): a stone house with a wooden roof, a red banner, two crossed swords.
-function barracks() {
-  const g = new THREE.Group();
-  mesh(g, new THREE.BoxGeometry(2.7, 0.2, 2.7), stone(), 0, 0.1, 0);
-  mesh(g, new THREE.BoxGeometry(2.2, 1.3, 1.9), flat(0xb8ad98), 0, 0.85, -0.1);
-  // A triangular prism lying front to back, its ridge on top.
-  const r = mesh(g, new THREE.CylinderGeometry(1.3, 1.3, 2.1, 3), roof(), 0, 2.13, -0.1); r.rotation.x = -Math.PI / 2;
-  mesh(g, new THREE.BoxGeometry(0.6, 0.85, 0.05), dark(), 0, 0.62, 0.86, false);
-  for (const s of [-1, 1]) { const sw = mesh(g, new THREE.BoxGeometry(0.07, 0.9, 0.04), std(0xd8d8d8, { metalness: 0.8, roughness: 0.3 }), 0, 1.35, 0.9, false); sw.rotation.z = s * 0.6; }
-  mesh(g, new THREE.CylinderGeometry(0.04, 0.04, 1.6, 16), flat(0x7a5230), 1.0, 1.0, 1.0);
-  const flag = mesh(g, new THREE.BoxGeometry(0.5, 0.35, 0.02), std(0xc8322a), 1.26, 1.6, 1.0, false);
-  g.userData.tick = (t) => { flag.rotation.y = Math.sin(t * 3) * 0.25; };
-  return g;
-}
-// The army camp (4×4): a ring of logs round a campfire, little tents, a weapons rack.
-function armycamp() {
-  const g = new THREE.Group();
-  const dirt = mesh(g, new THREE.CircleGeometry(1.85, 24), flat(0xb89a6a), 0, 0.03, 0, false); dirt.rotation.x = -Math.PI / 2;
-  for (let k = 0; k < 10; k++) { const a = (k / 10) * Math.PI * 2; const l = mesh(g, new THREE.CylinderGeometry(0.13, 0.13, 0.9, 16), flat(0x7a5230), Math.cos(a) * 1.8, 0.13, Math.sin(a) * 1.8); l.rotation.z = Math.PI / 2; l.rotation.y = -a + Math.PI / 2; }
-  for (let k = 0; k < 4; k++) { const l = mesh(g, new THREE.CylinderGeometry(0.06, 0.06, 0.6, 16), flat(0x5a3a1a), 0, 0.08, 0); l.rotation.z = Math.PI / 2; l.rotation.y = (k * Math.PI) / 4; }
-  const fire = mesh(g, new THREE.ConeGeometry(0.22, 0.55, 20), new THREE.MeshBasicMaterial({ color: 0xffa030 }), 0, 0.35, 0, false);
-  for (const [x, z, c] of [[-0.95, -0.9, 0xd8c8a0], [0.95, -0.9, 0xc8322a], [0, 1.05, 0xd8c8a0]]) { const t = mesh(g, new THREE.ConeGeometry(0.45, 0.75, 4), flat(c), x, 0.38, z); t.rotation.y = Math.PI / 4; }
-  g.userData.tick = (t) => { fire.scale.set(1 + Math.sin(t * 11) * 0.12, 1 + Math.sin(t * 7) * 0.2, 1 + Math.cos(t * 9) * 0.12); };
-  return g;
-}
-const BUILD = { townhall, builder, goldmine, nourwell, goldstore, nourstore, barracks, armycamp };
-export const buildingModel = (type) => BUILD[type]?.();
+// ---------- buildings (buildings3d.js draws them) ----------
+export const buildingModel = (type) => makeBuilding(type);
 
 // A little bubble over a collector when it has something to collect (an emoji on a white disc).
 export function bubble(emoji) {

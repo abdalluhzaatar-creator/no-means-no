@@ -108,10 +108,10 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
     placed.push(rec);
     const ent = { kind: rec.type, g, n, i, j, rec };
     if (rec.type === 'archer') {
-      g.add(platform());
-      const a = buildArcher(); a.root.position.y = 0.62; a.root.rotation.y = Math.PI * 0.75; g.add(a.root);
+      const tower = buildingModel('archer'); g.add(tower);
+      const a = buildArcher(); a.root.position.y = tower.userData.deckY; a.root.rotation.y = Math.PI * 0.75; g.add(a.root);
       Object.assign(ent, { a }); archer = ent; units.push(a);
-      archerBar = bars.add(g, { y: 3.3, max: 100 });
+      archerBar = bars.add(g, { y: 4.4, max: 100 });
     } else if (def.makes) { ent.bub = bubble(def.makes === 'gold' ? '🪙' : '✨'); ent.bub.position.y = 3.2; ent.bub.visible = false; g.add(ent.bub); }
     pickables.push({ obj: g, kind: 'building', ent }); ents.push(ent);
     look3d(ent);
@@ -161,7 +161,7 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
     const tiles = tileSet(n); g.add(tiles);
     // No platform while placing, so the cells show under it.
     const ghost = new THREE.Group(); g.add(ghost); let a = null;
-    if (type === 'archer') { a = buildArcher(); a.root.position.y = 0.62; a.root.rotation.y = Math.PI * 0.75; ghost.add(a.root); units.push(a); }
+    if (type === 'archer') { const tw = buildingModel('archer'); ghost.add(tw); a = buildArcher(); a.root.position.y = tw.userData.deckY; a.root.rotation.y = Math.PI * 0.75; ghost.add(a.root); units.push(a); }
     else ghost.add(buildingModel(type));
     ghost.traverse((m) => { if (m.material) { m.material = m.material.clone(); m.material.transparent = true; m.material.opacity = 0.75; } });
     placing = { g, tiles, a, n, type, i: i0, j: j0, ok: true, onMove, drag: false };
@@ -343,7 +343,7 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
       archer.a.root.rotation.y = Math.atan2(target.h.root.position.x - ap.x, target.h.root.position.z - ap.z) - archer.g.rotation.y;
       archer.aimK = 1;
       const arrow = makeArrow(); scene.add(arrow);
-      flights.push({ arrow, from: new THREE.Vector3(ap.x, 2.2, ap.z), foe: target, t0: now, ms: 340 });
+      flights.push({ arrow, from: new THREE.Vector3(ap.x, 3.3, ap.z), foe: target, t0: now, ms: 340 });
     }
     if (f.foes.every((e) => !e.alive) && !flights.length && !f.done) { f.done = true; setTimeout(() => { fight = null; f.resolve(); }, 600); }
   };
