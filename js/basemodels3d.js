@@ -68,7 +68,7 @@ export function scenery(seed = 5) {
     spots.push([px, pz]);
   }
   // Each wood tree: a big leafy crown and a smaller one beside it (three shapes, instanced).
-  const KINDS = [1, 2, 3].map((k) => foliage(1, { detail: 3, seed: k * 5 }));
+  const KINDS = [1, 2, 3].map((k) => foliage(1, { detail: 1, seed: k * 5 }));   // the core hides under the leaves: few faces
   const byKind = KINDS.map(() => []);
   spots.forEach(([x, z]) => {
     const s = 1.0 + r() * 0.45, h = 1.7 + r() * 0.8;
@@ -84,7 +84,7 @@ export function scenery(seed = 5) {
     const core = new THREE.InstancedMesh(geo, leafMat(), list.length), coat = new THREE.InstancedMesh(CARDS[kk], cardMat(), list.length);
     list.forEach(([x, y, z, sc0, ry], k) => {
       m4.compose(p.set(x, y, z), q.setFromEuler(new THREE.Euler(0, ry, 0)), sc.set(sc0, sc0, sc0)); core.setMatrixAt(k, m4.clone().scale(sc.set(0.86, 0.86, 0.86))); coat.setMatrixAt(k, m4);
-      const t = 0.8 + r() * 0.28; c.setRGB(t * (0.92 + r() * 0.1), t, t * (0.8 + r() * 0.1)); coat.setColorAt(k, c); core.setColorAt(k, c.clone().multiply(coreTint));
+      const t = 1.05 + r() * 0.3; c.setRGB(t * (0.95 + r() * 0.1), t, t * (0.7 + r() * 0.1)); coat.setColorAt(k, c); core.setColorAt(k, c.clone().multiply(coreTint));
     });
     q.identity();
     for (const im of [core, coat]) { im.castShadow = true; im.receiveShadow = true; leaf.add(im); }
