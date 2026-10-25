@@ -6,7 +6,8 @@
 // Void Kings' camp with two archers and wins ⭐⭐⭐, 500 gold and 500 light.
 // Checkpoints are saved (st.onboard): 'intro' → 'built' → 'defended' → 'done'.
 import { mountVillage, GRID } from './village3d.js';
-import { BUILDINGS, ensureBase, grow, collect, ready, capacity, clearGems } from './base.js';
+import { ensureBase, grow, capacity } from './base.js';
+import { createBaseUI } from './baseui.js';
 import { createPortraits } from './portrait3d.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -23,7 +24,6 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
     <div class="ob-talk" hidden><b class="ob-who"></b><p></p><small class="ob-tap">انقر للمتابعة ▼</small></div>
     <div class="ob-hint" hidden></div>
     <div class="ob-pop" hidden></div>
-    <div class="ob-clear" hidden><div class="ob-time"><i></i><b></b></div></div>
     <button class="ob-hammer" hidden>🔨</button>
     <div class="ob-shop" hidden><h3>🔨 ابنِ</h3><button class="ob-card" data-b="archer"><span class="ob-ico">🏹</span><b>رامي السهام</b><small>يحمي البعد من ملوك الفراغ</small><em>مجاني</em></button></div>
     <div class="ob-confirm" hidden><button class="ob-no">✕</button><button class="ob-yes">✓</button></div>
@@ -54,11 +54,7 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
     const pl = village?.placing;
     if (pl && !q('.ob-confirm').hidden) { const p = village.screenOf(pl.g.position, 4.2); const c = q('.ob-confirm'); c.style.left = `${p.x - c.offsetWidth / 2}px`; c.style.top = `${p.y - c.offsetHeight}px`; }
     if (village?.site && !q('.ob-timer').hidden) { const p = village.screenOf(village.site.g.position, 3.4); const c = q('.ob-timer'); c.style.left = `${p.x - c.offsetWidth / 2}px`; c.style.top = `${p.y - c.offsetHeight}px`; }
-    const cl = st.base.clearing, ce = q('.ob-clear');
-    if (cl && village && !village.site) {
-      const at = village.obstacleAt(cl.id);
-      if (at) { const p = village.screenOf(at, 2.6), left = Math.max(0, (cl.end - Date.now()) / 1000); ce.hidden = false; ce.style.left = `${p.x - ce.offsetWidth / 2}px`; ce.style.top = `${p.y - ce.offsetHeight}px`; ce.querySelector('i').style.width = `${(1 - left / cl.s) * 100}%`; ce.querySelector('b').textContent = `${Math.ceil(left)} ث`; if (left <= 0) finishClear(); }
-    } else ce.hidden = true;
+    ui?.tick();
     if (handEl) { const h = q('.ob-hand'), r = handEl.getBoundingClientRect(); h.style.left = `${r.left + r.width / 2 - 18}px`; h.style.top = `${r.bottom - 6}px`; }
     raf = requestAnimationFrame(place);
   };
@@ -97,48 +93,9 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
     sfx.open?.();
   };
   view.addEventListener('pointerdown', closePop);
-  const RES = { gold: '🪙', nour: '✨' };
-  // An obstacle: clear it (light for trees, gold for rocks); the builder works ~10 s, then a few gems.
-  const onObstacle = (o, at) => {
-    const busy = st.base.clearing || village.site;
-    if (st.base.clearing?.id === o.id) return openPop(`<b>${o.ico} ${o.name}</b><small>البنّاء يزيلها الآن…</small>`, at);
-    const can = (st[o.res] || 0) >= o.cost;
-    openPop(`<b>${o.ico} ${o.name}</b><button class="ob-pop-btn" ${can && !busy ? '' : 'disabled'}>🪓 إزالة · ${RES[o.res]} ${o.cost}</button>${busy ? '<small>البنّاء مشغول</small>' : can ? `<small>⏱ ${o.s} ث${o.gems ? ` · 💎 ${o.gems}` : ''}</small>` : `<small>${o.res === 'gold' ? 'ذهب' : 'نور'} غير كافٍ</small>`}`, at);
-    pop.querySelector('.ob-pop-btn').onclick = () => {
-      if ((st[o.res] || 0) < o.cost || st.base.clearing || village.site) return;
-      st[o.res] -= o.cost; st.base.clearing = { id: o.id, end: Date.now() + o.s * 1000, s: o.s };
-      village.shakeObstacle(o.id, true); res(); save(); sfx.wood?.(); closePop();
-    };
-  };
-  // The builder done: the obstacle goes, the gems come (the fixed pattern, as in Clash).
-  const finishClear = () => {
-    const cl = st.base.clearing; if (!cl) return;
-    st.base.clearing = null;
-    const k = st.base.obstacles.findIndex((o) => o.id === cl.id); if (k < 0) return save();
-    const o = st.base.obstacles[k], gems = clearGems(st.base, o.kind);
-    const p = village && village.screenOf(village.obstacleAt(o.id) || { isVector3: true, x: 0, y: 0, z: 0, clone() { return this; } }, 2);
-    st.base.obstacles.splice(k, 1); st.base.clears = (st.base.clears || 0) + 1; st.gems = (st.gems || 0) + gems;
-    village?.removeObstacle(o.id); res(); save(); sfx.coin?.();
-    if (gems && p) floatText(`+💎 ${gems}`, p);
-  };
-  const floatText = (txt, p) => { const f = document.createElement('div'); f.className = 'ob-float'; f.textContent = txt; f.style.left = `${p.x}px`; f.style.top = `${p.y}px`; root.appendChild(f); setTimeout(() => f.remove(), 1400); };
-  // A building: its name and level; what a collector makes; how full a storage is.
-  const onBuilding = (b, at) => {
-    const d = BUILDINGS[b.type]; let info = d.note || '';
-    if (d.makes) info = `ينتج ${RES[d.makes]} ${d.rate} بالساعة · يتّسع ${d.cap} · فيه الآن ${ready(b)}`;
-    if (d.holds) info = Object.keys(d.holds).map((r) => `${RES[r]} ${(st[r] || 0).toLocaleString('en')} / ${capacity(st.base, r).toLocaleString('en')}`).join(' · ') + (b.type === 'townhall' ? `<br>${d.note}` : '');
-    openPop(`<b>${d.ico} ${d.name}</b><span>المستوى 1</span><small>${info}</small><small class="ob-move">✋ اسحبه لتحريكه</small>`, at);
-  };
-  // A collector tapped with something in it: into the storages (what fits).
-  const onCollect = (b, at) => {
-    const d = BUILDINGS[b.type], got = collect(st, b);
-    if (!got) { openPop(`<b>${d.ico} ${d.name}</b><small>المخازن ممتلئة — ابنِ أو طوّر مخزنًا</small>`, at); return 0; }
-    st.base.buildings = village.buildings(); res(); save(); sfx.coin?.();
-    floatText(`+${RES[d.makes]} ${got}`, at);
-    return got;
-  };
-  const onMoved = ({ th, buildings }) => { closePop(); st.base.th = th; st.base.buildings = buildings; save(); };
-  const openVillage = () => { village?.dispose(); view.innerHTML = ''; village = mountVillage(view, { buildings: st.base.buildings, obstacles: st.base.obstacles, th: st.base.th, onObstacle, onBuilding, onCollect, onMoved });
+  const ui = createBaseUI(root, { st, save, sfx, getVillage: () => village, res });
+  const onMoved = ({ buildings }) => { closePop(); st.base.buildings = buildings; save(); };
+  const openVillage = () => { village?.dispose(); view.innerHTML = ''; village = mountVillage(view, { buildings: st.base.buildings, obstacles: st.base.obstacles, th: st.base.th, onObstacle: ui.onObstacle, onSelect: ui.onSelect, onCollect: ui.onCollect, onMoved });
     if (window.__nmnDebug) window.__village = village;
     res(); if (st.base.clearing) village.shakeObstacle(st.base.clearing.id, true);
     return village;
@@ -263,6 +220,6 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
   })();
 
   return {
-    dispose() { alive = false; cancelAnimationFrame(raf); portraits.dispose(); village?.dispose(); camp?.dispose(); root.remove(); },
+    dispose() { alive = false; cancelAnimationFrame(raf); portraits.dispose(); village?.dispose(); camp?.dispose(); ui.dispose(); root.remove(); },
   };
 }

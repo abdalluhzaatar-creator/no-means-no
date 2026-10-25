@@ -19,21 +19,23 @@ const HALF = GRID / 2;
 const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...o });
 const cellCenter = (i, j, n = 3) => new THREE.Vector3(i + n / 2 - HALF, 0, j + n / 2 - HALF);
 
-// buildings: [{ type, i, j, t? }] (the Town Hall apart, at th); obstacles: [{ id, kind, i, j }].
-// onBuilding(rec, at) a building tapped · onCollect(rec, at) → amount, a collector with something in it
+// buildings: [{ type, i, j, lv?, up?, t? }] (the Town Hall apart, at th); obstacles: [{ id, kind, i, j }].
+// The records are used as they are (not copied): moving a building changes its i, j there.
+// onSelect(rec | null, at) a building picked up / let go · onCollect(rec, at) → amount, a collector with something in it
 // onObstacle(o, at) an obstacle tapped · onMoved({ th, buildings }) a building moved.
-export function mountVillage(container, { buildings = [], obstacles: obList = [], th: thAt = null, onTapGround, onObstacle, onBuilding, onCollect, onMoved } = {}) {
+export function mountVillage(container, { buildings = [], obstacles: obList = [], th: thAt = null, onTapGround, onObstacle, onSelect, onCollect, onMoved } = {}) {
   let seed = 7; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+  // No filmic curve: Clash's colours are bright and full.
+  renderer.toneMapping = THREE.NoToneMapping;
   container.appendChild(renderer.domElement);
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x9fd6f0); scene.fog = new THREE.Fog(0xb9dcea, 90, 200);
+  scene.background = new THREE.Color(0x3f7f26); scene.fog = new THREE.Fog(0x3f7f26, 80, 150);
   const camera = new THREE.PerspectiveCamera(38, 1, 0.5, 600);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x7a9a4a, 1.5));
-  const sun = new THREE.DirectionalLight(0xfff4dc, 2.5); sun.position.set(22, 40, 16); sun.castShadow = true;
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x6a8a3a, 1.25));
+  const sun = new THREE.DirectionalLight(0xfff4dc, 1.9); sun.position.set(22, 40, 16); sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, near: 1, far: 120 }); sun.shadow.bias = -0.0005; scene.add(sun);
 
   // Ground: the map and its grass strip (one texture), plain grass beyond, the forest round it, hills far off.
@@ -41,11 +43,6 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
   const SIDE = GRID + BORDER * 2;
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(SIDE, SIDE), new THREE.MeshStandardMaterial({ map: groundTexture(), roughness: 1 })); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
   scene.add(forest());
-  for (let i = 0; i < 14; i++) {
-    const a = (i / 14) * Math.PI * 2, r = 150 + rand() * 90;
-    const hill = new THREE.Mesh(new THREE.SphereGeometry(50 + rand() * 50, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), std(0x6f9f3a, { roughness: 1 }));
-    hill.position.set(Math.cos(a) * r, -8, Math.sin(a) * r); hill.scale.y = 0.35 + rand() * 0.3; scene.add(hill);
-  }
   // The grid lines, shown while a building is moved or placed (only over the map, not the strip).
   const gridLines = new THREE.GridHelper(GRID, GRID, 0xffffff, 0xffffff); gridLines.position.y = 0.02; gridLines.material.transparent = true; gridLines.material.opacity = 0.35; gridLines.visible = false; scene.add(gridLines);
   const tickers = [];
@@ -96,8 +93,9 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
   // Each building on the map: { kind, g, n, i, j, rec } (rec: its entry in the save; none for the Town Hall).
   const placed = [], ents = [];
   const platform = () => { const p = new THREE.Group(); const base = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.5, 2.8), std(0xcdb88e)); base.position.y = 0.25; base.castShadow = base.receiveShadow = true; p.add(base); const top = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.12, 2.4), std(0x8a6a44)); top.position.y = 0.56; p.add(top); return p; };
-  const th = buildingModel('townhall'); scene.add(th);
-  const thEnt = { kind: 'townhall', g: th, n: 4, i: thAt?.i ?? HALF - 2, j: thAt?.j ?? HALF - 2 };
+  const thRec = thAt || { type: 'townhall', i: HALF - 2, j: HALF - 2 };
+  const th = new THREE.Group(); scene.add(th);
+  const thEnt = { kind: 'townhall', g: th, n: 4, i: thRec.i, j: thRec.j, rec: thRec };
   th.position.copy(cellCenter(thEnt.i, thEnt.j, 4)); take(thEnt.i, thEnt.j, 4);
   pickables.push({ obj: th, kind: 'building', ent: thEnt }); ents.push(thEnt);
   let archer = null, archerBar = null;
@@ -107,21 +105,41 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
     const { i, j } = rec, n = def.n;
     take(i, j, n);
     const g = new THREE.Group(); g.position.copy(cellCenter(i, j, n)); scene.add(g);
-    rec = { ...rec }; placed.push(rec);
+    placed.push(rec);
     const ent = { kind: rec.type, g, n, i, j, rec };
     if (rec.type === 'archer') {
       g.add(platform());
       const a = buildArcher(); a.root.position.y = 0.62; a.root.rotation.y = Math.PI * 0.75; g.add(a.root);
       Object.assign(ent, { a }); archer = ent; units.push(a);
       archerBar = bars.add(g, { y: 3.3, max: 100 });
-    } else {
-      const m = buildingModel(rec.type); g.add(m); if (m.userData.tick) tickers.push(m); ent.model = m;
-      if (def.makes) { ent.bub = bubble(def.makes === 'gold' ? '🪙' : '✨'); ent.bub.position.y = 3.2; ent.bub.visible = false; g.add(ent.bub); }
-    }
+    } else if (def.makes) { ent.bub = bubble(def.makes === 'gold' ? '🪙' : '✨'); ent.bub.position.y = 3.2; ent.bub.visible = false; g.add(ent.bub); }
     pickables.push({ obj: g, kind: 'building', ent }); ents.push(ent);
+    look3d(ent);
     if (pop) { g.scale.setScalar(0.01); popIn.push({ g, t0: performance.now() }); burst(g.position.x, 0.6, g.position.z, 0xfff0c0, 40); }
     return ent;
   };
+  // How a building looks at its level (a little bigger, gold trim from level 3), and the builder's fence while it's upgraded.
+  function look3d(ent) {
+    const lv = ent.rec.lv || 1;
+    if (ent.kind !== 'archer') {
+      if (ent.model) { ent.g.remove(ent.model); const k = tickers.indexOf(ent.model); if (k >= 0) tickers.splice(k, 1); }
+      const m = buildingModel(ent.kind); m.scale.setScalar(1 + Math.min(0.15, (lv - 1) * 0.04)); ent.g.add(m); if (m.userData.tick) tickers.push(m); ent.model = m;
+      if (lv >= 3) { const trim = new THREE.Mesh(new THREE.BoxGeometry(ent.n - 0.2, 0.08, ent.n - 0.2), std(0xe0b030, { metalness: 0.7, roughness: 0.3 })); trim.position.y = 0.04; m.add(trim); }
+    }
+    if (ent.rec.up && !ent.fence) {
+      const f = new THREE.Group(), wood = std(0xb07a46), h = ent.n / 2 + 0.15;
+      for (let k = 0; k < 4; k++) {
+        const side = new THREE.Group(); side.rotation.y = (k * Math.PI) / 2; f.add(side);
+        for (let x = -h; x < h; x += 0.5) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.55, 0.1), wood); p.position.set(x, 0.27, h); p.castShadow = true; side.add(p); }
+        const rail = new THREE.Mesh(new THREE.BoxGeometry(h * 2, 0.08, 0.06), wood); rail.position.set(0, 0.4, h); side.add(rail);
+      }
+      const hammer = new THREE.Group(); const hd = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.18, 0.18), std(0x8a8a8a, { metalness: 0.6 })); hd.position.y = 0.35; hammer.add(hd);
+      const hl = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.7, 8), std(0x7a5230)); hammer.add(hl); hammer.position.set(h - 0.2, 0.9, h - 0.2); f.add(hammer);
+      f.userData.tick = (t) => { hammer.rotation.z = -0.6 + Math.abs(Math.sin(t * 5)) * 1.2; };
+      ent.g.add(f); tickers.push(f); ent.fence = f;
+    } else if (!ent.rec.up && ent.fence) { ent.g.remove(ent.fence); tickers.splice(tickers.indexOf(ent.fence), 1); ent.fence = null; }
+  }
+  look3d(thEnt);
   for (const b of buildings) addBuilding(b);
   // The collectors' bubbles: shown when there is something to collect.
   const checkBubbles = (now = Date.now()) => { for (const e of ents) if (e.bub) e.bub.visible = ready(e.rec, now) >= 1; };
@@ -191,7 +209,7 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
     while (o && !owner()) o = o.parent;
     const pk = o && owner();
     if (!pk || pk.ent !== sel?.ent) deselect();
-    if (!pk) return;
+    if (!pk) return onSelect?.(null);
     const at = { x: e.clientX - r.left, y: e.clientY - r.top };
     if (pk.kind === 'obstacle') return onObstacle?.(pk.o, at);
     const ent = pk.ent;
@@ -202,7 +220,6 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
       return;
     }
     if (canMove() && !sel) select(ent);
-    onBuilding?.(ent.rec || { type: 'townhall', i: ent.i, j: ent.j }, at);
   });
 
   // ---------- moving a building (Clash-style: tap it, then drag it; red cells = can't go there) ----------
@@ -212,9 +229,20 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
   const select = (ent) => {
     untake(ent.i, ent.j, ent.n);
     const tiles = tileSet(ent.n); scene.add(tiles);
+    tiles.add(arrows(ent.n));
     sel = { ent, tiles, mat: tiles.userData.mat, i: ent.i, j: ent.j, i0: ent.i, j0: ent.j, ok: true, drag: false };
     gridLines.visible = true;
     setSel(ent.i, ent.j);
+    onSelect?.(ent.rec);
+  };
+  // Clash's four arrows round a picked-up building: it can be dragged.
+  const arrows = (n) => {
+    const g = new THREE.Group(), shape = new THREE.Shape();
+    shape.moveTo(0, 0.45); shape.lineTo(0.42, 0); shape.lineTo(0.16, 0); shape.lineTo(0.16, -0.35); shape.lineTo(-0.16, -0.35); shape.lineTo(-0.16, 0); shape.lineTo(-0.42, 0); shape.closePath();
+    const geo = new THREE.ShapeGeometry(shape), mat = new THREE.MeshBasicMaterial({ color: 0xfff27a, transparent: true, opacity: 0.95, depthWrite: false });
+    for (let k = 0; k < 4; k++) { const a = new THREE.Mesh(geo, mat), r = n / 2 + 0.75, ang = (k * Math.PI) / 2; a.rotation.x = -Math.PI / 2; a.rotation.z = ang; a.position.set(-Math.sin(ang) * r, 0.06, -Math.cos(ang) * r); g.add(a); }
+    g.userData.tick = (t) => g.scale.setScalar(1 + Math.sin(t * 5) * 0.05);
+    tickers.push(g); return g;
   };
   const setSel = (i, j) => {
     const n = sel.ent.n;
@@ -232,8 +260,10 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
     if (ent.rec) { ent.rec.i = ent.i; ent.rec.j = ent.j; }
     if (moved) burst(ent.g.position.x, 0.4, ent.g.position.z, 0xd8e8a0, 18, 2);
     scene.remove(sel.tiles); sel.tiles.children[0]?.geometry.dispose(); sel.mat.dispose();
+    const ar = sel.tiles.children.find((c) => c.userData.tick); if (ar) tickers.splice(tickers.indexOf(ar), 1);
     sel = null; gridLines.visible = false; controls.enabled = true;
-    if (moved) onMoved?.({ th: { i: thEnt.i, j: thEnt.j }, buildings: placed.map((b) => ({ ...b })) });
+    onSelect?.(null);
+    if (moved) onMoved?.({ th: thRec, buildings: placed.slice() });
   };
 
   // ---------- construction ----------
@@ -390,7 +420,11 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
     setStock({ gold = 0, nour = 0 }) { for (const e of ents) { const h = BUILDINGS[e.kind]?.holds; if (h && e.model?.userData.fill) e.model.userData.fill(h.gold ? gold : nour); } },
     checkBubbles,
     defend, heal, burst,
-    buildings: () => placed.map((b) => ({ ...b })),
+    buildings: () => placed.slice(),
+    // A building's record changed (a level, an upgrade started or done): how it looks.
+    refresh(rec) { const e = ents.find((x) => x.rec === rec); if (e) look3d(e); checkBubbles(); },
+    // Where a building is (for labels and timers over it).
+    posOf(rec) { return ents.find((x) => x.rec === rec)?.g.position.clone(); },
     townHallAt: () => ({ i: thEnt.i, j: thEnt.j }),
     // Moving buildings (also used by the tests).
     select: (kind) => { deselect(); const ent = ents.find((e) => e.kind === kind); if (ent && canMove()) select(ent); return !!sel; },

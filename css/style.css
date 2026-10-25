@@ -865,3 +865,36 @@ body.in-base .topbar, body.in-base #sandbox-badge { display: none; }
 .ob-pop .ob-move { color: #3f7d6e; font-weight: 700; }
 .ob-float { position: absolute; z-index: 7; transform: translate(-50%, -50%); pointer-events: none; font-weight: 900; font-size: 1.25rem; color: #fff; text-shadow: 0 2px 0 #0008, 0 0 6px #0006; animation: obfloat 1.4s ease-out forwards; }
 @keyframes obfloat { from { opacity: 0; margin-top: 10px; } 15% { opacity: 1; } to { opacity: 0; margin-top: -60px; } }
+/* ---------- the base's buttons and windows (Clash style) ---------- */
+.bu-bar { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 5; display: grid; justify-items: center; gap: 6px; pointer-events: none; width: max-content; max-width: calc(100vw - 16px); }
+.bu-title { color: #fff; font-weight: 900; font-size: 1.15rem; text-shadow: 0 2px 0 #000a, 0 0 4px #000a; white-space: nowrap; }
+.bu-btns { display: flex; gap: 10px; pointer-events: auto; flex-wrap: wrap; justify-content: center; }
+.bu-b { width: 78px; height: 78px; border-radius: 50%; border: 3px solid #fff; background: radial-gradient(circle at 50% 35%, #f4f0e4, #c9c0a8); box-shadow: 0 4px 0 #6a5a3a, 0 8px 14px #0006; display: grid; place-content: center; justify-items: center; gap: 0; font: inherit; cursor: pointer; padding: 0; color: #2a2010; }
+.bu-b .bu-i { font-size: 1.6rem; line-height: 1.1; }
+.bu-b b { font-size: .72rem; font-weight: 900; line-height: 1.1; }
+.bu-b small { font-size: .7rem; font-weight: 800; color: #2a2010; }
+.bu-b.short small { color: #d0241a; }
+.bu-b.off { filter: grayscale(.8); opacity: .75; }
+.bu-b.gem { background: radial-gradient(circle at 50% 35%, #c8ffcf, #4cc85a); }
+.bu-b:active { transform: translateY(3px); box-shadow: 0 1px 0 #6a5a3a; }
+.ob:has(.bu-bar:not([hidden])) .ob-done-bar { display: none; }
+.bu-timers > .ob-time { position: absolute; z-index: 3; pointer-events: none; }
+.bu-win { position: absolute; inset: 0; z-index: 9; background: #0008; display: grid; place-items: center; padding: 16px; }
+.bu-card { position: relative; width: min(420px, 100%); max-height: 86vh; overflow: auto; background: #f7f1e1; border: 4px solid #fff; border-radius: 18px; box-shadow: 0 10px 30px #000a; padding: 18px 18px 16px; color: #2a2010; animation: pop .2s; }
+.bu-card h3 { margin: 0 0 4px; text-align: center; font-size: 1.15rem; }
+.bu-x { position: absolute; top: 8px; inset-inline-end: 8px; width: 34px; height: 34px; border-radius: 50%; border: 2px solid #fff; background: #d8341a; color: #fff; font-weight: 900; cursor: pointer; }
+.bu-lv { text-align: center; margin: 0 0 10px; color: #3f7d6e; font-weight: 800; }
+.bu-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; margin: 5px 0; background: #fff; border-radius: 10px; }
+.bu-row span { flex: 1; } .bu-row b { font-weight: 900; } .bu-row i { font-style: normal; color: #2fa84a; font-weight: 900; }
+.bu-note { color: #8a6a4a; text-align: center; font-size: .9rem; }
+.bu-why { color: #d0241a; text-align: center; font-weight: 800; }
+.bu-go { display: block; margin: 12px auto 0; background: linear-gradient(#8de05a, #3fa82a); color: #fff; border: 3px solid #fff; border-radius: 14px; padding: 10px 28px; font: inherit; font-size: 1.15rem; font-weight: 900; text-shadow: 0 1px 0 #0006; box-shadow: 0 4px 0 #2a6a1a; cursor: pointer; }
+.bu-go.off { filter: grayscale(1); opacity: .6; }
+.bu-troops { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 10px; }
+.bu-troop { display: grid; gap: 4px; justify-items: center; }
+.bu-tadd { position: relative; width: 104px; display: grid; justify-items: center; gap: 2px; padding: 10px 6px; background: linear-gradient(#ffe9a8, #e8b84a); border: 3px solid #fff; border-radius: 12px; box-shadow: 0 4px 0 #a8782a; font: inherit; cursor: pointer; color: #2a2010; }
+.bu-tadd span { font-size: 2rem; } .bu-tadd small { font-size: .72rem; font-weight: 800; }
+.bu-tadd em { position: absolute; top: -8px; inset-inline-start: -8px; background: #2a9ad8; color: #fff; border: 2px solid #fff; border-radius: 10px; padding: 0 7px; font-style: normal; font-weight: 900; }
+.bu-tdel { background: #d8341a; color: #fff; border: 2px solid #fff; border-radius: 10px; padding: 3px 12px; font: inherit; font-weight: 900; cursor: pointer; }
+@media (max-width: 480px) { .bu-b { width: 66px; height: 66px; } .bu-b .bu-i { font-size: 1.35rem; } .bu-title { font-size: 1rem; } }
+.bu-card h3 { padding-inline: 34px; }
