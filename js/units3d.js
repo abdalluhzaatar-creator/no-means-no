@@ -98,7 +98,7 @@ export function hpBars(container) {
     place(camera, w, h) {
       for (const b of bars) {
         v.copy(b.obj.position); v.y += b.y * (b.obj.scale?.y || 1); v.project(camera);
-        const vis = v.z < 1 && b.obj.visible !== false;
+        const vis = v.z < 1 && b.obj.visible !== false && b.hp < b.max;   // as in Clash: a bar only once hurt
         b.el.style.display = vis ? '' : 'none';
         if (vis) b.el.style.transform = `translate(-50%, -50%) translate(${(v.x * 0.5 + 0.5) * w}px, ${(-v.y * 0.5 + 0.5) * h}px)`;
       }

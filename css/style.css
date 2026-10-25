@@ -852,3 +852,9 @@ body.in-base .topbar, body.in-base #sandbox-badge { display: none; }
 }
 .ob-attack { inset-inline-end: auto; right: 24px; }   /* the guide stands on the left: keep the button clear of him */
 .ob-attack { bottom: 150px; }   /* above the dialogue box */
+.ob-pop { position: absolute; z-index: 6; display: grid; justify-items: center; gap: 6px; background: #fffdf6; border: 3px solid #d9b45a; border-radius: 14px; padding: 10px 14px; box-shadow: 0 10px 24px #0006; animation: pop .2s; min-width: 150px; }
+.ob-pop b { font-size: 1.05rem; } .ob-pop small { color: #8a6a4a; } .ob-pop span { font-weight: 700; color: #3f7d6e; }
+.ob-pop-btn { background: linear-gradient(#ffd36b, #e0a42a); color: #3a2410; border: 2px solid #fff; border-radius: 10px; padding: 7px 14px; font: inherit; font-weight: 800; cursor: pointer; box-shadow: 0 3px 0 #a86a0a; }
+.ob-pop-btn:disabled { filter: grayscale(1); opacity: .6; cursor: not-allowed; }
+.ob-done-bar button { white-space: nowrap; }
+@media (max-width: 600px) { .ob-done-bar { gap: 6px; } .ob-done-bar button { padding: 8px 12px; font-size: .9rem; } }

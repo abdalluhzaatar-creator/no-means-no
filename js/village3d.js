@@ -1,45 +1,67 @@
-// The spiritual dimension as a base (Clash of Clans style): a wide sunny plaza seen from
-// above at an angle, a mosque, a fountain, gardens and palms around it, and a grid on
-// which buildings stand. Drag to move the view, pinch / wheel to zoom.
-// It also runs the base's fights: void kings walk in from the edge, the archer shoots them.
+// The spiritual dimension as a base, in the Clash of Clans way: a 44×44 map with the
+// marble floor of the spiritual dimension (light and dark squares with teal inlays),
+// grass around it and green hills far off, seen from above at an angle. The Town Hall
+// (a square hall with a dome) stands in the middle; trees are scattered over the map as
+// obstacles the player clears with gold. Drag to move the view, pinch / wheel to zoom.
+// It also runs the base's fights: void kings come out of a portal, the archer shoots them.
 // The tutorial (onboard.js) drives it through the API returned by mountVillage.
 import * as THREE from './vendor/three.module.min.js';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { palm, cypress, orangeTree, flowerBed, lantern, fountain, minaret } from './oasis3d.js';
+import { palm, cypress, orangeTree } from './oasis3d.js';
 import { buildVoidKing, buildArcher, makeArrow, makeSoul, hpBars } from './units3d.js';
 import { glowTex } from './env3d.js';
 
-export const GRID = 40;                  // cells per side (one cell = 1 unit)
+export const GRID = 44;                  // cells per side, as in Clash (one cell = 1 unit)
 const HALF = GRID / 2;
 const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...o });
 const cellCenter = (i, j, n = 3) => new THREE.Vector3(i + n / 2 - HALF, 0, j + n / 2 - HALF);
 
-function tileTexture() {
-  const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g = cv.getContext('2d');
-  g.fillStyle = '#efe4cc'; g.fillRect(0, 0, 256, 256);
-  for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) { g.fillStyle = (x + y) % 2 ? '#e6d8bb' : '#f3ead6'; g.fillRect(x * 64 + 1, y * 64 + 1, 62, 62); }
-  g.strokeStyle = '#c9b48a'; g.lineWidth = 2; g.beginPath(); g.arc(128, 128, 40, 0, Math.PI * 2); g.stroke();
-  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(GRID / 4, GRID / 4); t.colorSpace = THREE.SRGBColorSpace; return t;
+// The spiritual dimension's marble: light and dark squares, veins, a teal diamond at each corner.
+function marbleTexture() {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 512; const g = cv.getContext('2d');
+  const n = 4, s = 512 / n;
+  let sd = 3; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    g.fillStyle = (i + j) % 2 ? '#f4f1ea' : '#e3ddd0'; g.fillRect(i * s, j * s, s, s);
+    g.strokeStyle = 'rgba(150,140,125,.25)'; g.lineWidth = 1.5;
+    for (let k = 0; k < 4; k++) { g.beginPath(); g.moveTo(i * s + r() * s, j * s); g.bezierCurveTo(i * s + r() * s, j * s + s / 3, i * s + r() * s, j * s + s / 1.5, i * s + r() * s, j * s + s); g.stroke(); }
+    g.fillStyle = '#3f7d6e'; g.save(); g.translate(i * s, j * s); g.rotate(Math.PI / 4); g.fillRect(-9, -9, 18, 18); g.restore();
+  }
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(GRID / 4, GRID / 4); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
 }
 
-// The mosque at the heart of the base.
-function mosque() {
+// The Town Hall: a square hall with a dome, in the spiritual dimension's colours (4×4 cells).
+function townHall() {
   const g = new THREE.Group();
-  const stone = std(0xf4ead4, { roughness: 0.6 }), teal = std(0x2f7a8a, { roughness: 0.35, metalness: 0.2 }), gold = std(0xd4a53a, { metalness: 0.9, roughness: 0.25 });
+  const plaster = std(0xf3ece0, { roughness: 0.75 }), stone = std(0xeadfc8), teal = std(0x2f7a8a, { roughness: 0.3, metalness: 0.25 }), gold = std(0xd4a53a, { metalness: 0.9, roughness: 0.25 }), dark = std(0x2d2a28);
   const add = (o, x, y, z) => { o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; g.add(o); return o; };
-  add(new THREE.Mesh(new THREE.BoxGeometry(9, 4.2, 8), stone), 0, 2.1, 0);
-  add(new THREE.Mesh(new THREE.CylinderGeometry(3.1, 3.3, 1, 24), stone), 0, 4.7, 0);
-  add(new THREE.Mesh(new THREE.SphereGeometry(3.1, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), teal), 0, 5.2, 0);
-  add(new THREE.Mesh(new THREE.ConeGeometry(0.25, 1.2, 8), gold), 0, 8.8, 0);
-  for (const x of [-2.6, 0, 2.6]) {
-    const arch = new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.6, 0.2), std(0x3a2a1a)); add(arch, x, 1.3, 4.01);
-    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.2, 16, 1, false, 0, Math.PI), std(0x3a2a1a)); top.rotation.set(Math.PI / 2, 0, Math.PI / 2); add(top, x, 2.6, 4.01);
+  add(new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.35, 3.9), stone), 0, 0.17, 0);
+  add(new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.4, 3.4), plaster), 0, 1.55, 0);
+  add(new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.22, 3.6), teal), 0, 2.85, 0);
+  for (const [x, z] of [[-1.62, -1.62], [1.62, -1.62], [-1.62, 1.62], [1.62, 1.62]]) { add(new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.5, 0.42), stone), x, 3.15, z); add(new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.4, 4), gold), x, 3.6, z); }
+  add(new THREE.Mesh(new THREE.CylinderGeometry(1.25, 1.35, 0.45, 24), plaster), 0, 3.18, 0);
+  add(new THREE.Mesh(new THREE.SphereGeometry(1.25, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), teal), 0, 3.4, 0);
+  add(new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 8), gold), 0, 4.7, 0);
+  add(new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.5, 8), gold), 0, 5, 0);
+  // A door and windows on every side.
+  for (let k = 0; k < 4; k++) {
+    const side = new THREE.Group(); side.rotation.y = (k * Math.PI) / 2; g.add(side);
+    const door = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.3, 0.06), dark); door.position.set(0, 0.95, 1.72); side.add(door);
+    const arch = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 0.06, 16, 1, false, -Math.PI / 2, Math.PI), dark); arch.rotation.x = Math.PI / 2; arch.position.set(0, 1.6, 1.72); side.add(arch);
+    const frame = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.05, 6, 16, Math.PI), gold); frame.position.set(0, 1.6, 1.74); side.add(frame);
+    for (const x of [-1.1, 1.1]) { const w = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.6, 0.05), teal); w.position.set(x, 1.9, 1.72); side.add(w); }
   }
-  for (const [x, z] of [[-4.2, -3.6], [4.2, -3.6]]) { const m = minaret(); m.scale.setScalar(1.25); m.position.set(x, 0, z); g.add(m); }
   return g;
 }
 
-export function mountVillage(container, { buildings = [], onTapGround } = {}) {
+// Trees that stand on the map (cleared with gold): kind → model, name, price.
+const OBSTACLES = {
+  palm: { make: (r) => palm(r, 5.5 + r() * 2.5), name: 'نخلة', cost: 150 },
+  cypress: { make: (r) => cypress(r), name: 'سروة', cost: 100 },
+  orange: { make: (r) => orangeTree(r), name: 'شجرة برتقال', cost: 200 },
+};
+
+export function mountVillage(container, { buildings = [], cleared = [], onTapGround, onObstacle, onTownHall } = {}) {
   let seed = 7; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -47,33 +69,48 @@ export function mountVillage(container, { buildings = [], onTapGround } = {}) {
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   container.appendChild(renderer.domElement);
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x9fd3f0); scene.fog = new THREE.Fog(0xcfe6f2, 70, 160);
-  const camera = new THREE.PerspectiveCamera(38, 1, 0.5, 400);
-  scene.add(new THREE.HemisphereLight(0xffffff, 0xb59a6a, 1.4));
-  const sun = new THREE.DirectionalLight(0xfff1d6, 2.6); sun.position.set(20, 34, 14); sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, near: 1, far: 100 }); sun.shadow.bias = -0.0005; scene.add(sun);
+  scene.background = new THREE.Color(0xa9d6ee); scene.fog = new THREE.Fog(0xd8e8ee, 110, 260);
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.5, 600);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a9a6a, 1.4));
+  const sun = new THREE.DirectionalLight(0xfff1d6, 2.6); sun.position.set(22, 40, 16); sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -34, right: 34, top: 34, bottom: -34, near: 1, far: 120 }); sun.shadow.bias = -0.0005; scene.add(sun);
 
-  // Ground: desert sand, the marble plaza (the grid), a green border.
-  const sand = new THREE.Mesh(new THREE.PlaneGeometry(260, 260), std(0xe3cf9e, { roughness: 1 })); sand.rotation.x = -Math.PI / 2; sand.position.y = -0.02; sand.receiveShadow = true; scene.add(sand);
-  const lawn = new THREE.Mesh(new THREE.PlaneGeometry(GRID + 12, GRID + 12), std(0x6fae4a, { roughness: 1 })); lawn.rotation.x = -Math.PI / 2; lawn.position.y = -0.01; lawn.receiveShadow = true; scene.add(lawn);
-  const plaza = new THREE.Mesh(new THREE.PlaneGeometry(GRID, GRID), new THREE.MeshStandardMaterial({ map: tileTexture(), roughness: 0.5 })); plaza.rotation.x = -Math.PI / 2; plaza.receiveShadow = true; scene.add(plaza);
-  const rim = new THREE.Mesh(new THREE.BoxGeometry(GRID + 1, 0.3, GRID + 1), std(0xd9c49a)); rim.position.y = -0.14; scene.add(rim);
+  // Ground: grass all around, green hills far off, the marble map (the grid) raised a little.
+  const grass = new THREE.Mesh(new THREE.CircleGeometry(420, 64), std(0x6d9a4a, { roughness: 1 })); grass.rotation.x = -Math.PI / 2; grass.position.y = -0.05; grass.receiveShadow = true; scene.add(grass);
+  for (let i = 0; i < 14; i++) {
+    const a = (i / 14) * Math.PI * 2, r = 150 + rand() * 90;
+    const hill = new THREE.Mesh(new THREE.SphereGeometry(50 + rand() * 50, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), std(0x7fa35a, { roughness: 1 }));
+    hill.position.set(Math.cos(a) * r, -8, Math.sin(a) * r); hill.scale.y = 0.35 + rand() * 0.3; scene.add(hill);
+  }
+  const plaza = new THREE.Mesh(new THREE.BoxGeometry(GRID, 0.3, GRID), [std(0xeadfc8), std(0xeadfc8), new THREE.MeshStandardMaterial({ map: marbleTexture(), roughness: 0.35, metalness: 0.05 }), std(0xeadfc8), std(0xeadfc8), std(0xeadfc8)]);
+  plaza.position.y = -0.15; plaza.receiveShadow = true; scene.add(plaza);
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(GRID + 0.6, 0.18, GRID + 0.6), std(0x2f7a8a, { roughness: 0.4 })); trim.position.y = -0.2; scene.add(trim);
   // The grid lines, shown while placing a building.
-  const gridLines = new THREE.GridHelper(GRID, GRID, 0x6a8f4a, 0x6a8f4a); gridLines.position.y = 0.02; gridLines.material.transparent = true; gridLines.material.opacity = 0.35; gridLines.visible = false; scene.add(gridLines);
+  const gridLines = new THREE.GridHelper(GRID, GRID, 0x2f7a8a, 0x2f7a8a); gridLines.position.y = 0.02; gridLines.material.transparent = true; gridLines.material.opacity = 0.3; gridLines.visible = false; scene.add(gridLines);
+  const tickers = [];
 
-  // Cells taken by the landmarks (i, j, w, d in cells).
+  // Cells taken (i, j, w, d in cells).
   const taken = new Set();
   const take = (i, j, w, d) => { for (let x = i; x < i + w; x++) for (let z = j; z < j + d; z++) taken.add(`${x},${z}`); };
-  const ms = mosque(); ms.position.set(0, 0, -11); scene.add(ms); take(14, 3, 12, 11);
-  const fo = fountain(); fo.position.set(0, 0, 1); fo.scale.setScalar(1.3); scene.add(fo); take(17, 18, 6, 6);
-  const tickers = [fo];
-  for (const [x, z] of [[-7, 4], [7, 4], [-12, -4], [12, -4]]) { const fb = flowerBed(4, 2, rand); fb.position.set(x, 0, z); scene.add(fb); take(x + HALF - 2, z + HALF - 1, 4, 2); }
-  for (const [x, z] of [[-4, 6], [4, 6], [-10, 10], [10, 10], [-15, -12], [15, -12]]) { const l = lantern(); l.position.set(x, 0, z); l.userData.light.intensity = 0; scene.add(l); take(x + HALF, z + HALF, 1, 1); }
-  // Trees all around the plaza: palms, cypresses, orange trees.
-  for (let k = 0; k < 64; k++) {
-    const a = (k / 64) * Math.PI * 2, r = HALF + 3 + rand() * 6;
-    const t = k % 3 === 0 ? cypress(rand) : k % 3 === 1 ? palm(rand, 6 + rand() * 3) : orangeTree(rand);
-    t.position.set(Math.cos(a) * r * 1.02, 0, Math.sin(a) * r); t.rotation.y = rand() * 6; scene.add(t);
+  const untake = (i, j, w, d) => { for (let x = i; x < i + w; x++) for (let z = j; z < j + d; z++) taken.delete(`${x},${z}`); };
+  // The Town Hall in the middle.
+  const th = townHall(); th.position.set(0, 0, 0); scene.add(th); take(HALF - 2, HALF - 2, 4, 4);
+  const pickables = [{ obj: th, kind: 'townhall' }];
+  // Trees on the map (2×2 cells each), the same every time; the ones cleared stay gone.
+  // Kept clear: the middle, and the corner the void kings come from and the archer goes.
+  const obstacles = [];
+  const keepClear = (i, j) => (Math.abs(i - HALF) < 6 && Math.abs(j - HALF) < 6) || (i < 16 && j > 22);
+  const kinds = Object.keys(OBSTACLES);
+  for (let k = 0, tries = 0; k < 26 && tries < 400; tries++) {
+    const i = 1 + Math.floor(rand() * (GRID - 3)), j = 1 + Math.floor(rand() * (GRID - 3));
+    let ok = !keepClear(i, j); for (let x = i - 1; ok && x < i + 3; x++) for (let z = j - 1; z < j + 3; z++) if (taken.has(`${x},${z}`)) ok = false;
+    const kind = kinds[Math.floor(rand() * kinds.length)];
+    const model = OBSTACLES[kind].make(rand); model.rotation.y = rand() * 6;   // same random draws whether kept or cleared
+    if (!ok) continue;
+    const id = `t${k++}`;
+    if (cleared.includes(id)) continue;
+    model.position.copy(cellCenter(i, j, 2)); scene.add(model); take(i, j, 2, 2);
+    const o = { id, kind, i, j, obj: model, ...OBSTACLES[kind] }; obstacles.push(o); pickables.push({ obj: model, kind: 'obstacle', o });
   }
 
   // ---------- camera: Clash-style angle, drag to pan, pinch / wheel to zoom ----------
@@ -81,16 +118,20 @@ export function mountVillage(container, { buildings = [], onTapGround } = {}) {
   controls.enableRotate = false; controls.screenSpacePanning = false; controls.enableDamping = true; controls.dampingFactor = 0.1;
   controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
-  controls.minDistance = 16; controls.maxDistance = 70;
+  controls.minDistance = 16; controls.maxDistance = 95;
   const VIEW = new THREE.Vector3(24, 30, 26);
   const look = (x, z, dist = 1) => { controls.target.set(x, 0, z); camera.position.set(x, 0, z).addScaledVector(VIEW, dist); controls.update(); };
-  look(0, 2, 1);
   controls.addEventListener('change', () => { const t = controls.target, cx = THREE.MathUtils.clamp(t.x, -HALF, HALF) - t.x, cz = THREE.MathUtils.clamp(t.z, -HALF, HALF) - t.z; if (cx || cz) { t.x += cx; t.z += cz; camera.position.x += cx; camera.position.z += cz; } });
   // Fly the view to a point (used by the tutorial).
   let fly = null;
   const flyTo = (x, z, dist = 0.8, ms = 900) => new Promise((res) => { fly = { t0: performance.now(), ms, a: controls.target.clone(), b: new THREE.Vector3(x, 0, z), da: camera.position.distanceTo(controls.target), db: VIEW.length() * dist, res }; });
 
-  const resize = () => { const w = container.clientWidth, h = container.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.fov = w / h < 0.8 ? 52 : 38; camera.updateProjectionMatrix(); };
+  // The whole map in view at the start, as Clash opens (on a tall phone, most of it).
+  let framed = false;
+  const resize = () => {
+    const w = container.clientWidth, h = container.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.fov = w / h < 0.8 ? 52 : 38; camera.updateProjectionMatrix();
+    if (!framed) { framed = true; const hfov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect); const d = (GRID * 1.3) / (2 * Math.tan(hfov / 2)); look(0, 0, Math.min(1.9, Math.max(1, d / VIEW.length()))); }
+  };
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
 
   const bars = hpBars(container);
@@ -124,7 +165,8 @@ export function mountVillage(container, { buildings = [], onTapGround } = {}) {
     const g = new THREE.Group(); scene.add(g);
     const tiles = []; const tileGeo = new THREE.PlaneGeometry(0.92, 0.92);
     for (let k = 0; k < 9; k++) { const m = new THREE.Mesh(tileGeo, new THREE.MeshBasicMaterial({ color: 0x3ad86a, transparent: true, opacity: 0.6, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.position.set((k % 3) - 1, 0.04, Math.floor(k / 3) - 1); g.add(m); tiles.push(m); }
-    const ghost = new THREE.Group(); g.add(ghost); ghost.add(platform()); const a = buildArcher(); a.root.position.y = 0.62; a.root.rotation.y = Math.PI * 0.75; ghost.add(a.root); units.push(a);
+    // No platform while placing, so the 9 cells show under the archer.
+    const ghost = new THREE.Group(); g.add(ghost); const a = buildArcher(); a.root.position.y = 0.62; a.root.rotation.y = Math.PI * 0.75; ghost.add(a.root); units.push(a);
     ghost.traverse((m) => { if (m.material) { m.material = m.material.clone(); m.material.transparent = true; m.material.opacity = 0.75; } });
     placing = { g, tiles, a, i: i0, j: j0, ok: true, onMove, drag: false };
     gridLines.visible = true;
@@ -155,7 +197,19 @@ export function mountVillage(container, { buildings = [], onTapGround } = {}) {
   // A tap (not a drag) on the ground moves the building there too — easier on a phone.
   let downAt = null;
   el.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
-  el.addEventListener('click', (e) => { if (!placing || placing.drag || !downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return; const p = groundAt(e); if (p) { const [i, j] = cellOf(p); setPlace(i, j); } });
+  el.addEventListener('click', (e) => {
+    if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
+    if (placing) { if (placing.drag) return; const p = groundAt(e); if (p) { const [i, j] = cellOf(p); setPlace(i, j); } return; }
+    // A tap on a tree or on the Town Hall.
+    const r = el.getBoundingClientRect(); ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ptr, camera);
+    const hits = ray.intersectObjects(pickables.map((x) => x.obj), true);
+    if (!hits.length) return;
+    let o = hits[0].object; const owner = () => pickables.find((x) => x.obj === o);
+    while (o && !owner()) o = o.parent;
+    const pk = o && owner(); if (!pk) return;
+    const at = { x: e.clientX - r.left, y: e.clientY - r.top };
+    if (pk.kind === 'obstacle') onObstacle?.(pk.o, at); else onTownHall?.(at);
+  });
 
   // ---------- construction ----------
   let site = null;
@@ -289,6 +343,15 @@ export function mountVillage(container, { buildings = [], onTapGround } = {}) {
     // Placing: a ghost with 3×3 cells under it; onMove(ok) tells whether the spot is free.
     startPlacing, endPlacing, get placing() { return placing; },
     startSite, finishSite, get site() { return site; },
+    obstacleList: () => obstacles.map((o) => ({ id: o.id, kind: o.kind, cost: o.cost, pos: o.obj.position.clone() })),
+    // Clear a tree: it shrinks away in a burst of leaves, and its cells are free again.
+    removeObstacle(id) {
+      const k = obstacles.findIndex((o) => o.id === id); if (k < 0) return false;
+      const o = obstacles[k]; obstacles.splice(k, 1); pickables.splice(pickables.findIndex((x) => x.o === o), 1);
+      const p = o.obj.position; burst(p.x, 1.5, p.z, 0x5aa83a, 40, 3); burst(p.x, 0.3, p.z, 0xc9a26a, 20, 2);
+      const t0 = performance.now(); const shrink = () => { const e = Math.min(1, (performance.now() - t0) / 700); o.obj.scale.setScalar(Math.max(0.01, 1 - e)); o.obj.rotation.y += 0.2; if (e < 1) requestAnimationFrame(shrink); else { scene.remove(o.obj); untake(o.i, o.j, 2, 2); } }; shrink();
+      return true;
+    },
     defend, heal, burst,
     buildings: () => placed.slice(),
     dispose() { cancelAnimationFrame(raf); ro.disconnect(); bars.dispose(); controls.dispose(); scene.traverse((o) => o.geometry?.dispose?.()); renderer.dispose(); renderer.forceContextLoss?.(); renderer.domElement.remove(); },

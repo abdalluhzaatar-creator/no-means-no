@@ -5,7 +5,7 @@
 // kings attack and the archer shoots them down; it heals; then the player attacks the
 // Void Kings' camp with two archers and wins ⭐⭐⭐, 500 gold and 500 light.
 // Checkpoints are saved (st.onboard): 'intro' → 'built' → 'defended' → 'done'.
-import { mountVillage } from './village3d.js';
+import { mountVillage, GRID } from './village3d.js';
 import { createPortraits } from './portrait3d.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -13,13 +13,14 @@ const GEMS_START = 300, SPEEDUP = 1, BUILD_S = 10, REWARD = { gold: 500, nour: 5
 const START_CELL = [6, 26];   // where the archer appears for placing (near the king's side)
 
 export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
-  st.gems ??= GEMS_START; st.nour ??= 0; st.base ??= { buildings: [] }; st.onboard ??= 'intro';
+  st.gems ??= GEMS_START; st.nour ??= 0; st.base ??= { buildings: [] }; st.base.cleared ??= []; st.onboard ??= 'intro';
   const root = document.createElement('div'); root.className = 'ob'; host.appendChild(root);
   root.innerHTML = `
     <div class="ob-view"></div>
     <div class="ob-res"><span>🪙 <b data-r="gold"></b></span><span>✨ <b data-r="nour"></b></span><span class="gem">💎 <b data-r="gems"></b></span></div>
     <div class="ob-talk" hidden><b class="ob-who"></b><p></p><small class="ob-tap">انقر للمتابعة ▼</small></div>
     <div class="ob-hint" hidden></div>
+    <div class="ob-pop" hidden></div>
     <button class="ob-hammer" hidden>🔨</button>
     <div class="ob-shop" hidden><h3>🔨 ابنِ</h3><button class="ob-card" data-b="archer"><span class="ob-ico">🏹</span><b>رامي السهام</b><small>يحمي البعد من ملوك الفراغ</small><em>مجاني</em></button></div>
     <div class="ob-confirm" hidden><button class="ob-no">✕</button><button class="ob-yes">✓</button></div>
@@ -75,12 +76,31 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
   const handAt = (x, y) => { const h = q('.ob-hand'); handEl = null; h.hidden = false; h.style.left = `${x - 18}px`; h.style.top = `${y}px`; };
   const click = (el) => new Promise((r) => { el.onclick = () => { el.onclick = null; sfx.click?.(); r(); }; });
 
-  const openVillage = () => { village?.dispose(); view.innerHTML = ''; village = mountVillage(view, { buildings: st.base.buildings }); return village; };
+  // A small panel where the player tapped: a tree (clear it for gold) or the Town Hall.
+  const pop = q('.ob-pop');
+  const closePop = () => { pop.hidden = true; };
+  const openPop = (html, at) => {
+    pop.innerHTML = html; pop.hidden = false;
+    pop.style.left = `${Math.max(8, Math.min(innerWidth - pop.offsetWidth - 8, at.x - pop.offsetWidth / 2))}px`;
+    pop.style.top = `${Math.max(56, at.y - pop.offsetHeight - 16)}px`;
+    sfx.open?.();
+  };
+  view.addEventListener('pointerdown', closePop);
+  const onObstacle = (o, at) => {
+    const can = (st.gold || 0) >= o.cost;
+    openPop(`<b>${o.kind === 'palm' ? '🌴' : '🌳'} ${o.name}</b><button class="ob-pop-btn" ${can ? '' : 'disabled'}>🪓 إزالة · 🪙 ${o.cost}</button>${can ? '' : '<small>ذهب غير كافٍ</small>'}`, at);
+    pop.querySelector('.ob-pop-btn').onclick = () => {
+      if ((st.gold || 0) < o.cost || !village.removeObstacle(o.id)) return;
+      st.gold -= o.cost; st.base.cleared.push(o.id); res(); save(); sfx.wood?.(); closePop();
+    };
+  };
+  const onTownHall = (at) => openPop('<b>🏛 القلعة</b><span>المستوى 1</span><small>قلب البعد الروحي</small>', at);
+  const openVillage = () => { village?.dispose(); view.innerHTML = ''; village = mountVillage(view, { buildings: st.base.buildings, cleared: st.base.cleared, onObstacle, onTownHall }); if (window.__nmnDebug) window.__village = village; return village; };
 
   // ---------- 1 · the base, the guide and the King of the Void ----------
   const intro = async () => {
     await wait(600);
-    village.flyTo(4, 6, 0.6, 1200);
+    village.flyTo(0, 2, 0.75, 1400);
     await wait(900);
     await say('guide', 'مرحباً أيها المحارب!');
     await say('guide', 'هنا الجانب الروحي من شخصيتك… هل دخلت إليه من قبل؟');
@@ -99,7 +119,8 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
       await click(card); shop.hidden = true; ham.hidden = true; hand(null, false);
       hint('ضع رامي السهام بمكان يحمي البعد الروحي — اسحبه، ولما تصير المربعات خضرا اكبس ✓');
       const conf = q('.ob-confirm'), yes = q('.ob-yes'), no = q('.ob-no');
-      village.flyTo(START_CELL[0] - 18.5, START_CELL[1] - 18.5, 0.7, 700);
+      // The spot, a little low on screen so ✓ ✕ show above it, clear of the instruction strip.
+      village.flyTo(START_CELL[0] + 1.5 - GRID / 2, START_CELL[1] + 1.5 - GRID / 2 + 3, 0.75, 700);
       village.startPlacing(START_CELL[0], START_CELL[1], (ok) => { yes.disabled = !ok; conf.classList.toggle('bad', !ok); });
       conf.hidden = false;
       const choice = await new Promise((r) => { yes.onclick = () => { if (!yes.disabled) r(true); }; no.onclick = () => r(false); });
@@ -185,6 +206,7 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
 
   (async () => {
     openVillage();
+    await wait(0);   // let the caller hold on to this run before anything finishes
     try {
       if (st.onboard === 'intro') { await intro(); const cell = await buildArcher(); await construct(cell); }
       if (st.onboard === 'built') await defence();

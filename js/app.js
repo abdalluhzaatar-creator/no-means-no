@@ -57,7 +57,7 @@ async function loadGame() {
   try { raw = await storage.load(); } catch (e) { console.error(e); FX.toast('تعذّر تحميل الحفظ', 'err'); }
   state = raw ? E.migrate(raw) : E.demoState();
   syncClock();
-  if (state.onboard && state.onboard !== 'done') screen = 'base';
+  if (state.base) screen = 'base';   // the game opens on the base (the spiritual dimension), as Clash opens on your village
   C.ensure(state);
   if (!raw) scheduleSave();
   $('#account').textContent = storage.accountName ? `👤 ${storage.accountName}` : '👤 حسابك';
@@ -202,9 +202,10 @@ async function bindBase() {
     onDone: () => {
       // After the tutorial: the way back to the rest of the game.
       const bar = document.createElement('div'); bar.className = 'ob-done-bar';
-      bar.innerHTML = `<button data-ob-world>🗺 العالم</button>`;
+      bar.innerHTML = `<button data-ob-world>🗺 العالم</button>${obPreview ? '' : '<button data-ob-habits>📜 مهام البعد الروحي</button>'}`;
       host.querySelector('.ob')?.appendChild(bar);
       bar.querySelector('[data-ob-world]').onclick = () => { if (obPreview) FX.toast('خلصت التجربة — رجعت لتقدّمك الحقيقي'); go('world'); };
+      bar.querySelector('[data-ob-habits]')?.addEventListener('click', () => { currentChar = 'worshipper'; go('character'); });   // the old habits screen, until it moves into the base
       if (!obPreview) render();
     },
   });
@@ -446,6 +447,7 @@ function openSpot(id) {
   const def = E.findRegion(id);
   if (def.kind === 'trophies') return go('trophies');
   if (def.kind === 'hq') return go('hq');
+  if (id === 'sanctuary' && state.base) return go('base');   // the spiritual dimension is the base now
   if (def.kind === 'leaders') {
     const st = E.shipStage(state);
     modal(`<div class="keyuse"><div class="keyuse-icon">🏝</div><h2>${def.name}</h2><p class="muted">${def.desc}</p>
