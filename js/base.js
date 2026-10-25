@@ -186,7 +186,7 @@ export function ensureBase(base = {}, now = Date.now()) {
 
 // What a collector holds right now.
 // A building's numbers at its level (level 1 when it has none).
-export const statsOf = (b, lv = b.lv || 1) => BUILDINGS[b.type]?.lv[lv - 1] || {};
+export const statsOf = (b, lv = b.lv ?? 1) => BUILDINGS[b.type]?.lv[Math.max(1, lv) - 1] || {};
 export const maxLevel = (type) => BUILDINGS[type].lv.length;
 export const ready = (b, now = Date.now()) => {
   const d = BUILDINGS[b.type]; if (!d?.makes || b.up) return 0;
@@ -194,7 +194,7 @@ export const ready = (b, now = Date.now()) => {
   return Math.min(cap, Math.floor((rate * Math.max(0, now - (b.t ?? now))) / 3600e3));
 };
 // How much of a resource the base can hold: the Town Hall and the storages.
-export const capacity = (base, res) => (statsOf({ type: 'townhall', lv: base.th?.lv }).holds?.[res] || 0) + (base.buildings || []).reduce((a, b) => a + (statsOf(b).holds?.[res] || 0), 0);
+export const capacity = (base, res) => (statsOf({ type: 'townhall', lv: base.th?.lv }).holds?.[res] || 0) + (base.buildings || []).filter((b) => b.lv !== 0).reduce((a, b) => a + (statsOf(b).holds?.[res] || 0), 0);
 // Collect a collector into the storages: what fits goes in; the rest stays in the collector.
 export function collect(st, b, now = Date.now()) {
   const d = BUILDINGS[b.type], have = ready(b, now); if (!have) return 0;
@@ -220,10 +220,13 @@ export function gemsFor(seconds) {
 }
 const allBuildings = (base) => [base.th, ...(base.buildings || [])];
 // What the one builder is doing (an upgrade or clearing an obstacle), or null.
-export const builderJob = (base) => allBuildings(base).find((b) => b?.up) || (base.clearing ? { clearing: base.clearing } : null);
+// Builders: one per builder's hut. Busy: one for each upgrade or new building, and one clearing.
+export const builders = (base) => Math.max(1, (base.buildings || []).filter((b) => b.type === 'builder' && !b.up).length);
+export const busyBuilders = (base) => allBuildings(base).filter((b) => b?.up).length + (base.clearing ? 1 : 0);
+export const builderJob = (base) => busyBuilders(base) >= builders(base);
 // Can this building go up a level now? { ok, next, reason }.
 export function canUpgrade(st, b) {
-  const lv = b.lv || 1, next = BUILDINGS[b.type].lv[lv];
+  const lv = b.lv ?? 1, next = BUILDINGS[b.type].lv[lv];
   if (b.up) return { ok: false, reason: 'قيد التطوير' };
   if (!next) return { ok: false, reason: 'أعلى مستوى' };
   const th = st.base.th?.lv || 1;
@@ -244,7 +247,7 @@ export function startUpgrade(st, b, now = Date.now()) {
 export function finishUpgrades(base, now = Date.now()) {
   const done = [];
   for (const b of allBuildings(base)) if (b?.up && now >= b.up.end) {
-    b.lv = (b.lv || 1) + 1; delete b.up;
+    b.lv = (b.lv ?? 1) + 1; delete b.up;
     if (BUILDINGS[b.type].makes) b.t = now;
     done.push(b);
   }
@@ -261,10 +264,10 @@ export function rushUpgrade(st, b, now = Date.now()) {
 
 // ---------- training troops ----------
 // The army camp's room, the troops ready, and the barracks' line (trained one by one, in order).
-export const armyRoom = (base) => (base.buildings || []).filter((b) => b.type === 'armycamp').reduce((a, b) => a + (statsOf(b).room || 0), 0);
+export const armyRoom = (base) => (base.buildings || []).filter((b) => b.type === 'armycamp' && b.lv !== 0).reduce((a, b) => a + (statsOf(b).room || 0), 0);
 export const armySize = (base) => Object.entries(base.army || {}).reduce((a, [t, n]) => a + TROOPS[t].room * n, 0);
 export const queueSize = (base) => (base.queue || []).reduce((a, t) => a + TROOPS[t].room, 0);
-export const queueRoom = (base) => (base.buildings || []).filter((b) => b.type === 'barracks').reduce((a, b) => a + (statsOf(b).queue || 0), 0);
+export const queueRoom = (base) => (base.buildings || []).filter((b) => b.type === 'barracks' && b.lv !== 0).reduce((a, b) => a + (statsOf(b).queue || 0), 0);
 // Move the troops whose training is done into the army camp (training waits while the camp is full).
 export function advanceTraining(base, now = Date.now()) {
   base.army ??= {}; base.queue ??= [];
@@ -292,4 +295,36 @@ export function untrain(st, type) {
   const q = st.base.queue || [], k = q.lastIndexOf(type); if (k < 0) return false;
   q.splice(k, 1); st.nour = (st.nour || 0) + TROOPS[type].cost; if (k === 0) st.base.qT = Date.now();
   return true;
+}
+
+// ---------- the shop: new buildings ----------
+// What a new one costs and takes to build, and how many the Town Hall allows (by its level, 1–4).
+export const SHOP = {
+  goldmine: { res: 'nour', cost: 150, s: 60, max: [1, 2, 3, 4], tab: 'res' },
+  nourwell: { res: 'gold', cost: 150, s: 60, max: [1, 2, 3, 4], tab: 'res' },
+  goldstore: { res: 'nour', cost: 300, s: 5 * 60, max: [1, 1, 2, 2], tab: 'res' },
+  nourstore: { res: 'gold', cost: 300, s: 5 * 60, max: [1, 1, 2, 2], tab: 'res' },
+  builder: { res: 'gems', cost: 250, s: 0, max: [2, 2, 3, 3], tab: 'res' },
+  barracks: { res: 'nour', cost: 100, s: 60, max: [1, 1, 2, 2], tab: 'army' },
+  armycamp: { res: 'nour', cost: 250, s: 5 * 60, max: [1, 1, 2, 2], tab: 'army' },
+  archer: { res: 'gold', cost: 1000, s: 15 * 60, max: [1, 2, 2, 3], tab: 'def' },
+};
+export const countOf = (base, type) => (base.buildings || []).filter((b) => b.type === type).length;
+export const maxOf = (base, type) => SHOP[type].max[Math.min(3, (base.th?.lv || 1) - 1)];
+export function canBuy(st, type) {
+  const d = SHOP[type];
+  if (countOf(st.base, type) >= maxOf(st.base, type)) return { ok: false, reason: countOf(st.base, type) >= d.max[3] ? 'وصلت للعدد الأعلى' : 'طوّر القلعة لتبني أكثر' };
+  if ((st[d.res] || 0) < d.cost) return { ok: false, short: true, reason: d.res === 'gold' ? 'ذهب غير كافٍ' : d.res === 'gems' ? 'جواهر غير كافية' : 'نور غير كافٍ' };
+  if (d.s && builderJob(st.base)) return { ok: false, busy: true, reason: 'البنّاء مشغول' };
+  return { ok: true };
+}
+// Pay and start building at i, j (the caller checked the spot): level 0 until the builder is done.
+export function buy(st, type, i, j, now = Date.now()) {
+  const c = canBuy(st, type); if (!c.ok) return c;
+  const d = SHOP[type]; st[d.res] -= d.cost;
+  const b = { type, i, j, lv: d.s ? 0 : 1 };
+  if (d.s) b.up = { end: now + d.s * 1000, s: d.s };
+  if (BUILDINGS[type].makes) b.t = now;
+  st.base.buildings.push(b);
+  return { ok: true, b };
 }

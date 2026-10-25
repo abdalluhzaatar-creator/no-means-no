@@ -12,7 +12,7 @@ import { OrbitControls } from './vendor/OrbitControls.js';
 import { buildVoidKing, buildArcher, makeArrow, makeSoul, hpBars } from './units3d.js';
 import { glowTex } from './env3d.js';
 import { GRID, BORDER, BUILDINGS, OBSTACLES, ready } from './base.js';
-import { groundTexture, forest, obstacleModel, buildingModel, bubble, GRASS } from './basemodels3d.js';
+import { groundTexture, scenery, obstacleModel, buildingModel, bubble, GRASS } from './basemodels3d.js';
 
 export { GRID };
 const HALF = GRID / 2;
@@ -32,7 +32,7 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
   renderer.toneMapping = THREE.NoToneMapping;
   container.appendChild(renderer.domElement);
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x3f7f26); scene.fog = new THREE.Fog(0x3f7f26, 80, 150);
+  scene.background = new THREE.Color(0xa8dcf2); scene.fog = new THREE.Fog(0xb8e2f2, 90, 170);
   const camera = new THREE.PerspectiveCamera(38, 1, 0.5, 600);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x6a8a3a, 1.25));
   const sun = new THREE.DirectionalLight(0xfff4dc, 1.9); sun.position.set(22, 40, 16); sun.castShadow = true;
@@ -42,10 +42,10 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
   const far = new THREE.Mesh(new THREE.CircleGeometry(420, 64), std(GRASS.far, { roughness: 1 })); far.rotation.x = -Math.PI / 2; far.position.y = -0.02; far.receiveShadow = true; scene.add(far);
   const SIDE = GRID + BORDER * 2;
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(SIDE, SIDE), new THREE.MeshStandardMaterial({ map: groundTexture(), roughness: 1 })); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
-  scene.add(forest());
+  const tickers = [];
+  const land = scenery(); scene.add(land); tickers.push(land);
   // The grid lines, shown while a building is moved or placed (only over the map, not the strip).
   const gridLines = new THREE.GridHelper(GRID, GRID, 0xffffff, 0xffffff); gridLines.position.y = 0.02; gridLines.material.transparent = true; gridLines.material.opacity = 0.35; gridLines.visible = false; scene.add(gridLines);
-  const tickers = [];
 
   // Cells taken.
   const taken = new Set();
@@ -120,10 +120,10 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
   };
   // How a building looks at its level (a little bigger, gold trim from level 3), and the builder's fence while it's upgraded.
   function look3d(ent) {
-    const lv = ent.rec.lv || 1;
+    const lv = ent.rec.lv ?? 1;
     if (ent.kind !== 'archer') {
       if (ent.model) { ent.g.remove(ent.model); const k = tickers.indexOf(ent.model); if (k >= 0) tickers.splice(k, 1); }
-      const m = buildingModel(ent.kind); m.scale.setScalar(1 + Math.min(0.15, (lv - 1) * 0.04)); ent.g.add(m); if (m.userData.tick) tickers.push(m); ent.model = m;
+      const m = buildingModel(ent.kind); m.scale.setScalar(lv === 0 ? 0.6 : 1 + Math.min(0.15, (lv - 1) * 0.04)); ent.g.add(m); if (m.userData.tick) tickers.push(m); ent.model = m;
       if (lv >= 3) { const trim = new THREE.Mesh(new THREE.BoxGeometry(ent.n - 0.2, 0.08, ent.n - 0.2), std(0xe0b030, { metalness: 0.7, roughness: 0.3 })); trim.position.y = 0.04; m.add(trim); }
     }
     if (ent.rec.up && !ent.fence) {
@@ -154,26 +154,30 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
     g.userData.mat = mat; return g;
   };
   let placing = null;
-  const startPlacing = (i0, j0, onMove) => {
+  // A new building to place (the archer in the tutorial, anything from the shop after).
+  const startPlacing = (i0, j0, onMove, type = 'archer') => {
     deselect();
-    const g = new THREE.Group(); scene.add(g);
-    const tiles = tileSet(3); g.add(tiles);
-    // No platform while placing, so the 9 cells show under the archer.
-    const ghost = new THREE.Group(); g.add(ghost); const a = buildArcher(); a.root.position.y = 0.62; a.root.rotation.y = Math.PI * 0.75; ghost.add(a.root); units.push(a);
+    const n = BUILDINGS[type].n, g = new THREE.Group(); scene.add(g);
+    const tiles = tileSet(n); g.add(tiles);
+    // No platform while placing, so the cells show under it.
+    const ghost = new THREE.Group(); g.add(ghost); let a = null;
+    if (type === 'archer') { a = buildArcher(); a.root.position.y = 0.62; a.root.rotation.y = Math.PI * 0.75; ghost.add(a.root); units.push(a); }
+    else ghost.add(buildingModel(type));
     ghost.traverse((m) => { if (m.material) { m.material = m.material.clone(); m.material.transparent = true; m.material.opacity = 0.75; } });
-    placing = { g, tiles, a, i: i0, j: j0, ok: true, onMove, drag: false };
+    placing = { g, tiles, a, n, type, i: i0, j: j0, ok: true, onMove, drag: false };
     gridLines.visible = true;
     setPlace(i0, j0);
   };
   const setPlace = (i, j) => {
     if (!placing) return;
-    i = THREE.MathUtils.clamp(i, 0, GRID - 3); j = THREE.MathUtils.clamp(j, 0, GRID - 3);
-    placing.i = i; placing.j = j; placing.ok = free(i, j);
-    placing.g.position.copy(cellCenter(i, j));
+    const n = placing.n;
+    i = THREE.MathUtils.clamp(i, 0, GRID - n); j = THREE.MathUtils.clamp(j, 0, GRID - n);
+    placing.i = i; placing.j = j; placing.ok = free(i, j, n);
+    placing.g.position.copy(cellCenter(i, j, n));
     placing.tiles.userData.mat.color.set(placing.ok ? 0x3ad86a : 0xff4a3a);
     placing.onMove?.(placing.ok);
   };
-  const endPlacing = () => { if (!placing) return; scene.remove(placing.g); units.splice(units.indexOf(placing.a), 1); placing = null; gridLines.visible = false; controls.enabled = true; };
+  const endPlacing = () => { if (!placing) return; scene.remove(placing.g); if (placing.a) units.splice(units.indexOf(placing.a), 1); placing = null; gridLines.visible = false; controls.enabled = true; };
   const cellOf = (p, n = 3) => [Math.round(p.x + HALF - n / 2), Math.round(p.z + HALF - n / 2)];
   const el = renderer.domElement;
   el.addEventListener('pointerdown', (e) => {
@@ -184,12 +188,12 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
     }
     if (!placing) return;
     const p = groundAt(e);
-    if (p && Math.abs(p.x - placing.g.position.x) < 2 && Math.abs(p.z - placing.g.position.z) < 2) { placing.drag = true; controls.enabled = false; }
+    if (p && Math.abs(p.x - placing.g.position.x) < placing.n / 2 + 0.5 && Math.abs(p.z - placing.g.position.z) < placing.n / 2 + 0.5) { placing.drag = true; controls.enabled = false; }
   });
   el.addEventListener('pointermove', (e) => {
     if (sel?.drag) { const p = groundAt(e); if (p) { p.x += sel.off[0]; p.z += sel.off[1]; const [i, j] = cellOf(p, sel.ent.n); if (i !== sel.i || j !== sel.j) setSel(i, j); } }
   });
-  el.addEventListener('pointermove', (e) => { if (placing?.drag) { const p = groundAt(e); if (p) { const [i, j] = cellOf(p); if (i !== placing.i || j !== placing.j) setPlace(i, j); } } });
+  el.addEventListener('pointermove', (e) => { if (placing?.drag) { const p = groundAt(e); if (p) { const [i, j] = cellOf(p, placing.n); if (i !== placing.i || j !== placing.j) setPlace(i, j); } } });
   const up = (e) => {
     if (sel?.drag) { sel.drag = false; controls.enabled = true; return; }
     if (!placing) { const p = onTapGround && groundAt(e); if (p) onTapGround(p); return; }
@@ -201,7 +205,7 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
   el.addEventListener('pointerdown', (e) => { downAt = [e.clientX, e.clientY]; });
   el.addEventListener('click', (e) => {
     if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
-    if (placing) { if (placing.drag) return; const p = groundAt(e); if (p) { const [i, j] = cellOf(p); setPlace(i, j); } return; }
+    if (placing) { if (placing.drag) return; const p = groundAt(e); if (p) { const [i, j] = cellOf(p, placing.n); setPlace(i, j); } return; }
     // A tap on an obstacle or a building.
     const r = el.getBoundingClientRect(); ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ptr, camera);
     const hits = ray.intersectObjects(pickables.map((x) => x.obj), true);
@@ -421,6 +425,10 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
     checkBubbles,
     defend, heal, burst,
     buildings: () => placed.slice(),
+    add: (rec, pop = true) => !!addBuilding(rec, { pop }),
+    // A free spot for an n×n building near (i, j) (where the shop puts a new one first).
+    freeNear(i, j, n) { for (let r = 0; r < GRID; r++) for (let x = i - r; x <= i + r; x++) for (let z = j - r; z <= j + r; z++) if (Math.max(Math.abs(x - i), Math.abs(z - j)) === r && free(x, z, n)) return [x, z]; return null; },
+    get center() { const t = controls.target; return [Math.round(t.x + HALF), Math.round(t.z + HALF)]; },
     // A building's record changed (a level, an upgrade started or done): how it looks.
     refresh(rec) { const e = ents.find((x) => x.rec === rec); if (e) look3d(e); checkBubbles(); },
     // Where a building is (for labels and timers over it).

@@ -20,7 +20,7 @@ const rng = (seed) => () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const hash = (s) => { let h = 7; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 2147483646; return h + 1; };
 
 // ---------- the ground ----------
-export const GRASS = { a: '#9bcf45', b: '#93c73f', edge: '#7fb33a', far: 0x3f7f26 };
+export const GRASS = { a: '#9bcf45', b: '#93c73f', edge: '#8cc23f', far: 0x86bc3c };
 // The map and its strip as one texture: one pixel block per cell, soft checks inside, plain strip outside, tufts.
 export function groundTexture() {
   const cells = GRID + BORDER * 2, px = 16, cv = document.createElement('canvas'); cv.width = cv.height = cells * px;
@@ -39,37 +39,89 @@ export function groundTexture() {
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.magFilter = THREE.LinearFilter; return t;
 }
 
-// The forest all round the map, thick right up to the grass strip and on to the horizon,
-// as in Clash (cheap: instanced meshes — round trees of two leafy blobs, a few pines).
-export function forest(seed = 5) {
-  const r = rng(seed), g = new THREE.Group(), edge = GRID / 2 + BORDER + 0.9, out = edge + 26, step = 2.1;
-  const spots = [];
-  for (let x = -out; x <= out; x += step) for (let z = -out; z <= out; z += step) {
-    const px = x + (r() - 0.5) * step * 0.9, pz = z + (r() - 0.5) * step * 0.9;
-    const d = Math.max(Math.abs(px), Math.abs(pz)) - edge;
-    if (d < 0 || Math.hypot(px, pz) > out + 6) continue;
-    spots.push([px, pz, d]);
+// The land round the village, as Clash's classic scenery (drawn from memory of it):
+// open grass first with trees here and there in little groups, bushes and flowers; the
+// woods getting thicker further out; on the left the sea, a sandy shore, a wooden jetty
+// and a boat; behind, grey-brown cliffs. Instanced meshes keep it cheap.
+export function scenery(seed = 5) {
+  const r = rng(seed), g = new THREE.Group(), edge = GRID / 2 + BORDER, out = edge + 30;
+  const SEA_X = -edge - 9;                                   // the shore line (x), on the left of the screen
+  // Groups of trees: a few centres with trees round them, more of them further out.
+  const noise = (x, z) => Math.sin(x * 0.21 + 1.3) * Math.cos(z * 0.17 + 0.4) + Math.sin(x * 0.07 - z * 0.11 + 2.1) * 0.8 + Math.sin((x + z) * 0.33) * 0.35;
+  const trees = [], bushes = [], flowers = [];
+  for (let k = 0; k < 26000 && trees.length < 1500; k++) {
+    const x = (r() * 2 - 1) * out, z = (r() * 2 - 1) * out, d = Math.max(Math.abs(x), Math.abs(z)) - edge;
+    if (d < 0.6 || x < SEA_X + 2.5) continue;
+    const want = d < 4 ? 0.02 : d < 12 ? 0.06 + Math.max(0, noise(x, z)) * 0.35 : 0.25 + Math.max(0, noise(x, z) + 0.4) * 0.5;
+    const roll = r();
+    if (roll < want) trees.push([x, z, d]);
+    else if (roll < want + 0.03 && d < 14) bushes.push([x, z]);
+    else if (roll < want + 0.07 && d < 10) flowers.push([x, z]);
   }
-  const pines = spots.filter(() => r() < 0.16), round = spots.filter((s) => !pines.includes(s));
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc3 = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color();
-  const LEAF = [0x4f9e2a, 0x5aab30, 0x45922a, 0x63b436, 0x3d8526];
-  const crown = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 12, 9), flat(0xffffff), round.length * 2);
-  const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.16, 0.22, 1, 10), flat(0x8b5a2b), round.length);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color();
+  const LEAF = [0x4f9e2a, 0x5aab30, 0x48962a, 0x66b836, 0x3f8a26];
+  const pines = trees.filter(() => r() < 0.2), round = trees.filter((t) => !pines.includes(t));
+  const crown = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 14, 10), flat(0xffffff), round.length * 3);
+  const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.14, 0.2, 1, 10), flat(0x8b5a2b), round.length);
   round.forEach(([x, z, d], k) => {
-    const sc = 1.05 + r() * 0.45 + Math.min(0.35, d * 0.03);
-    m4.compose(p.set(x, 0.5 * sc, z), q, sc3.set(sc, sc, sc)); trunk.setMatrixAt(k, m4);
-    m4.compose(p.set(x, 1.55 * sc, z), q, sc3.set(sc * 1.1, sc * 0.95, sc * 1.1)); crown.setMatrixAt(k * 2, m4);
-    const a = r() * Math.PI * 2;
-    m4.compose(p.set(x + Math.cos(a) * 0.55 * sc, 2.05 * sc, z + Math.sin(a) * 0.55 * sc), q, sc3.set(sc * 0.7, sc * 0.65, sc * 0.7)); crown.setMatrixAt(k * 2 + 1, m4);
-    crown.setColorAt(k * 2, c.set(LEAF[k % 5])); crown.setColorAt(k * 2 + 1, c.set(LEAF[(k + 3) % 5]).offsetHSL(0, 0, 0.04));
+    const s = 0.8 + r() * 0.5 + Math.min(0.5, d * 0.025);
+    m4.compose(p.set(x, 0.55 * s, z), q, sc.set(s, s * 1.1, s)); trunk.setMatrixAt(k, m4);
+    m4.compose(p.set(x, 1.45 * s, z), q, sc.set(s * 0.8, s * 0.72, s * 0.8)); crown.setMatrixAt(k * 3, m4);
+    for (const n of [1, 2]) {
+      const a = r() * Math.PI * 2;
+      m4.compose(p.set(x + Math.cos(a) * 0.45 * s, (1.2 + n * 0.25) * s, z + Math.sin(a) * 0.45 * s), q, sc.set(s * 0.55, s * 0.5, s * 0.55)); crown.setMatrixAt(k * 3 + n, m4);
+    }
+    const base = LEAF[Math.floor(r() * 5)];
+    crown.setColorAt(k * 3, c.set(base)); crown.setColorAt(k * 3 + 1, c.set(base).offsetHSL(0, 0, 0.05)); crown.setColorAt(k * 3 + 2, c.set(base).offsetHSL(0, 0, -0.03));
   });
-  const pine = new THREE.InstancedMesh(new THREE.ConeGeometry(0.95, 2.8, 18), flat(0xffffff), pines.length);
+  const pine = new THREE.InstancedMesh(new THREE.ConeGeometry(0.75, 2.3, 16), flat(0xffffff), pines.length * 2);
+  const pineTrunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.1, 0.14, 0.6, 8), flat(0x7a4f28), pines.length);
   pines.forEach(([x, z, d], k) => {
-    const sc = 1.0 + r() * 0.4 + Math.min(0.35, d * 0.03);
-    m4.compose(p.set(x, 1.45 * sc, z), q, sc3.set(sc, sc, sc)); pine.setMatrixAt(k, m4);
-    pine.setColorAt(k, c.set([0x2e8b3a, 0x36964a, 0x287a33][k % 3]));
+    const s = 0.85 + r() * 0.4 + Math.min(0.5, d * 0.025);
+    m4.compose(p.set(x, 0.3 * s, z), q, sc.set(s, s, s)); pineTrunk.setMatrixAt(k, m4);
+    m4.compose(p.set(x, 1.35 * s, z), q, sc.set(s, s, s)); pine.setMatrixAt(k * 2, m4);
+    m4.compose(p.set(x, 2.1 * s, z), q, sc.set(s * 0.7, s * 0.6, s * 0.7)); pine.setMatrixAt(k * 2 + 1, m4);
+    const col = [0x2e8b3a, 0x36964a, 0x2a7f35][k % 3]; pine.setColorAt(k * 2, c.set(col)); pine.setColorAt(k * 2 + 1, c.set(col).offsetHSL(0, 0, 0.04));
   });
-  for (const m of [crown, trunk, pine]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
+  const bush = new THREE.InstancedMesh(new THREE.SphereGeometry(0.5, 12, 8), flat(0xffffff), bushes.length * 2);
+  bushes.forEach(([x, z], k) => {
+    const s = 0.7 + r() * 0.6;
+    m4.compose(p.set(x, 0.25 * s, z), q, sc.set(s, s * 0.75, s)); bush.setMatrixAt(k * 2, m4);
+    m4.compose(p.set(x + 0.4 * s, 0.2 * s, z + 0.2 * s), q, sc.set(s * 0.7, s * 0.55, s * 0.7)); bush.setMatrixAt(k * 2 + 1, m4);
+    bush.setColorAt(k * 2, c.set(0x5aab30)); bush.setColorAt(k * 2 + 1, c.set(0x66b836));
+  });
+  const flower = new THREE.InstancedMesh(new THREE.SphereGeometry(0.09, 8, 6), std(0xffffff, { roughness: 0.6 }), flowers.length * 4);
+  flowers.forEach(([x, z], k) => {
+    const col = [0xffffff, 0xfff27a, 0xff8ac0, 0xffb04a][k % 4];
+    for (let n = 0; n < 4; n++) { m4.compose(p.set(x + (r() - 0.5) * 0.8, 0.08, z + (r() - 0.5) * 0.8), q, sc.set(1, 1, 1)); flower.setMatrixAt(k * 4 + n, m4); flower.setColorAt(k * 4 + n, c.set(col)); }
+  });
+  for (const m of [crown, trunk, pine, pineTrunk, bush]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
+  g.add(flower);
+
+  // The sea on the left, the sandy shore, a jetty and a boat.
+  const sand = new THREE.Mesh(new THREE.PlaneGeometry(6, out * 2 + 40), std(0xead9a0, { roughness: 1 })); sand.rotation.x = -Math.PI / 2; sand.position.set(SEA_X + 1, 0.01, 0); sand.receiveShadow = true; g.add(sand);
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(200, out * 2 + 60), new THREE.MeshStandardMaterial({ color: 0x3aa6d8, roughness: 0.25, metalness: 0.1 })); sea.rotation.x = -Math.PI / 2; sea.position.set(SEA_X - 100, 0.02, 0); g.add(sea);
+  const foam = new THREE.Mesh(new THREE.PlaneGeometry(0.6, out * 2 + 40), new THREE.MeshBasicMaterial({ color: 0xe8f8ff, transparent: true, opacity: 0.8 })); foam.rotation.x = -Math.PI / 2; foam.position.set(SEA_X - 1.9, 0.03, 0); g.add(foam);
+  const wood = flat(0xa8743e), darkWood = flat(0x7a5230);
+  const jetty = new THREE.Group(); jetty.position.set(SEA_X - 2, 0, 6); g.add(jetty);
+  for (let k = 0; k < 7; k++) { const pl = new THREE.Mesh(new THREE.BoxGeometry(1, 0.12, 2.2), k % 2 ? wood : flat(0xb8844a)); pl.position.set(-k * 1.05 + 2, 0.35, 0); pl.castShadow = pl.receiveShadow = true; jetty.add(pl); }
+  for (let k = 0; k < 4; k++) for (const z of [-1.05, 1.05]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.9, 10), darkWood); post.position.set(-k * 2 + 2, 0.15, z); jetty.add(post); }
+  const boat = new THREE.Group(); boat.position.set(SEA_X - 8, 0, 8.6); g.add(boat);
+  const hull = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 0.8, 4.2, 16, 1, false, 0, Math.PI), flat(0x8b5a2b)); hull.rotation.set(Math.PI / 2, 0, Math.PI / 2); hull.position.y = 0.55; hull.scale.set(1, 1, 0.65); hull.castShadow = true; boat.add(hull);
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(4, 0.1, 1.5), wood); deck.position.y = 0.6; boat.add(deck);
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 3.4, 10), darkWood); mast.position.y = 2.2; boat.add(mast);
+  const sail = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.1, 6, 6), std(0xf6efdc, { side: THREE.DoubleSide })); sail.position.set(0.05, 2.4, 0); sail.rotation.y = Math.PI / 2; boat.add(sail);
+  const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.3), std(0xd8341a, { side: THREE.DoubleSide })); flag.position.set(0, 4.0, 0.25); flag.rotation.y = Math.PI / 2; boat.add(flag);
+  g.userData.tick = (t) => { boat.position.y = Math.sin(t * 1.3) * 0.06; boat.rotation.z = Math.sin(t * 1.1) * 0.03; foam.material.opacity = 0.6 + Math.sin(t * 2) * 0.2; };
+
+  // Cliffs far behind (the top of the screen), grey-brown and smooth.
+  const rock = flat(0xa39880), rock2 = flat(0x8c8170);
+  for (let k = 0; k < 18; k++) {
+    const a = -Math.PI * 0.75 + (k / 17 - 0.5) * 1.5, rr = out + 4 + r() * 8;
+    const m = new THREE.Mesh(boulder(5 + r() * 4, k + 11), k % 2 ? rock : rock2);
+    m.position.set(Math.cos(a) * rr * 1.3, 0, Math.sin(a) * rr * 1.3); m.scale.set(1.4, 1.2 + r() * 0.8, 1.2); m.rotation.y = r() * 6;
+    m.castShadow = false; m.receiveShadow = true; g.add(m);
+  }
   return g;
 }
 

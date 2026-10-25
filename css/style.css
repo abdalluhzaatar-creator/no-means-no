@@ -898,3 +898,25 @@ body.in-base .topbar, body.in-base #sandbox-badge { display: none; }
 .bu-tdel { background: #d8341a; color: #fff; border: 2px solid #fff; border-radius: 10px; padding: 3px 12px; font: inherit; font-weight: 900; cursor: pointer; }
 @media (max-width: 480px) { .bu-b { width: 66px; height: 66px; } .bu-b .bu-i { font-size: 1.35rem; } .bu-title { font-size: 1rem; } }
 .bu-card h3 { padding-inline: 34px; }
+/* Clash's corner buttons after the tutorial: attack bottom left, shop bottom right. */
+.ob-corner { position: absolute; inset: auto 12px 12px 12px; z-index: 4; display: flex; justify-content: space-between; pointer-events: none; }
+.ob-corner button { pointer-events: auto; width: 84px; height: 84px; border-radius: 18px; border: 3px solid #fff; display: grid; place-content: center; justify-items: center; font: inherit; cursor: pointer; color: #fff; text-shadow: 0 2px 0 #0008; box-shadow: 0 5px 0 #0006, 0 10px 18px #0005; }
+.ob-corner span { font-size: 2.1rem; line-height: 1; } .ob-corner b { font-weight: 900; font-size: .95rem; }
+.ob-corner .ob-raid { order: 2; background: linear-gradient(#ffb04a, #e0601a); }
+.ob-corner .ob-shopbtn { order: 1; background: linear-gradient(#8de05a, #3fa82a); }
+[dir=ltr] .ob-corner .ob-raid { order: 1; } [dir=ltr] .ob-corner .ob-shopbtn { order: 2; }
+.ob:has(.bu-bar:not([hidden])) .ob-corner, .ob:has(.bu-place:not([hidden])) .ob-corner { display: none; }
+@media (max-width: 560px) { .ob-done-bar { bottom: 108px; } .ob-corner button { width: 72px; height: 72px; } }
+.bu-place { position: absolute; z-index: 5; display: flex; gap: 14px; }
+.bu-place button { width: 52px; height: 52px; border-radius: 50%; border: 3px solid #fff; font-size: 1.5rem; font-weight: 900; color: #fff; cursor: pointer; box-shadow: 0 4px 0 #0006; }
+.bu-pyes { background: #3fa82a; } .bu-pno { background: #d8341a; } .bu-pyes:disabled { filter: grayscale(1); opacity: .6; }
+.bu-tabs { display: flex; gap: 6px; justify-content: center; margin: 8px 0; }
+.bu-tabs button { border: 2px solid #fff; border-radius: 10px; padding: 6px 12px; background: #d8cdb0; font: inherit; font-weight: 800; cursor: pointer; }
+.bu-tabs button.on { background: #f0b83a; }
+.bu-shop { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 10px; }
+.bu-item { display: grid; justify-items: center; gap: 2px; padding: 10px 6px; background: linear-gradient(#fff6d8, #f0d898); border: 3px solid #fff; border-radius: 12px; box-shadow: 0 4px 0 #a8782a; font: inherit; cursor: pointer; color: #2a2010; }
+.bu-item span { font-size: 2rem; } .bu-item b { font-size: .85rem; } .bu-item small { font-size: .72rem; color: #6a5a3a; }
+.bu-item em { font-style: normal; font-weight: 900; } .bu-item em.short { color: #d0241a; }
+.bu-item i { font-style: normal; font-size: .68rem; color: #d0241a; font-weight: 800; }
+.bu-item.off { filter: saturate(.4); opacity: .8; }
+.ob:has(.ob-battle:not([hidden])) .ob-done-bar, .ob:has(.ob-load:not([hidden])) .ob-done-bar, .ob:has(.ob-win:not([hidden])) .ob-done-bar { display: none; }

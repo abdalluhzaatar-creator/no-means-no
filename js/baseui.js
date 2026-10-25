@@ -6,9 +6,10 @@
 import {
   BUILDINGS, TROOPS, statsOf, maxLevel, ready, capacity, collect, canUpgrade, startUpgrade, finishUpgrades, rushUpgrade,
   gemsFor, builderJob, clearGems, train, untrain, advanceTraining, armySize, armyRoom, queueSize, queueRoom,
+  SHOP, canBuy, buy, countOf, maxOf,
 } from './base.js';
 
-const RES = { gold: '🪙', nour: '✨' };
+const RES = { gold: '🪙', nour: '✨', gems: '💎' };
 const num = (n) => Math.round(n).toLocaleString('en');
 // 1س 20د · 4د 30ث · 45ث
 export const timeText = (s) => {
@@ -20,7 +21,8 @@ export const timeText = (s) => {
 export function createBaseUI(root, { st, save, sfx = {}, getVillage, res }) {
   const el = document.createElement('div'); el.className = 'bu'; root.appendChild(el);
   el.innerHTML = `<div class="bu-bar" hidden><div class="bu-title"></div><div class="bu-btns"></div></div>
-    <div class="bu-timers"></div><div class="bu-win" hidden><div class="bu-card"><button class="bu-x">✕</button><div class="bu-body"></div></div></div>`;
+    <div class="bu-timers"></div>
+    <div class="bu-place" hidden><button class="bu-pno">✕</button><button class="bu-pyes">✓</button></div><div class="bu-win" hidden><div class="bu-card"><button class="bu-x">✕</button><div class="bu-body"></div></div></div>`;
   const q = (s) => el.querySelector(s);
   const bar = q('.bu-bar'), win = q('.bu-win'), body = q('.bu-body'), timers = q('.bu-timers');
   q('.bu-x').onclick = () => closeWin();
@@ -42,12 +44,12 @@ export function createBaseUI(root, { st, save, sfx = {}, getVillage, res }) {
       bar.hidden = false; return;
     }
     const b = selected; if (!b) { bar.hidden = true; return; }
-    const lv = b.lv || 1, d = BUILDINGS[b.type];
-    q('.bu-title').textContent = `${name(b)} (المستوى ${lv})`;
+    const lv = b.lv ?? 1, d = BUILDINGS[b.type];
+    q('.bu-title').textContent = lv ? `${name(b)} (المستوى ${lv})` : `${name(b)} (قيد البناء)`;
     let h = btn('ℹ', 'معلومات');
     if (b.up) h += btn('⚡', 'إنهاء الآن', `💎 ${gemsFor((b.up.end - Date.now()) / 1000)}`, 'gem');
     else if (lv < maxLevel(b.type)) { const c = canUpgrade(st, b), n = d.lv[lv]; h += btn('⬆', 'تطوير', `${RES[n.res]} ${num(n.cost)}`, c.ok ? '' : c.short ? 'short' : ''); }
-    if (d.trains) h += btn('⚔', 'تدريب الجنود');
+    if (d.trains && lv) h += btn('⚔', 'تدريب الجنود');
     if (d.makes && ready(b) >= 1) h += btn(RES[d.makes], 'جمع', `${num(ready(b))}`);
     q('.bu-btns').innerHTML = h; bar.hidden = false;
   };
@@ -78,8 +80,9 @@ export function createBaseUI(root, { st, save, sfx = {}, getVillage, res }) {
   const openWin = (kind) => { winKind = kind; drawWin(); win.hidden = false; sfx.open?.(); };
   const closeWin = () => { win.hidden = true; winKind = null; };
   const drawWin = () => {
+    if (winKind === 'shop') return drawShop();
     const b = selected; if (!b || !winKind) return closeWin();
-    const lv = b.lv || 1, d = BUILDINGS[b.type];
+    const lv = b.lv ?? 1, d = BUILDINGS[b.type];
     if (winKind === 'info') {
       let extra = '';
       if (d.makes) extra = row('فيه الآن', `${RES[d.makes]} ${num(ready(b))}`);
@@ -109,6 +112,36 @@ export function createBaseUI(root, { st, save, sfx = {}, getVillage, res }) {
       for (const x of body.querySelectorAll('.bu-tadd')) x.onclick = () => { const r = train(st, x.dataset.t); if (!r.ok) toastWin(r.reason); else { sfx.coin?.(); changed(); } drawWin(); };
       for (const x of body.querySelectorAll('.bu-tdel')) x.onclick = () => { untrain(st, x.dataset.t); changed(); drawWin(); };
     }
+  };
+  // ---------- the shop: pick a building, place it, the builder builds it ----------
+  let shopTab = 'res';
+  const TABS = { res: '💰 الموارد', army: '⚔ الجيش', def: '🛡 الدفاع' };
+  const drawShop = () => {
+    body.innerHTML = `<h3>🛒 المتجر</h3><div class="bu-tabs">${Object.entries(TABS).map(([k, t]) => `<button data-tab="${k}" class="${k === shopTab ? 'on' : ''}">${t}</button>`).join('')}</div>
+      <div class="bu-shop">${Object.entries(SHOP).filter(([, d]) => d.tab === shopTab).map(([k, d]) => {
+        const c = canBuy(st, k), B = BUILDINGS[k];
+        return `<button class="bu-item ${c.ok ? '' : 'off'}" data-b="${k}"><span>${B.ico}</span><b>${B.name}</b><small>${countOf(st.base, k)} / ${maxOf(st.base, k)}</small>
+          <em class="${c.short ? 'short' : ''}">${RES[d.res]} ${num(d.cost)}</em><small>${d.s ? `⏱ ${timeText(d.s)}` : 'فوري'}</small>${c.ok ? '' : `<i>${c.reason}</i>`}</button>`;
+      }).join('')}</div>`;
+    for (const x of body.querySelectorAll('[data-tab]')) x.onclick = () => { shopTab = x.dataset.tab; drawShop(); };
+    for (const x of body.querySelectorAll('.bu-item')) x.onclick = () => { const c = canBuy(st, x.dataset.b); if (!c.ok) return toastWin(c.reason); closeWin(); place(x.dataset.b); };
+  };
+  const placeEl = q('.bu-place');
+  let placingType = null;
+  const place = (type) => {
+    const v = getVillage(); if (!v) return;
+    const n = BUILDINGS[type].n, [ci, cj] = v.center, at = v.freeNear(ci - Math.floor(n / 2), cj - Math.floor(n / 2), n) || [ci, cj];
+    placingType = type; selected = null; selObstacle = null; drawBar();
+    v.startPlacing(at[0], at[1], (ok) => { q('.bu-pyes').disabled = !ok; placeEl.classList.toggle('bad', !ok); }, type);
+    placeEl.hidden = false;
+  };
+  const endPlace = () => { placingType = null; placeEl.hidden = true; getVillage()?.endPlacing(); };
+  q('.bu-pno').onclick = () => { sfx.click?.(); endPlace(); };
+  q('.bu-pyes').onclick = () => {
+    const v = getVillage(), pl = v?.placing; if (!pl || !pl.ok) return;
+    const r = buy(st, placingType, pl.i, pl.j);
+    if (!r.ok) { toast(r.reason); return endPlace(); }
+    endPlace(); v.add(r.b); changed(); sfx.wood?.();
   };
   const toastWin = (t) => { const c = q('.bu-card').getBoundingClientRect(); floatText(t, { x: c.left + c.width / 2, y: c.top + 30 }); };
 
@@ -155,6 +188,8 @@ export function createBaseUI(root, { st, save, sfx = {}, getVillage, res }) {
       if (!bar.hidden) drawBar();
       if (winKind === 'train' || winKind === 'info') drawWin();
     }
+    const pl = v.placing;
+    if (pl && placingType) { const p = v.screenOf(pl.g.position, BUILDINGS[placingType].n + 1.5); placeEl.style.left = `${p.x - placeEl.offsetWidth / 2}px`; placeEl.style.top = `${p.y - placeEl.offsetHeight}px`; }
     const jobs = [st.base.th, ...st.base.buildings].filter((b) => b?.up).map((b) => [b.up, v.posOf(b), 3.4]);
     const cl = st.base.clearing; if (cl) jobs.push([cl, v.obstacleAt(cl.id), 2.6]);
     while (timers.children.length < jobs.length) timers.insertAdjacentHTML('beforeend', '<div class="ob-time"><i></i><b></b></div>');
@@ -174,6 +209,8 @@ export function createBaseUI(root, { st, save, sfx = {}, getVillage, res }) {
     onSelect(b) { selObstacle = null; selected = b; if (!b) closeWin(); drawBar(); },
     onObstacle(o) { selected = null; selObstacle = o; closeWin(); drawBar(); },
     onCollect: (b, at) => doCollect(b, at),
+    openShop() { if (placingType) return; selected = null; selObstacle = null; drawBar(); openWin('shop'); },
+    get placing() { return !!placingType; },
     hide() { selected = null; selObstacle = null; closeWin(); drawBar(); },
     dispose() { el.remove(); },
   };

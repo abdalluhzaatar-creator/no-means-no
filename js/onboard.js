@@ -166,47 +166,81 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
     await healing;
   };
   // ---------- 5 · to the Void Kings' camp ----------
-  const attack = async () => {
-    show('guide', 'هيا نهجم على معسكر ملوك الفراغ!', { tap: false });
-    const btn = q('.ob-attack'); btn.hidden = false; hand(btn);
-    await click(btn); btn.hidden = true; hand(null, false); hide();
+  // ---------- the battle at the Void Kings' camp (the tutorial's, then any raid with the trained army) ----------
+  const battle = async (count) => {
     const load = q('.ob-load'); load.hidden = false; sfx.whoosh?.();
     await wait(1600);
-    village.dispose(); village = null; view.innerHTML = '';
+    ui.hide(); village.dispose(); village = null; view.innerHTML = '';
     const { mountCamp } = await import('./camp3d.js');
-    const battle = q('.ob-battle'), stars = [...battle.querySelectorAll('.ob-bstars i')], pctEl = q('.ob-pct');
+    const bt = q('.ob-battle'), stars = [...bt.querySelectorAll('.ob-bstars i')], pctEl = q('.ob-pct');
+    for (const s of stars) s.className = ''; pctEl.textContent = '0%';
     const cardsEl = q('.ob-cards');
     const draw = (counts) => { cardsEl.innerHTML = Array.from({ length: 10 }, (_, k) => k === 0 ? `<button class="ob-tcard on ${counts[0] ? '' : 'empty'}"><span>🏹</span><b>×${counts[0]}</b><small>رامي السهام</small></button>` : '<div class="ob-tcard blank"></div>').join(''); };
-    draw([2]);
+    draw([count]);
     let deployed = 0;
     const done = new Promise((resolve) => {
       camp = mountCamp(view, {
-        troops: [{ type: 'archer', count: 2 }],
-        onDeploy: (counts) => { deployed++; draw(counts); sfx.jump?.(); if (deployed === 1) { const p = camp.hintPoint(1); handAt(p.x, p.y); } else hand(null, false); },
+        troops: [{ type: 'archer', count }],
+        onDeploy: (counts) => { deployed++; draw(counts); sfx.jump?.(); if (deployed === 1 && count > 1) { const p = camp.hintPoint(1); handAt(p.x, p.y); } else hand(null, false); },
         onStar: (n) => { stars[n - 1].className = 'on'; sfx.key?.(); },
         onPercent: (p) => { pctEl.textContent = `${p}%`; },
         onEnd: resolve,
       });
     });
-    load.hidden = true; battle.hidden = false;
+    load.hidden = true; bt.hidden = false;
     await wait(500);
     const p = camp.hintPoint(); handAt(p.x, p.y); q('.ob-hand').classList.add('tapping');
     const result = await done;
-    hand(null, false);
-    // ---------- 6 · victory and the reward ----------
-    st.gold = (st.gold || 0) + REWARD.gold; st.nour = (st.nour || 0) + REWARD.nour; res();
-    checkpoint('done');
+    hand(null, false); q('.ob-hand').classList.remove('tapping');
+    return { ...result, used: deployed };
+  };
+  // The end screen: stars, %, the loot; back home.
+  const victory = async (result, loot) => {
+    st.gold = (st.gold || 0) + loot.gold; st.nour = (st.nour || 0) + loot.nour; res();
     const win = q('.ob-win'); win.hidden = false; sfx.fanfare?.();
-    win.innerHTML = `<h2>${result.stars >= 3 ? 'انتصار!' : 'انتهت المعركة'}</h2>
+    win.innerHTML = `<h2>${result.stars >= 1 ? 'انتصار!' : 'هزيمة'}</h2>
       <div class="ob-wstars">${[0, 1, 2].map((k) => `<i class="${k < result.stars ? 'on' : ''}" style="animation-delay:${k * 0.25}s"></i>`).join('')}</div>
       <p class="ob-wpct">دمّرت ${result.pct}% من المعسكر</p>
-      <div class="ob-loot"><span>🪙 <b>+${REWARD.gold}</b> ذهب</span><span>✨ <b>+${REWARD.nour}</b> نور</span></div>
+      <div class="ob-loot"><span>🪙 <b>+${loot.gold}</b> ذهب</span><span>✨ <b>+${loot.nour}</b> نور</span></div>
       <button class="ob-home">🕌 العودة إلى البعد الروحي</button>`;
+    save();
     await click(q('.ob-home'));
-    win.hidden = true; battle.hidden = true;
+    win.hidden = true; q('.ob-battle').hidden = true;
     camp.dispose(); camp = null; view.innerHTML = '';
     openVillage();
   };
+  // ---------- 5 · to the Void Kings' camp ----------
+  const attack = async () => {
+    show('guide', 'هيا نهجم على معسكر ملوك الفراغ!', { tap: false });
+    const btn = q('.ob-attack'); btn.hidden = false; hand(btn);
+    await click(btn); btn.hidden = true; hand(null, false); hide();
+    const result = await battle(2);
+    // ---------- 6 · victory and the reward ----------
+    checkpoint('done');
+    await victory(result, REWARD);
+  };
+  // After the tutorial: Clash's two corner buttons — ⚔ attack (bottom left) and 🛒 shop (bottom right).
+  // The attack takes the army trained in the barracks; the loot follows the % destroyed.
+  const RAID_LOOT = { gold: 1000, nour: 1000 };
+  const home = () => {
+    const bar = document.createElement('div'); bar.className = 'ob-corner';
+    bar.innerHTML = '<button class="ob-raid"><span>⚔</span><b>هجوم!</b></button><button class="ob-shopbtn"><span>🛒</span><b>المتجر</b></button>';
+    root.appendChild(bar);
+    bar.querySelector('.ob-shopbtn').onclick = () => { sfx.click?.(); ui.openShop(); };
+    bar.querySelector('.ob-raid').onclick = async () => {
+      const n = st.base.army?.archer || 0;
+      if (!n) { sfx.lose?.(); floatAt('درّب جنودًا في الثكنة أولاً', bar.querySelector('.ob-raid')); return; }
+      if (camp || ui.placing) return;
+      bar.hidden = true;
+      const result = await battle(n);
+      // The troops sent are used up, as in Clash; the rest come home.
+      st.base.army.archer = Math.max(0, n - result.used);
+      const k = result.pct / 100;
+      await victory(result, { gold: Math.round(RAID_LOOT.gold * k), nour: Math.round(RAID_LOOT.nour * k) });
+      bar.hidden = false;
+    };
+  };
+  const floatAt = (txt, el) => { const r = el.getBoundingClientRect(), f = document.createElement('div'); f.className = 'ob-float'; f.textContent = txt; f.style.left = `${r.left + r.width / 2 + 80}px`; f.style.top = `${r.top - 20}px`; root.appendChild(f); setTimeout(() => f.remove(), 1400); };
 
   (async () => {
     openVillage();
@@ -215,6 +249,7 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
       if (st.onboard === 'intro') { await intro(); const cell = await buildArcher(); await construct(cell); }
       if (st.onboard === 'built') await defence();
       if (st.onboard === 'defended') await attack();
+      home();
       onDone?.();
     } catch (err) { console.error('onboarding', err); }
   })();
