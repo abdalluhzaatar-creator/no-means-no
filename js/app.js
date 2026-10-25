@@ -10,7 +10,6 @@ import * as FX from './effects.js';
 import * as SND from './audio.js';
 import { CITIES, METHODS, prayerDay, windowState, fmtTime } from './prayer.js';
 import { createTour } from './tour.js';
-import { playAttack } from './attack.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -209,12 +208,17 @@ function closeDays() {
   scheduleSave();
   setTimeout(() => showAttack(state.lastAttack, after), 400);
 }
-function showAttack(data, then) {
+// The 3D night attack (loaded the first time it plays). Each warrior wears the armour of their rank.
+async function showAttack(data, then) {
   if (!data) return then?.();
-  playAttack({ ...data, shields: state.shields }, {
-    warrior: (id) => { const c = E.findCharacter(id), ch = state.characters[id]; return c && ch ? characterSVG(c, artLevel(ch), { size: 180 }) : ''; },
-    sfx: SND.sfx, onDone: then,
-  });
+  try {
+    const { playAttack } = await import('./attack.js');
+    const shown = playAttack({ ...data, shields: state.shields }, {
+      warrior: (id) => { const c = E.findCharacter(id), ch = state.characters[id]; return { palette: c.palette, tier: ch ? E.totalLevel(ch) - 1 : 0 }; },
+      sfx: SND.sfx, onDone: then,
+    });
+    if (!shown) then?.();
+  } catch (err) { console.warn('attack scene unavailable', err); then?.(); }
 }
 function showNightReport(rep) {
   const lastDate = rep.stars.at(-1)?.date;

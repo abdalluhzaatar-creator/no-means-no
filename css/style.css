@@ -756,3 +756,7 @@ body.cine .hud, body.cine .move-pad, body.cine .door-btn, body.cine .cell-captio
   .atk-warrior.charge { transform: translateX(26vw); } .atk-stars i { width: 42px; height: 42px; }
 }
 .road-replay { margin-top: 6px; }
+/* 3D version: the canvas fills the screen under the HUD */
+.atk3d { background: #0d0b22; }
+.atk-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.atk3d .atk-flash.on { opacity: .35; }
