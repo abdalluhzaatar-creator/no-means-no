@@ -4,7 +4,7 @@
 // a village starts with. Each model stands on the ground at (0, 0, 0), centred on its cells.
 import * as THREE from './vendor/three.module.min.js';
 import { GRID } from './base.js';
-import { foliage, leafMat, rockGeo, rockMat, leafyTree, pineTree, bushPlant, stones, logPile } from './nature3d.js';
+import { foliage, leafMat, leafCards, cardMat, rockGeo, rockMat, leafyTree, pineTree, bushPlant, stones, logPile } from './nature3d.js';
 
 const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...o });
 // Smooth, painted-looking shading (no facets), as Clash looks.
@@ -76,13 +76,18 @@ export function scenery(seed = 5) {
     const a = r() * 6; byKind[Math.floor(r() * 3)].push([x + Math.cos(a) * 0.7 * s, h - 0.35, z + Math.sin(a) * 0.7 * s, s * 0.68, r() * 6]);
   });
   const leaf = new THREE.Group();
+  // Each kind: a dark core and its coat of leaf cards, sharing the same places.
+  const CARDS = [1, 2, 3].map((k) => leafCards(1, { seed: k * 5, n: 120 }));
+  const coreTint = new THREE.Color(0.72, 0.78, 0.7);
   KINDS.forEach((geo, kk) => {
-    const list = byKind[kk], im = new THREE.InstancedMesh(geo, leafMat(), list.length);
+    const list = byKind[kk];
+    const core = new THREE.InstancedMesh(geo, leafMat(), list.length), coat = new THREE.InstancedMesh(CARDS[kk], cardMat(), list.length);
     list.forEach(([x, y, z, sc0, ry], k) => {
-      m4.compose(p.set(x, y, z), q.setFromEuler(new THREE.Euler(0, ry, 0)), sc.set(sc0, sc0, sc0)); im.setMatrixAt(k, m4);
-      const t = 0.66 + r() * 0.28; im.setColorAt(k, c.setRGB(t * (0.92 + r() * 0.1), t, t * (0.8 + r() * 0.1)));
+      m4.compose(p.set(x, y, z), q.setFromEuler(new THREE.Euler(0, ry, 0)), sc.set(sc0, sc0, sc0)); core.setMatrixAt(k, m4.clone().scale(sc.set(0.86, 0.86, 0.86))); coat.setMatrixAt(k, m4);
+      const t = 0.8 + r() * 0.28; c.setRGB(t * (0.92 + r() * 0.1), t, t * (0.8 + r() * 0.1)); coat.setColorAt(k, c); core.setColorAt(k, c.clone().multiply(coreTint));
     });
-    q.identity(); im.castShadow = true; im.receiveShadow = true; leaf.add(im);
+    q.identity();
+    for (const im of [core, coat]) { im.castShadow = true; im.receiveShadow = true; leaf.add(im); }
   });
   leaf.castShadow = true; leaf.receiveShadow = true; g.add(leaf);
   // The wood's floor: dark, so gaps between the trees read as shade.

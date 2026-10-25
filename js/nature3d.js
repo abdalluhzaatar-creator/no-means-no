@@ -60,6 +60,63 @@ export function foliage(r = 1, { detail = 4, seed = 1, squash = 0.88, puff = 1, 
 }
 export const leafMat = () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 });
 
+// ---------- leaf cards ----------
+// A picture of a bunch of leaves (pointed leaves with a light middle vein, on a clear
+// background), laid many times over each crown so its edge is ragged with leaves, not smooth.
+let leafTex = null;
+export function leafTexture() {
+  if (leafTex) return leafTex;
+  const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d');
+  let sd = 5; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  for (let k = 0; k < 26; k++) {
+    const a = r() * Math.PI * 2, d = r() * S * 0.3, x = S / 2 + Math.cos(a) * d, y = S / 2 + Math.sin(a) * d, len = S * (0.17 + r() * 0.09), w = len * 0.42, rot = a + (r() - 0.5) * 1.2;
+    g.save(); g.translate(x, y); g.rotate(rot);
+    const l = 0.55 + r() * 0.45;
+    const grd = g.createLinearGradient(0, -w, 0, w); grd.addColorStop(0, `rgb(${170 * l | 0},${220 * l | 0},${120 * l | 0})`); grd.addColorStop(1, `rgb(${110 * l | 0},${165 * l | 0},${70 * l | 0})`);
+    g.fillStyle = grd; g.beginPath(); g.moveTo(-len / 2, 0); g.quadraticCurveTo(0, -w, len / 2, 0); g.quadraticCurveTo(0, w, -len / 2, 0); g.fill();
+    g.strokeStyle = `rgba(230,255,200,${0.35 * l})`; g.lineWidth = 2; g.beginPath(); g.moveTo(-len / 2 + 4, 0); g.lineTo(len / 2 - 4, 0); g.stroke();
+    g.restore();
+  }
+  leafTex = new THREE.CanvasTexture(cv); leafTex.colorSpace = THREE.SRGBColorSpace; leafTex.anisotropy = 4; return leafTex;
+}
+export const cardMat = () => new THREE.MeshStandardMaterial({ map: leafTexture(), alphaTest: 0.5, vertexColors: true, side: THREE.DoubleSide, roughness: 0.9 });
+// Leaf cards scattered over an ellipsoid crown (radius r), each facing outwards; lit as if the
+// whole crown were a ball, coloured dark underneath and inside, lime on top.
+export function leafCards(r = 1, { n = 110, seed = 1, squash = 0.88, size = 0.5 } = {}) {
+  const pos = [], nor = [], uv = [], col = [], idx = [];
+  const rr = () => hash3(seed, pos.length, 7.7 + idx.length * 0.013), v = new THREE.Vector3(), t1 = new THREE.Vector3(), t2 = new THREE.Vector3(), c = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
+  for (let k = 0; k < n; k++) {
+    // Spread over the ball (golden angle), pushed in and out a little.
+    const y = 1 - (2 * (k + 0.5)) / n, rad = Math.sqrt(1 - y * y), th = k * 2.39996 + seed;
+    v.set(Math.cos(th) * rad, y, Math.sin(th) * rad);
+    const out = 0.82 + rr() * 0.28, nrm = v.clone();
+    const ctr = v.clone().multiplyScalar(r * out); ctr.y *= squash;
+    if (ctr.y < -r * 0.5) continue;
+    t1.crossVectors(nrm, Math.abs(nrm.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : up).normalize(); t2.crossVectors(nrm, t1).normalize();
+    const roll = rr() * 6.28, cs = Math.cos(roll), sn = Math.sin(roll), s = r * size * (0.75 + rr() * 0.5);
+    const a = t1.clone().multiplyScalar(cs).addScaledVector(t2, sn), b = t1.clone().multiplyScalar(-sn).addScaledVector(t2, cs);
+    const h = (ctr.y / (r * squash) + 1) / 2, light = Math.max(0, nrm.y) * 0.5 + h * 0.6;
+    c.copy(LEAVES.dark).lerp(LEAVES.mid, Math.min(1, h * 1.8)).lerp(LEAVES.top, Math.min(1, Math.max(0, light * 0.95 - 0.1))).multiplyScalar(1.0 + rr() * 0.4);
+    const base = pos.length / 3;
+    for (const [du, dv] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      pos.push(ctr.x + (a.x * du + b.x * dv) * s, ctr.y + (a.y * du + b.y * dv) * s, ctr.z + (a.z * du + b.z * dv) * s);
+      nor.push(nrm.x, nrm.y, nrm.z); uv.push((du + 1) / 2, (dv + 1) / 2); col.push(c.r, c.g, c.b);
+    }
+    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+  return g;
+}
+// A crown: a dark leafy core (so no holes show through) under a coat of leaf cards.
+export function crown(r = 1, { seed = 1, n, squash = 0.88, detail = 3 } = {}) {
+  const g = new THREE.Group();
+  const core = new THREE.Mesh(foliage(r * 0.86, { seed, detail, squash, tint: new THREE.Color(0.72, 0.78, 0.7) }), leafMat()); core.castShadow = core.receiveShadow = true; g.add(core);
+  const cards = new THREE.Mesh(leafCards(r, { seed, squash, n: n ?? Math.round(120 * r * r + 40) }), cardMat()); cards.castShadow = cards.receiveShadow = true; g.add(cards);
+  return g;
+}
+
 // ---------- trunks ----------
 // A trunk that tapers and leans a little, with bark (darker grooves running up it).
 export function trunkGeo(h = 1, r0 = 0.2, r1 = 0.12, { seed = 1, lean = 0.1 } = {}) {
@@ -115,10 +172,12 @@ const add = (g, geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.po
 export function leafyTree(r, seed = 1) {
   const g = new THREE.Group(), lm = leafMat();
   add(g, trunkGeo(1.15, 0.2, 0.11, { seed }), barkMat(), 0, 0, 0);
-  add(g, foliage(0.78, { seed }), lm, 0.05, 1.45, 0);
+  void lm;
+  const put = (c, x, y, z) => { c.position.set(x, y, z); g.add(c); };
+  put(crown(0.8, { seed }), 0.05, 1.5, 0);
   const a = r() * 6;
-  add(g, foliage(0.5, { seed: seed + 1, detail: 3 }), lm, Math.cos(a) * 0.5, 1.15, Math.sin(a) * 0.5);
-  add(g, foliage(0.42, { seed: seed + 2, detail: 3 }), lm, Math.cos(a + 2.3) * 0.45, 1.25, Math.sin(a + 2.3) * 0.45);
+  put(crown(0.52, { seed: seed + 1 }), Math.cos(a) * 0.55, 1.15, Math.sin(a) * 0.55);
+  put(crown(0.45, { seed: seed + 2 }), Math.cos(a + 2.3) * 0.5, 1.3, Math.sin(a + 2.3) * 0.5);
   return g;
 }
 // A pine: three layers of needles, each a drooping puffy cone.
@@ -129,16 +188,21 @@ export function pineTree(r, seed = 1) {
   for (const [y, rad, hgt] of [[0.85, 0.82, 0.8], [1.4, 0.64, 0.72], [1.9, 0.44, 0.62]]) {
     const geo = foliage(1, { seed: seed + y, detail: 3, squash: 1, puff: 0.5, tint }), p = geo.attributes.position;
     // Shape the ball into a cone: wide at the bottom, a point at the top.
-    for (let i = 0; i < p.count; i++) { const yy = p.getY(i), k = Math.max(0.05, (1 - yy) / 2); p.setXYZ(i, p.getX(i) * rad * k * 1.6, yy * hgt * 0.6, p.getZ(i) * rad * k * 1.6); }
-    geo.computeVertexNormals();
-    add(g, geo, mat, 0, y, 0);
+    const cone = (geo, keepNormals) => { const p = geo.attributes.position; for (let i = 0; i < p.count; i++) { const yy = p.getY(i), k = Math.max(0.05, (1 - yy) / 2); p.setXYZ(i, p.getX(i) * rad * k * 1.6, yy * hgt * 0.6, p.getZ(i) * rad * k * 1.6); } if (!keepNormals) geo.computeVertexNormals(); return geo; };
+    for (let i = 0; i < p.count; i++) p.setXYZ(i, p.getX(i) * 0.85, p.getY(i), p.getZ(i) * 0.85);
+    add(g, cone(geo), mat, 0, y, 0);
+    // Needles: leaf cards over the cone, a bluer green.
+    const cards = cone(leafCards(1, { seed: seed + y * 3, squash: 1, n: 90, size: 0.32 }), true), col = cards.attributes.color;
+    for (let i = 0; i < col.count; i++) col.setXYZ(i, col.getX(i) * 0.6, col.getY(i) * 0.85, col.getZ(i) * 0.75);
+    add(g, cards, cardMat(), 0, y, 0);
   }
   return g;
 }
 // A bush: a few low puffs of leaves, with flowers.
 export function bushPlant(r, seed = 1) {
   const g = new THREE.Group(), lm = leafMat();
-  for (const [x, z, s] of [[0, 0, 0.5], [0.42, 0.2, 0.38], [-0.4, 0.22, 0.4], [0.08, -0.4, 0.36]]) add(g, foliage(s, { seed: seed + x * 10 + z, detail: 3, squash: 0.75 }), lm, x, s * 0.45, z);
+  void lm;
+  for (const [x, z, s] of [[0, 0, 0.5], [0.42, 0.2, 0.38], [-0.4, 0.22, 0.4], [0.08, -0.4, 0.36]]) { const c = crown(s, { seed: seed + x * 10 + z, squash: 0.75 }); c.position.set(x, s * 0.45, z); g.add(c); }
   const fl = new THREE.MeshStandardMaterial({ color: r() < 0.5 ? 0xff7ab8 : 0xfff2a0, roughness: 0.6 });
   for (let k = 0; k < 7; k++) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), fl); m.position.set((r() - 0.5) * 0.9, 0.5 + r() * 0.15, (r() - 0.5) * 0.8); g.add(m); }
   return g;
