@@ -50,14 +50,20 @@ export function groundTexture() {
 // Far at the top right, a cliff with a waterfall. Instanced meshes keep it cheap.
 export function scenery(seed = 5) {
   const r = rng(seed), g = new THREE.Group(), edge = GRID / 2 + STRIP, out = edge + 22;
-  const SHORE = edge + 4.5;                                   // where the sand meets the sea (z)
+  const SHORE = edge + 4.5;                                   // where the sand meets the sea (z), on average
+  // The shore's two edges wander a little (no straight lines). Past the map's corners the woods
+  // come down to the sand; along the map the sand starts right at the grass strip.
+  const wob = (x, k) => Math.sin(x * 0.37 + k) * 0.5 + Math.sin(x * 0.91 + 2 * k) * 0.25 + Math.sin(x * 0.13 + 3 * k) * 0.6;
+  const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const zIn = (x) => { const t = smooth(edge - 1, edge + 7, Math.abs(x)); return (edge - 0.6) * (1 - t) + (SHORE - 3.2 + wob(x, 1) * 0.8) * t; };
+  const zOut = (x) => SHORE + wob(x, 2) * 0.9;
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color();
   // Woods: a tree every ~1.7 units, each a bunch of leafy balls.
   const spots = [];
   for (let x = -out; x <= out; x += 1.7) for (let z = -out; z <= out; z += 1.7) {
     const px = x + (r() - 0.5) * 1.4, pz = z + (r() - 0.5) * 1.4;
     if (Math.max(Math.abs(px), Math.abs(pz)) < edge + 0.4) continue;
-    if (pz > edge - 1 && px > -out + 2 && px < out - 2) continue;      // the shore side stays open
+    if (pz > zIn(px) - 0.7) continue;      // no trees on the sand or in the sea
     spots.push([px, pz]);
   }
   const BALLS = 4, LIME = [0x9ccf34, 0x8cc42a, 0xa8d83c, 0x82bc26], DARK = [0x467e18, 0x528c1e, 0x3c7214];
@@ -76,18 +82,26 @@ export function scenery(seed = 5) {
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(out * 2 + 60, out * 2 + 60), std(0x2f5c1c, { roughness: 1 })); floor.rotation.x = -Math.PI / 2; floor.position.y = -0.03; g.add(floor);
 
   // The shore: orange sand with grey rocks, then the sea, deep and teal.
-  const sand = new THREE.Mesh(new THREE.PlaneGeometry(out * 2 + 60, SHORE - edge + 1.2), std(0xc8833e, { roughness: 1 })); sand.rotation.x = -Math.PI / 2; sand.position.set(0, 0.004, (edge + SHORE) / 2 - 0.4); sand.receiveShadow = true; g.add(sand);
-  const sea = new THREE.Mesh(new THREE.PlaneGeometry(out * 2 + 200, 140), new THREE.MeshStandardMaterial({ color: 0x1c8bb0, roughness: 0.3, metalness: 0.05 })); sea.rotation.x = -Math.PI / 2; sea.position.set(0, 0.01, SHORE + 70); g.add(sea);
-  const deep = new THREE.Mesh(new THREE.PlaneGeometry(out * 2 + 200, 120), new THREE.MeshStandardMaterial({ color: 0x125f86, roughness: 0.3 })); deep.rotation.x = -Math.PI / 2; deep.position.set(0, 0.012, SHORE + 74); g.add(deep);
-  const foam = new THREE.Mesh(new THREE.PlaneGeometry(out * 2 + 60, 0.5), new THREE.MeshBasicMaterial({ color: 0xd8f4ff, transparent: true, opacity: 0.6 })); foam.rotation.x = -Math.PI / 2; foam.position.set(0, 0.02, SHORE + 0.2); g.add(foam);
+  // A strip along the shore from xs: rows at z0(x) and z1(x), coloured c0 → c1.
+  const strip = (z0, z1, c0, c1, mat) => {
+    const pos = [], col = [], idx = [], A = new THREE.Color(c0), B = new THREE.Color(c1); let n = 0;
+    for (let x = -out - 30; x <= out + 30; x += 0.8, n++) { pos.push(x, 0, z0(x), x, 0, z1(x)); col.push(A.r, A.g, A.b, B.r, B.g, B.b); if (n) { const k = n * 2; idx.push(k - 2, k - 1, k, k - 1, k + 1, k); } }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+    return new THREE.Mesh(geo, mat);
+  };
+  // Sand: light orange inland, darker where the waves wet it. Just under the grass, so the strip's edge stays clean.
+  const sand = strip(zIn, zOut, 0xd99a52, 0xa9662f, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide })); sand.position.y = -0.012; sand.receiveShadow = true; g.add(sand);
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(out * 2 + 200, 140), new THREE.MeshStandardMaterial({ color: 0x1c8bb0, roughness: 0.3, metalness: 0.05 })); sea.rotation.x = -Math.PI / 2; sea.position.set(0, -0.02, SHORE + 66); g.add(sea);
+  const deep = new THREE.Mesh(new THREE.PlaneGeometry(out * 2 + 200, 120), new THREE.MeshStandardMaterial({ color: 0x125f86, roughness: 0.3 })); deep.rotation.x = -Math.PI / 2; deep.position.set(0, -0.018, SHORE + 72); g.add(deep);
+  const foam = strip((x) => zOut(x) - 0.1, (x) => zOut(x) + 0.45, 0xffffff, 0xbfe8f8, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.6, side: THREE.DoubleSide })); foam.position.y = -0.008; g.add(foam);
   const stones = [];
-  for (let k = 0; k < 140; k++) { const x = (r() * 2 - 1) * (out + 10), z = edge + 0.8 + r() * (SHORE - edge - 0.4); if (r() < 0.35 && z < SHORE - 1.5) continue; stones.push([x, z, 0.25 + r() * r() * 0.9]); }
+  for (let k = 0; k < 170; k++) { const x = (r() * 2 - 1) * (out + 10), a = zIn(x) + 0.8, b = zOut(x) - 0.3, f = Math.sqrt(r()), z = a + (b - a) * f; if (b - a < 0.6) continue; stones.push([x, z, 0.22 + r() * r() * 0.85 * f]); }
   const stone = new THREE.InstancedMesh(boulder(1, 9), flat(0xffffff, { roughness: 0.8 }), stones.length);
   stones.forEach(([x, z, s], k) => { m4.compose(p.set(x, s * 0.35, z), q.setFromEuler(new THREE.Euler(r(), r() * 6, r())), sc.set(s, s * 0.75, s)); stone.setMatrixAt(k, m4); stone.setColorAt(k, c.set([0x8f9399, 0x9da1a6, 0x7d8187][k % 3])); });
   q.identity(); stone.castShadow = true; g.add(stone);
   // The builder's boat at the shore.
   const wood = flat(0xa8743e), darkWood = flat(0x7a5230);
-  const boat = new THREE.Group(); boat.position.set(-12, 0, SHORE + 2.2); boat.rotation.y = 0.3; g.add(boat);
+  const boat = new THREE.Group(); boat.position.set(-12, 0, zOut(-12) + 2.4); boat.rotation.y = 0.3; g.add(boat);
   const hull = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 0.8, 4.2, 16, 1, false, 0, Math.PI), flat(0x8b5a2b)); hull.rotation.set(Math.PI / 2, 0, Math.PI / 2); hull.position.y = 0.55; hull.scale.set(1, 1, 0.65); hull.castShadow = true; boat.add(hull);
   const deck = new THREE.Mesh(new THREE.BoxGeometry(4, 0.1, 1.5), wood); deck.position.y = 0.6; boat.add(deck);
   const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 3.4, 10), darkWood); mast.position.y = 2.2; boat.add(mast);

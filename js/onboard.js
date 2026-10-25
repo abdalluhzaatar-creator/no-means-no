@@ -8,6 +8,7 @@
 import { mountVillage, GRID } from './village3d.js';
 import { ensureBase, grow, capacity, builders, busyBuilders } from './base.js';
 import { createBaseUI } from './baseui.js';
+import { img } from './thumbs.js';
 import { createPortraits } from './portrait3d.js';
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -184,7 +185,7 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
     const bt = q('.ob-battle'), stars = [...bt.querySelectorAll('.ob-bstars i')], pctEl = q('.ob-pct');
     for (const s of stars) s.className = ''; pctEl.textContent = '0%';
     const cardsEl = q('.ob-cards');
-    const draw = (counts) => { cardsEl.innerHTML = Array.from({ length: 10 }, (_, k) => k === 0 ? `<button class="ob-tcard on ${counts[0] ? '' : 'empty'}"><span>🏹</span><b>×${counts[0]}</b><small>رامي السهام</small></button>` : '<div class="ob-tcard blank"></div>').join(''); };
+    const draw = (counts) => { cardsEl.innerHTML = Array.from({ length: 10 }, (_, k) => k === 0 ? `<button class="ob-tcard on ${counts[0] ? '' : 'empty'}">${img('troop:archer', 'troop') || '<span>🏹</span>'}<b>×${counts[0]}</b><small>رامي السهام</small></button>` : '<div class="ob-tcard blank"></div>').join(''); };
     draw([count]);
     let deployed = 0;
     const done = new Promise((resolve) => {

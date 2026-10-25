@@ -942,3 +942,22 @@ body.in-base .topbar, body.in-base #sandbox-badge { display: none; }
 .ob-rbar div { margin-inline-end: 0; margin-right: -10px; }
 .ob-res .ob-rbar span { background: none; border: 0; padding: 0; border-radius: 0; }
 @media (max-width: 480px) { .ob-builders { top: 10px; bottom: auto; left: 10px; transform: none; } }
+/* Cards with pictures, Clash style. */
+.th-img { display: block; width: 84px; height: 84px; object-fit: contain; filter: drop-shadow(0 4px 3px #0005); }
+.th-img.troop { width: 70px; height: 70px; }
+.bu-pic { display: grid; place-items: center; margin: 2px 0 6px; } .bu-pic .th-img { width: 120px; height: 120px; }
+.bu-shop { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); }
+.bu-item { position: relative; padding: 6px 6px 0; gap: 0; border-radius: 10px; border: 3px solid #fff; background: linear-gradient(#f9eccb, #e8cf98); box-shadow: 0 4px 0 #9a7438, 0 6px 10px #0003; overflow: hidden; align-content: start; min-height: 172px; }
+.bu-item > b { color: #fff; font-size: .92rem; font-weight: 900; text-shadow: 0 1px 0 #000, 0 0 2px #000, 0 0 3px #000; width: 100%; text-align: center; }
+.bu-item .bu-it { position: absolute; top: 26px; inset-inline-end: 6px; font-weight: 800; color: #5a4520; font-size: .66rem; }
+.bu-item .bu-ic { color: #5a4520; font-weight: 800; font-size: .7rem; margin-bottom: 2px; }
+.bu-item em { align-self: end; width: calc(100% + 12px); margin: 4px -6px 0; padding: 4px 0; background: #00000055; color: #fff; font-weight: 900; text-shadow: 0 1px 0 #000; }
+.bu-item em.short { color: #ff6a5a; }
+.bu-item i { position: absolute; inset: 40% 4px auto; background: #000a; color: #fff; border-radius: 6px; padding: 3px; font-size: .68rem; }
+.bu-item.off { filter: saturate(.35) brightness(.95); opacity: 1; }
+.bu-tadd { width: 112px; padding: 6px 6px 0; overflow: hidden; gap: 0; background: linear-gradient(#f9eccb, #e8cf98); box-shadow: 0 4px 0 #9a7438; }
+.bu-tadd b { color: #fff; text-shadow: 0 1px 0 #000, 0 0 3px #000; }
+.bu-tadd .bu-tc { width: calc(100% + 12px); margin: 4px -6px 0; padding: 4px 0; background: #00000055; color: #fff; font-weight: 900; font-size: .85rem; }
+.ob-tcard.on .th-img { width: 46px; height: 46px; }
+.bu-item i { position: static; inset: auto; margin: 2px 0; background: #b0301e; }
+.th-img.troop { width: 84px; height: 84px; }

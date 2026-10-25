@@ -8,6 +8,7 @@ import {
   gemsFor, builderJob, clearGems, train, untrain, advanceTraining, armySize, armyRoom, queueSize, queueRoom,
   SHOP, canBuy, buy, countOf, maxOf,
 } from './base.js';
+import { img } from './thumbs.js';
 
 const RES = { gold: '🪙', nour: '✨', gems: '💎' };
 const num = (n) => Math.round(n).toLocaleString('en');
@@ -87,11 +88,11 @@ export function createBaseUI(root, { st, save, sfx = {}, getVillage, res }) {
       let extra = '';
       if (d.makes) extra = row('فيه الآن', `${RES[d.makes]} ${num(ready(b))}`);
       if (b.up) extra += row('⏳ يتطوّر', timeText((b.up.end - Date.now()) / 1000));
-      body.innerHTML = `<h3>${d.ico} ${d.name}</h3><p class="bu-lv">المستوى ${lv}</p>${statRows(b, lv)}${extra}<p class="bu-note">${d.note || ''}</p>`;
+      body.innerHTML = `<h3>${d.name}</h3><p class="bu-lv">المستوى ${lv}</p><div class="bu-pic">${img(b.type)}</div>${statRows(b, lv)}${extra}<p class="bu-note">${d.note || ''}</p>`;
     } else if (winKind === 'upgrade') {
       const c = canUpgrade(st, b), n = d.lv[lv];
       if (!n) { body.innerHTML = `<h3>${d.ico} ${d.name}</h3><p class="bu-note">وصل لأعلى مستوى</p>`; return; }
-      body.innerHTML = `<h3>تطوير ${d.name} إلى المستوى ${lv + 1}؟</h3>${statRows(b, lv, true)}
+      body.innerHTML = `<h3>تطوير ${d.name} إلى المستوى ${lv + 1}؟</h3><div class="bu-pic">${img(b.type)}</div>${statRows(b, lv, true)}
         ${row('⏱ وقت التطوير', timeText(n.s))}
         ${c.ok ? '' : `<p class="bu-why">${c.reason}</p>`}
         <button class="bu-go ${c.ok ? '' : 'off'}">${RES[n.res]} ${num(n.cost)}</button>`;
@@ -107,7 +108,7 @@ export function createBaseUI(root, { st, save, sfx = {}, getVillage, res }) {
       body.innerHTML = `<h3>⚔ تدريب الجنود</h3>
         <div class="bu-army">${row('⛺ الجيش', `${armySize(st.base)} / ${armyRoom(st.base)}`)}${row('⚔ قيد التدريب', `${queueSize(st.base)} / ${queueRoom(st.base)}`)}
         ${qd.length ? row('⏳ الجندي التالي', full ? 'المعسكر ممتلئ' : timeText(left)) : ''}</div>
-        <div class="bu-troops">${Object.entries(TROOPS).map(([k, t]) => `<div class="bu-troop"><button class="bu-tadd" data-t="${k}"><span>${t.ico}</span><b>${t.name}</b><small>✨ ${t.cost} · ⏱ ${timeText(t.s)}</small>${army[k] ? `<em>${army[k]}</em>` : ''}</button>${qd.includes(k) ? `<button class="bu-tdel" data-t="${k}">− ${qd.filter((x) => x === k).length}</button>` : ''}</div>`).join('')}</div>
+        <div class="bu-troops">${Object.entries(TROOPS).map(([k, t]) => `<div class="bu-troop"><button class="bu-tadd" data-t="${k}">${img(`troop:${k}`, 'troop') || `<span>${t.ico}</span>`}<b>${t.name}</b><small>⏱ ${timeText(t.s)}</small><small class="bu-tc">${t.cost} ✨</small>${army[k] ? `<em>${army[k]}</em>` : ''}</button>${qd.includes(k) ? `<button class="bu-tdel" data-t="${k}">− ${qd.filter((x) => x === k).length}</button>` : ''}</div>`).join('')}</div>
         <p class="bu-note">اكبس على الجندي لتدرّبه — يُدفع النور الآن</p>`;
       for (const x of body.querySelectorAll('.bu-tadd')) x.onclick = () => { const r = train(st, x.dataset.t); if (!r.ok) toastWin(r.reason); else { sfx.coin?.(); changed(); } drawWin(); };
       for (const x of body.querySelectorAll('.bu-tdel')) x.onclick = () => { untrain(st, x.dataset.t); changed(); drawWin(); };
@@ -120,8 +121,10 @@ export function createBaseUI(root, { st, save, sfx = {}, getVillage, res }) {
     body.innerHTML = `<h3>🛒 المتجر</h3><div class="bu-tabs">${Object.entries(TABS).map(([k, t]) => `<button data-tab="${k}" class="${k === shopTab ? 'on' : ''}">${t}</button>`).join('')}</div>
       <div class="bu-shop">${Object.entries(SHOP).filter(([, d]) => d.tab === shopTab).map(([k, d]) => {
         const c = canBuy(st, k), B = BUILDINGS[k];
-        return `<button class="bu-item ${c.ok ? '' : 'off'}" data-b="${k}"><span>${B.ico}</span><b>${B.name}</b><small>${countOf(st.base, k)} / ${maxOf(st.base, k)}</small>
-          <em class="${c.short ? 'short' : ''}">${RES[d.res]} ${num(d.cost)}</em><small>${d.s ? `⏱ ${timeText(d.s)}` : 'فوري'}</small>${c.ok ? '' : `<i>${c.reason}</i>`}</button>`;
+        // Clash's shop card: the name on top, the time in the corner, the picture, how many, the price at the bottom.
+        return `<button class="bu-item ${c.ok ? '' : 'off'}" data-b="${k}"><b>${B.name}</b><small class="bu-it">⏱ ${d.s ? timeText(d.s) : 'فوري'}</small>
+          ${img(k) || `<span>${B.ico}</span>`}<small class="bu-ic">مبني ${countOf(st.base, k)}/${maxOf(st.base, k)}</small>
+          ${c.ok || c.short ? '' : `<i>${c.reason}</i>`}<em class="${c.short ? 'short' : ''}">${num(d.cost)} ${RES[d.res]}</em></button>`;
       }).join('')}</div>`;
     for (const x of body.querySelectorAll('[data-tab]')) x.onclick = () => { shopTab = x.dataset.tab; drawShop(); };
     for (const x of body.querySelectorAll('.bu-item')) x.onclick = () => { const c = canBuy(st, x.dataset.b); if (!c.ok) return toastWin(c.reason); closeWin(); place(x.dataset.b); };
