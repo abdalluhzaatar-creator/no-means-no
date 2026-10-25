@@ -108,7 +108,7 @@ export function scenery(seed = 5) {
   const foam = strip((x) => zOut(x) - 0.1, (x) => zOut(x) + 0.45, 0xffffff, 0xbfe8f8, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.6, side: THREE.DoubleSide })); foam.position.y = -0.008; g.add(foam);
   const shoreStones = [];
   for (let k = 0; k < 170; k++) { const x = (r() * 2 - 1) * (out + 10), a = zIn(x) + 0.8, b = zOut(x) - 0.3, f = Math.sqrt(r()), z = a + (b - a) * f; if (b - a < 0.6) continue; shoreStones.push([x, z, 0.22 + r() * r() * 0.85 * f]); }
-  const stone = new THREE.InstancedMesh(rockGeo(1, { seed: 9, moss: 0.3 }), rockMat(), shoreStones.length);
+  const stone = new THREE.InstancedMesh(rockGeo(1, { seed: 9, moss: 0.3, detail: 3 }), rockMat(), shoreStones.length);
   shoreStones.forEach(([x, z, s], k) => { m4.compose(p.set(x, s * 0.12, z), q.setFromEuler(new THREE.Euler(r(), r() * 6, r())), sc.set(s, s * 0.75, s)); stone.setMatrixAt(k, m4); stone.setColorAt(k, c.setScalar(0.85 + (k % 3) * 0.08)); });
   q.identity(); stone.castShadow = true; g.add(stone);
   // The builder's boat at the shore.

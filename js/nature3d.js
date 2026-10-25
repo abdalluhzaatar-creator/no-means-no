@@ -136,35 +136,58 @@ export const barkMat = () => new THREE.MeshStandardMaterial({ vertexColors: true
 
 // ---------- rocks ----------
 // A heavy stone: chunky, flat underneath, cracks and lighter worn edges, a little moss on top.
-export function rockGeo(r = 1, { seed = 1, moss = 0.6, tall = 0.7 } = {}) {
-  const g = merge(new THREE.IcosahedronGeometry(1, 3)), p = g.attributes.position, v = new THREE.Vector3(), o = seed * 7.31;
-  const disp = new Float32Array(p.count);
-  // A few big flat faces (as if split off), cut into the round shape.
-  const planes = Array.from({ length: 7 }, (_, k) => { const a = hash3(seed, k, 1) * 6.28, b = Math.acos(hash3(seed, k, 2) * 1.6 - 0.6); return [new THREE.Vector3(Math.sin(b) * Math.cos(a), Math.cos(b), Math.sin(b) * Math.sin(a)), 0.78 + hash3(seed, k, 3) * 0.14]; });
+// Stone grain: speckles, pits and fine veins (used as colour and as bumps).
+let stoneTex = null;
+function stoneTexture() {
+  if (stoneTex) return stoneTex;
+  const S = 256, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d'), im = g.createImageData(S, S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    // Wraps round (the noise is sampled on a torus), so no seam.
+    const a = (x / S) * Math.PI * 2, b = (y / S) * Math.PI * 2;
+    const nx = Math.cos(a) * 2, ny = Math.sin(a) * 2, nz = Math.cos(b) * 2, nw = Math.sin(b) * 2;
+    const f = fbm(nx + nw * 0.7, ny + nz * 0.3, nz + nw, 5), vein = Math.abs(noise3(nx * 2.5, ny * 2.5 + nw, nz * 2.5));
+    let v = 200 + f * 55 + (hash3(x, y, 3) - 0.5) * 30;
+    if (vein < 0.05) v -= 60 * (1 - vein / 0.05);
+    const i = (y * S + x) * 4; im.data[i] = im.data[i + 1] = im.data[i + 2] = Math.max(0, Math.min(255, v)); im.data[i + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  stoneTex = new THREE.CanvasTexture(cv); stoneTex.wrapS = stoneTex.wrapT = THREE.RepeatWrapping; stoneTex.colorSpace = THREE.SRGBColorSpace; return stoneTex;
+}
+// A heavy stone in Clash's way: a rounded lump split into big flat faces with soft edges,
+// light grey on top, darker down the sides, almost black where it meets the ground; grainy,
+// with thin cracks and a little moss on the top.
+export function rockGeo(r = 1, { seed = 1, moss = 0.5, tall = 0.72, detail = 4 } = {}) {
+  const g = merge(new THREE.IcosahedronGeometry(1, detail)), p = g.attributes.position, v = new THREE.Vector3(), o = seed * 7.31;
+  const planes = Array.from({ length: 11 }, (_, k) => {
+    const a = hash3(seed, k, 1) * 6.28, b = Math.acos(hash3(seed, k, 2) * 1.7 - 0.7);
+    return [new THREE.Vector3(Math.sin(b) * Math.cos(a), Math.cos(b), Math.sin(b) * Math.sin(a)), 0.7 + hash3(seed, k, 3) * 0.2];
+  });
+  const uv = new Float32Array(p.count * 2);
   for (let i = 0; i < p.count; i++) {
     v.fromBufferAttribute(p, i);
-    let d = 1 + 0.22 * fbm(v.x * 1.2 + o, v.y * 1.2, v.z * 1.2 + o, 3) + 0.03 * noise3(v.x * 9 + o, v.y * 9, v.z * 9);
-    for (const [nrm, cut] of planes) { const along = v.dot(nrm) * d; if (along > cut) d *= 1 - (along - cut) / along * 0.9; }
-    disp[i] = d;
-    v.multiplyScalar(r * d); v.y *= tall; if (v.y < -r * 0.2) v.y = -r * 0.2 + (v.y + r * 0.2) * 0.25;
+    uv[i * 2] = Math.atan2(v.z, v.x) / (Math.PI * 2) + 0.5; uv[i * 2 + 1] = v.y * 0.5 + 0.5;
+    let d = 1 + 0.12 * fbm(v.x * 1.3 + o, v.y * 1.3, v.z * 1.3 + o, 3);
+    // Each cut: whatever sticks out past the plane is pressed back onto it (a flat face).
+    for (const [nrm, cut] of planes) { const along = v.dot(nrm) * d; if (along > cut) d -= (along - cut) / v.dot(nrm) * 0.97; }
+    d += 0.012 * noise3(v.x * 12 + o, v.y * 12, v.z * 12);
+    v.multiplyScalar(r * d); v.y *= tall; if (v.y < -r * 0.18) v.y = -r * 0.18 + (v.y + r * 0.18) * 0.2;
     p.setXYZ(i, v.x, v.y, v.z);
   }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   g.computeVertexNormals();
   const n = g.attributes.normal, col = new Float32Array(p.count * 3), t = new THREE.Color();
-  const dark = C(0x4a4d53), mid = C(0x868a90), light = C(0xd0d3d6), green = C(0x6f9a32);
+  const base = C(0x3e4046), side = C(0x7c8087), top = C(0xc9ccd0), green = C(0x78a034);
   for (let i = 0; i < p.count; i++) {
-    const up = n.getY(i), h = p.getY(i) / (r * tall) + 0.3, x = p.getX(i), z = p.getZ(i), y = p.getY(i);
-    t.copy(mix(dark, mid, 0.3 + h * 0.9)).lerp(light, Math.max(0, up) * 0.6 * Math.min(1, h + 0.2));
-    // Hollows darker, worn edges lighter; thin dark cracks.
-    t.multiplyScalar(0.75 + Math.min(0.35, (disp[i] - 0.85) * 1.2));
-    if (Math.abs(noise3(x * 2.6 / r + o, y * 2.6 / r, z * 2.6 / r)) < 0.045) t.multiplyScalar(0.55);
-    if (up > 0.55 && noise3(x * 1.8 / r + o, 0, z * 1.8 / r) > 0.05) t.lerp(green, moss * (up - 0.55) * 1.8);
+    const up = n.getY(i), y = p.getY(i), h = (y / (r * tall) + 0.18) / 1.18, x = p.getX(i), z = p.getZ(i);
+    t.copy(base).lerp(side, Math.min(1, h * 2.2)).lerp(top, Math.max(0, up) ** 1.5 * Math.min(1, h * 1.4));
+    if (Math.abs(noise3(x * 2.2 / r + o, y * 2.2 / r, z * 2.2 / r)) < 0.035) t.multiplyScalar(0.55);
+    if (up > 0.6 && noise3(x * 1.6 / r + o, 0, z * 1.6 / r) > 0.12) t.lerp(green, moss * (up - 0.6) * 2);
     col.set([t.r, t.g, t.b], i * 3);
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   return g;
 }
-export const rockMat = () => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
+export const rockMat = () => new THREE.MeshStandardMaterial({ vertexColors: true, map: stoneTexture(), bumpMap: stoneTexture(), bumpScale: 2.5, roughness: 0.9 });
 
 // ---------- whole plants ----------
 const add = (g, geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; g.add(m); return m; };
@@ -210,9 +233,9 @@ export function bushPlant(r, seed = 1) {
 // A stone (or a few, for a big one).
 export function stones(r, size = 1, seed = 1) {
   const g = new THREE.Group(), m = rockMat();
-  add(g, rockGeo(0.72 * size, { seed }), m, 0, 0.12 * size, 0).rotation.y = r() * 6;
-  add(g, rockGeo(0.36 * size, { seed: seed + 1 }), m, 0.62 * size, 0.04, 0.42 * size).rotation.y = r() * 6;
-  if (size > 1.2) add(g, rockGeo(0.42 * size, { seed: seed + 2 }), m, -0.7 * size, 0.05, 0.45 * size).rotation.y = r() * 6;
+  add(g, rockGeo(0.72 * size, { seed }), m, 0, 0.1 * size, 0).rotation.y = r() * 6;
+  const k = size > 1.2 ? 4 : 2;
+  for (let i = 0; i < k; i++) { const a = r() * 6.28, d = (0.6 + r() * 0.3) * size, s = (0.22 + r() * 0.18) * size; add(g, rockGeo(s, { seed: seed + i + 1 }), m, Math.cos(a) * d, 0.02, Math.sin(a) * d).rotation.y = r() * 6; }
   return g;
 }
 // A fallen log with cut ends and a stump.
