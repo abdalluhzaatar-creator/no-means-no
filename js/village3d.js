@@ -61,7 +61,7 @@ const OBSTACLES = {
   orange: { make: (r) => orangeTree(r), name: 'شجرة برتقال', cost: 200 },
 };
 
-export function mountVillage(container, { buildings = [], cleared = [], onTapGround, onObstacle, onTownHall } = {}) {
+export function mountVillage(container, { buildings = [], cleared = [], th: thAt = null, onTapGround, onObstacle, onTownHall, onArcher, onMoved } = {}) {
   let seed = 7; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -93,9 +93,7 @@ export function mountVillage(container, { buildings = [], cleared = [], onTapGro
   const taken = new Set();
   const take = (i, j, w, d) => { for (let x = i; x < i + w; x++) for (let z = j; z < j + d; z++) taken.add(`${x},${z}`); };
   const untake = (i, j, w, d) => { for (let x = i; x < i + w; x++) for (let z = j; z < j + d; z++) taken.delete(`${x},${z}`); };
-  // The Town Hall in the middle.
-  const th = townHall(); th.position.set(0, 0, 0); scene.add(th); take(HALF - 2, HALF - 2, 4, 4);
-  const pickables = [{ obj: th, kind: 'townhall' }];
+  const pickables = [];
   // Trees on the map (2×2 cells each), the same every time; the ones cleared stay gone.
   // Kept clear: the middle, and the corner the void kings come from and the archer goes.
   const obstacles = [];
@@ -112,6 +110,12 @@ export function mountVillage(container, { buildings = [], cleared = [], onTapGro
     model.position.copy(cellCenter(i, j, 2)); scene.add(model); take(i, j, 2, 2);
     const o = { id, kind, i, j, obj: model, ...OBSTACLES[kind] }; obstacles.push(o); pickables.push({ obj: model, kind: 'obstacle', o });
   }
+  // The Town Hall: in the middle at first, then wherever the player moved it.
+  // (After the trees, so moving it never changes which trees grow where.)
+  const th = townHall(); scene.add(th);
+  const thEnt = { kind: 'townhall', g: th, n: 4, i: thAt?.i ?? HALF - 2, j: thAt?.j ?? HALF - 2 };
+  th.position.copy(cellCenter(thEnt.i, thEnt.j, 4)); take(thEnt.i, thEnt.j, 4, 4);
+  pickables.push({ obj: th, kind: 'townhall', ent: thEnt });
 
   // ---------- camera: Clash-style angle, drag to pan, pinch / wheel to zoom ----------
   const controls = new OrbitControls(camera, renderer.domElement);
@@ -148,9 +152,10 @@ export function mountVillage(container, { buildings = [], cleared = [], onTapGro
     const g = new THREE.Group(); g.position.copy(cellCenter(i, j)); scene.add(g);
     g.add(platform());
     const a = buildArcher(); a.root.position.y = 0.62; a.root.rotation.y = Math.PI * 0.75; g.add(a.root);
-    archer = { g, a, i, j }; units.push(a);
+    const rec = { type: 'archer', i, j }; placed.push(rec);
+    archer = { g, a, i, j, rec, kind: 'archer', n: 3 }; units.push(a);
     archerBar = bars.add(g, { y: 3.3, max: 100 });
-    placed.push({ type: 'archer', i, j });
+    pickables.push({ obj: g, kind: 'archer', ent: archer });
     if (pop) { g.scale.setScalar(0.01); popIn.push({ g, t0: performance.now() }); burst(g.position.x, 0.6, g.position.z, 0xfff0c0, 40); }
     return archer;
   };
@@ -162,6 +167,7 @@ export function mountVillage(container, { buildings = [], cleared = [], onTapGro
   const groundAt = (e) => { const r = renderer.domElement.getBoundingClientRect(); ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ptr, camera); return ray.ray.intersectPlane(groundPlane, hit) ? hit.clone() : null; };
   let placing = null;
   const startPlacing = (i0, j0, onMove) => {
+    deselect();
     const g = new THREE.Group(); scene.add(g);
     const tiles = []; const tileGeo = new THREE.PlaneGeometry(0.92, 0.92);
     for (let k = 0; k < 9; k++) { const m = new THREE.Mesh(tileGeo, new THREE.MeshBasicMaterial({ color: 0x3ad86a, transparent: true, opacity: 0.6, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.position.set((k % 3) - 1, 0.04, Math.floor(k / 3) - 1); g.add(m); tiles.push(m); }
@@ -181,15 +187,24 @@ export function mountVillage(container, { buildings = [], cleared = [], onTapGro
     placing.onMove?.(placing.ok);
   };
   const endPlacing = () => { if (!placing) return; scene.remove(placing.g); units.splice(units.indexOf(placing.a), 1); placing = null; gridLines.visible = false; controls.enabled = true; };
-  const cellOf = (p) => [Math.round(p.x + HALF - 1.5), Math.round(p.z + HALF - 1.5)];
+  const cellOf = (p, n = 3) => [Math.round(p.x + HALF - n / 2), Math.round(p.z + HALF - n / 2)];
   const el = renderer.domElement;
   el.addEventListener('pointerdown', (e) => {
+    if (sel && !placing) {
+      const p = groundAt(e), c = sel.ent.g.position;
+      if (p && Math.abs(p.x - c.x) < sel.ent.n / 2 + 0.6 && Math.abs(p.z - c.z) < sel.ent.n / 2 + 0.6) { sel.drag = true; sel.off = [c.x - p.x, c.z - p.z]; controls.enabled = false; }
+      return;
+    }
     if (!placing) return;
     const p = groundAt(e);
     if (p && Math.abs(p.x - placing.g.position.x) < 2 && Math.abs(p.z - placing.g.position.z) < 2) { placing.drag = true; controls.enabled = false; }
   });
+  el.addEventListener('pointermove', (e) => {
+    if (sel?.drag) { const p = groundAt(e); if (p) { p.x += sel.off[0]; p.z += sel.off[1]; const [i, j] = cellOf(p, sel.ent.n); if (i !== sel.i || j !== sel.j) setSel(i, j); } }
+  });
   el.addEventListener('pointermove', (e) => { if (placing?.drag) { const p = groundAt(e); if (p) { const [i, j] = cellOf(p); if (i !== placing.i || j !== placing.j) setPlace(i, j); } } });
   const up = (e) => {
+    if (sel?.drag) { sel.drag = false; controls.enabled = true; return; }
     if (!placing) { const p = onTapGround && groundAt(e); if (p) onTapGround(p); return; }
     if (placing.drag) { placing.drag = false; controls.enabled = true; return; }
   };
@@ -203,13 +218,49 @@ export function mountVillage(container, { buildings = [], cleared = [], onTapGro
     // A tap on a tree or on the Town Hall.
     const r = el.getBoundingClientRect(); ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1); ray.setFromCamera(ptr, camera);
     const hits = ray.intersectObjects(pickables.map((x) => x.obj), true);
-    if (!hits.length) return;
-    let o = hits[0].object; const owner = () => pickables.find((x) => x.obj === o);
+    let o = hits[0]?.object; const owner = () => pickables.find((x) => x.obj === o);
     while (o && !owner()) o = o.parent;
-    const pk = o && owner(); if (!pk) return;
+    const pk = o && owner();
+    if (!pk || pk.kind === 'obstacle' || pk.ent !== sel?.ent) deselect();
+    if (!pk) return;
     const at = { x: e.clientX - r.left, y: e.clientY - r.top };
-    if (pk.kind === 'obstacle') onObstacle?.(pk.o, at); else onTownHall?.(at);
+    if (pk.kind === 'obstacle') return onObstacle?.(pk.o, at);
+    if (canMove() && !sel) select(pk.ent);
+    if (pk.kind === 'townhall') onTownHall?.(at); else onArcher?.(at);
   });
+
+  // ---------- moving a building (Clash-style: tap it, then drag it; red cells = can't go there) ----------
+  let sel = null;
+  const canMove = () => !placing && !site && !fight && !fly;
+  const LIFT = 0.35;
+  const select = (ent) => {
+    untake(ent.i, ent.j, ent.n, ent.n);
+    const tiles = new THREE.Group(), geo = new THREE.PlaneGeometry(0.92, 0.92), mat = new THREE.MeshBasicMaterial({ color: 0x3ad86a, transparent: true, opacity: 0.6, depthWrite: false });
+    for (let x = 0; x < ent.n; x++) for (let z = 0; z < ent.n; z++) { const m = new THREE.Mesh(geo, mat); m.rotation.x = -Math.PI / 2; m.position.set(x - (ent.n - 1) / 2, 0.04, z - (ent.n - 1) / 2); tiles.add(m); }
+    scene.add(tiles);
+    sel = { ent, tiles, mat, i: ent.i, j: ent.j, i0: ent.i, j0: ent.j, ok: true, drag: false };
+    gridLines.visible = true;
+    setSel(ent.i, ent.j);
+  };
+  const setSel = (i, j) => {
+    const n = sel.ent.n;
+    i = THREE.MathUtils.clamp(i, 0, GRID - n); j = THREE.MathUtils.clamp(j, 0, GRID - n);
+    sel.i = i; sel.j = j; sel.ok = free(i, j, n);
+    const c = cellCenter(i, j, n); sel.tiles.position.copy(c); sel.ent.g.position.set(c.x, LIFT, c.z);
+    sel.mat.color.set(sel.ok ? 0x3ad86a : 0xff4a3a);
+  };
+  // Let go: where it stands if the cells are free, else back where it was.
+  const deselect = () => {
+    if (!sel) return;
+    const { ent } = sel, moved = sel.ok && (sel.i !== sel.i0 || sel.j !== sel.j0);
+    if (sel.ok) { ent.i = sel.i; ent.j = sel.j; }
+    ent.g.position.copy(cellCenter(ent.i, ent.j, ent.n)); take(ent.i, ent.j, ent.n, ent.n);
+    if (ent.rec) { ent.rec.i = ent.i; ent.rec.j = ent.j; }
+    if (moved) burst(ent.g.position.x, 0.4, ent.g.position.z, 0xeadfc8, 18, 2);
+    scene.remove(sel.tiles); sel.tiles.children[0]?.geometry.dispose(); sel.mat.dispose();
+    sel = null; gridLines.visible = false; controls.enabled = true;
+    if (moved) onMoved?.({ th: { i: thEnt.i, j: thEnt.j }, buildings: placed.map((b) => ({ ...b })) });
+  };
 
   // ---------- construction ----------
   let site = null;
@@ -253,6 +304,7 @@ export function mountVillage(container, { buildings = [], cleared = [], onTapGro
   const fades = [];
   let fight = null;
   const defend = () => new Promise((resolve) => {
+    deselect();
     const foes = [];
     for (let k = 0; k < 10; k++) {
       const h = buildVoidKing(); const a = (k / 10) * 1.6 - 0.8;
@@ -353,7 +405,12 @@ export function mountVillage(container, { buildings = [], cleared = [], onTapGro
       return true;
     },
     defend, heal, burst,
-    buildings: () => placed.slice(),
+    buildings: () => placed.map((b) => ({ ...b })),
+    townHallAt: () => ({ i: thEnt.i, j: thEnt.j }),
+    // Moving buildings (also used by the tests).
+    select: (kind) => { deselect(); const ent = kind === 'townhall' ? thEnt : archer; if (ent && canMove()) select(ent); return !!sel; },
+    moveSelected: (i, j) => { if (sel) setSel(i, j); return sel?.ok; },
+    deselect, get selected() { return sel && { kind: sel.ent.kind, i: sel.i, j: sel.j, ok: sel.ok }; },
     dispose() { cancelAnimationFrame(raf); ro.disconnect(); bars.dispose(); controls.dispose(); scene.traverse((o) => o.geometry?.dispose?.()); renderer.dispose(); renderer.forceContextLoss?.(); renderer.domElement.remove(); },
   };
 }

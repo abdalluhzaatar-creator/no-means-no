@@ -94,8 +94,10 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
       st.gold -= o.cost; st.base.cleared.push(o.id); res(); save(); sfx.wood?.(); closePop();
     };
   };
-  const onTownHall = (at) => openPop('<b>🏛 القلعة</b><span>المستوى 1</span><small>قلب البعد الروحي</small>', at);
-  const openVillage = () => { village?.dispose(); view.innerHTML = ''; village = mountVillage(view, { buildings: st.base.buildings, cleared: st.base.cleared, onObstacle, onTownHall }); if (window.__nmnDebug) window.__village = village; return village; };
+  const onTownHall = (at) => openPop('<b>🏛 القلعة</b><span>المستوى 1</span><small>قلب البعد الروحي — اسحبها لتحريكها</small>', at);
+  const onArcher = (at) => openPop('<b>🏹 رامي السهام</b><span>المستوى 1</span><small>اسحبه لتحريكه</small>', at);
+  const onMoved = ({ th, buildings }) => { closePop(); st.base.th = th; st.base.buildings = buildings; save(); };
+  const openVillage = () => { village?.dispose(); view.innerHTML = ''; village = mountVillage(view, { buildings: st.base.buildings, cleared: st.base.cleared, th: st.base.th, onObstacle, onTownHall, onArcher, onMoved }); if (window.__nmnDebug) window.__village = village; return village; };
 
   // ---------- 1 · the base, the guide and the King of the Void ----------
   const intro = async () => {
