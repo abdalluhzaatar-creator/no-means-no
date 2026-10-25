@@ -920,3 +920,25 @@ body.in-base .topbar, body.in-base #sandbox-badge { display: none; }
 .bu-item i { font-style: normal; font-size: .68rem; color: #d0241a; font-weight: 800; }
 .bu-item.off { filter: saturate(.4); opacity: .8; }
 .ob:has(.ob-battle:not([hidden])) .ob-done-bar, .ob:has(.ob-load:not([hidden])) .ob-done-bar, .ob:has(.ob-win:not([hidden])) .ob-done-bar { display: none; }
+/* Clash's resource bars (top right): a dark bar filling up, the number on it, the icon at the end, the limit above. */
+.ob-res { flex-direction: column; align-items: flex-end; gap: 4px; }
+.ob-rbar { display: flex; align-items: center; gap: 0; position: relative; }
+.ob-rbar small { position: absolute; top: -2px; inset-inline-end: 34px; font-size: .62rem; color: #fff; text-shadow: 0 1px 0 #000; font-weight: 800; }
+.ob-rbar div { position: relative; width: 150px; height: 22px; margin-top: 10px; background: #1a1a1acc; border: 2px solid #00000088; border-radius: 6px; overflow: hidden; margin-inline-end: -10px; }
+.ob-rbar.gems div { margin-top: 2px; width: 110px; }
+.ob-rbar i { position: absolute; inset: 0 0 0 auto; width: 0; }
+[dir=ltr] .ob-rbar i { inset: 0 auto 0 0; }
+.ob-rbar.gold i { background: linear-gradient(#ffe86a, #e8b81a); } .ob-rbar.nour i { background: linear-gradient(#ff9ef0, #c040c8); } .ob-rbar.gems i { background: linear-gradient(#8af07a, #2fa83a); }
+.ob-rbar b { position: relative; display: block; padding-inline: 18px 8px; text-align: start; color: #fff; font-weight: 900; font-size: .95rem; line-height: 18px; text-shadow: 0 1px 0 #000, 0 0 3px #000; }
+.ob-rbar span { position: relative; z-index: 1; font-size: 1.6rem; filter: drop-shadow(0 2px 1px #0008); margin-top: 8px; }
+.ob-rbar.gems span { margin-top: 0; }
+.ob-builders { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 3; background: #1a1a1acc; color: #fff; border: 2px solid #00000088; border-radius: 8px; padding: 2px 12px; font-weight: 900; }
+@media (max-width: 480px) { .ob-rbar div { width: 112px; } .ob-builders { top: auto; bottom: 96px; } }
+/* Laid out left to right like Clash's (fill from the left, icon at the right end), at the top right. */
+.ob-res { direction: ltr; right: 10px; left: auto; inset-inline-end: auto; }
+.ob-rbar i, [dir=ltr] .ob-rbar i { inset: 0 auto 0 0; }
+.ob-rbar small { inset-inline-end: auto; right: 34px; }
+.ob-rbar b { text-align: left; padding: 0 18px 0 8px; }
+.ob-rbar div { margin-inline-end: 0; margin-right: -10px; }
+.ob-res .ob-rbar span { background: none; border: 0; padding: 0; border-radius: 0; }
+@media (max-width: 480px) { .ob-builders { top: 10px; bottom: auto; left: 10px; transform: none; } }

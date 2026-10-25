@@ -19,122 +19,99 @@ const mesh = (g, geo, mat, x = 0, y = 0, z = 0, shadow = true) => { const m = ne
 const rng = (seed) => () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 const hash = (s) => { let h = 7; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 2147483646; return h + 1; };
 
-// ---------- the ground ----------
-export const GRASS = { a: '#9bcf45', b: '#93c73f', edge: '#8cc23f', far: 0x86bc3c };
-// The map and its strip as one texture: one pixel block per cell, soft checks inside, plain strip outside, tufts.
+// ---------- the ground (as in Clash's empty village: see the designer's reference) ----------
+// Inside: light yellow-green with faint diamonds (squares, seen corner-on). Round it, a strip of
+// darker, streaky grass (STRIP cells wide) ending in a thin dirt line, then the woods.
+export const STRIP = 5;
+export const GRASS = { a: '#a7d042', b: '#a0ca3d', strip: '#79b134', far: 0x2f5c1c };
 export function groundTexture() {
-  const cells = GRID + BORDER * 2, px = 16, cv = document.createElement('canvas'); cv.width = cv.height = cells * px;
+  const cells = GRID + STRIP * 2, px = 16, W = cells * px, cv = document.createElement('canvas'); cv.width = cv.height = W;
   const g = cv.getContext('2d'), r = rng(11);
-  for (let i = 0; i < cells; i++) for (let j = 0; j < cells; j++) {
-    const inside = i >= BORDER && j >= BORDER && i < cells - BORDER && j < cells - BORDER;
-    // Clash's grass: 2×2 patches, a shade lighter and darker.
-    g.fillStyle = inside ? ((Math.floor(i / 2) + Math.floor(j / 2)) % 2 ? GRASS.a : GRASS.b) : GRASS.edge;
-    g.fillRect(i * px, j * px, px, px);
-  }
-  for (let k = 0; k < 2600; k++) {
-    const x = r() * cv.width, y = r() * cv.height;
-    g.fillStyle = r() < 0.5 ? 'rgba(70,120,30,.28)' : 'rgba(200,235,120,.25)';
-    g.fillRect(x, y, 2, 3);
-  }
-  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.magFilter = THREE.LinearFilter; return t;
+  g.fillStyle = GRASS.strip; g.fillRect(0, 0, W, W);
+  // The strip's streaks.
+  for (let k = 0; k < 9000; k++) { const x = r() * W, y = r() * W; g.fillStyle = r() < 0.5 ? 'rgba(40,90,20,.22)' : 'rgba(170,215,90,.22)'; g.fillRect(x, y, 1.5, 4 + r() * 4); }
+  // The dirt line at the strip's outer edge.
+  const e = STRIP * px - 6; g.strokeStyle = '#a5823f'; g.lineWidth = 3; g.globalAlpha = 0.8; g.strokeRect(6, 6, W - 12, W - 12); g.globalAlpha = 1;
+  // The map: soft checks, one per cell.
+  const o = STRIP * px;
+  for (let i = 0; i < GRID; i++) for (let j = 0; j < GRID; j++) { g.fillStyle = (i + j) % 2 ? GRASS.a : GRASS.b; g.fillRect(o + i * px, o + j * px, px, px); }
+  // A soft edge between the map and the strip, and grass speckles on the map.
+  const grad = (x0, y0, x1, y1) => { const l = g.createLinearGradient(x0, y0, x1, y1); l.addColorStop(0, 'rgba(90,150,40,.45)'); l.addColorStop(1, 'rgba(90,150,40,0)'); return l; };
+  g.fillStyle = grad(o, 0, o + 10, 0); g.fillRect(o, o, 10, GRID * px); g.fillStyle = grad(o + GRID * px, 0, o + GRID * px - 10, 0); g.fillRect(o + GRID * px - 10, o, 10, GRID * px);
+  g.fillStyle = grad(0, o, 0, o + 10); g.fillRect(o, o, GRID * px, 10); g.fillStyle = grad(0, o + GRID * px, 0, o + GRID * px - 10); g.fillRect(o, o + GRID * px - 10, GRID * px, 10);
+  for (let k = 0; k < 4000; k++) { const x = o + r() * GRID * px, y = o + r() * GRID * px; g.fillStyle = r() < 0.5 ? 'rgba(80,140,30,.18)' : 'rgba(220,240,140,.2)'; g.fillRect(x, y, 2, 2); }
+  void e;
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t;
 }
 
-// The land round the village, as Clash's classic scenery (drawn from memory of it):
-// open grass first with trees here and there in little groups, bushes and flowers; the
-// woods getting thicker further out; on the left the sea, a sandy shore, a wooden jetty
-// and a boat; behind, grey-brown cliffs. Instanced meshes keep it cheap.
+// The land round the village, as in the designer's Clash reference: woods right up to the
+// strip on three sides — thick, bushy, lime on top and dark below, like heads of broccoli —
+// and on the lower left (the +z side) an orange sandy shore with grey rocks, then the deep sea.
+// Far at the top right, a cliff with a waterfall. Instanced meshes keep it cheap.
 export function scenery(seed = 5) {
-  const r = rng(seed), g = new THREE.Group(), edge = GRID / 2 + BORDER, out = edge + 30;
-  const SEA_X = -edge - 9;                                   // the shore line (x), on the left of the screen
-  // Groups of trees: a few centres with trees round them, more of them further out.
-  const noise = (x, z) => Math.sin(x * 0.21 + 1.3) * Math.cos(z * 0.17 + 0.4) + Math.sin(x * 0.07 - z * 0.11 + 2.1) * 0.8 + Math.sin((x + z) * 0.33) * 0.35;
-  const trees = [], bushes = [], flowers = [];
-  for (let k = 0; k < 26000 && trees.length < 1500; k++) {
-    const x = (r() * 2 - 1) * out, z = (r() * 2 - 1) * out, d = Math.max(Math.abs(x), Math.abs(z)) - edge;
-    if (d < 0.6 || x < SEA_X + 2.5) continue;
-    const want = d < 4 ? 0.02 : d < 12 ? 0.06 + Math.max(0, noise(x, z)) * 0.35 : 0.25 + Math.max(0, noise(x, z) + 0.4) * 0.5;
-    const roll = r();
-    if (roll < want) trees.push([x, z, d]);
-    else if (roll < want + 0.03 && d < 14) bushes.push([x, z]);
-    else if (roll < want + 0.07 && d < 10) flowers.push([x, z]);
-  }
+  const r = rng(seed), g = new THREE.Group(), edge = GRID / 2 + STRIP, out = edge + 22;
+  const SHORE = edge + 4.5;                                   // where the sand meets the sea (z)
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color();
-  const LEAF = [0x4f9e2a, 0x5aab30, 0x48962a, 0x66b836, 0x3f8a26];
-  const pines = trees.filter(() => r() < 0.2), round = trees.filter((t) => !pines.includes(t));
-  const crown = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 14, 10), flat(0xffffff), round.length * 3);
-  const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.14, 0.2, 1, 10), flat(0x8b5a2b), round.length);
-  round.forEach(([x, z, d], k) => {
-    const s = 0.8 + r() * 0.5 + Math.min(0.5, d * 0.025);
-    m4.compose(p.set(x, 0.55 * s, z), q, sc.set(s, s * 1.1, s)); trunk.setMatrixAt(k, m4);
-    m4.compose(p.set(x, 1.45 * s, z), q, sc.set(s * 0.8, s * 0.72, s * 0.8)); crown.setMatrixAt(k * 3, m4);
-    for (const n of [1, 2]) {
-      const a = r() * Math.PI * 2;
-      m4.compose(p.set(x + Math.cos(a) * 0.45 * s, (1.2 + n * 0.25) * s, z + Math.sin(a) * 0.45 * s), q, sc.set(s * 0.55, s * 0.5, s * 0.55)); crown.setMatrixAt(k * 3 + n, m4);
+  // Woods: a tree every ~1.7 units, each a bunch of leafy balls.
+  const spots = [];
+  for (let x = -out; x <= out; x += 1.7) for (let z = -out; z <= out; z += 1.7) {
+    const px = x + (r() - 0.5) * 1.4, pz = z + (r() - 0.5) * 1.4;
+    if (Math.max(Math.abs(px), Math.abs(pz)) < edge + 0.4) continue;
+    if (pz > edge - 1 && px > -out + 2 && px < out - 2) continue;      // the shore side stays open
+    spots.push([px, pz]);
+  }
+  const BALLS = 4, LIME = [0x9ccf34, 0x8cc42a, 0xa8d83c, 0x82bc26], DARK = [0x467e18, 0x528c1e, 0x3c7214];
+  const leaf = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 7), flat(0xffffff, { roughness: 0.95 }), spots.length * BALLS);
+  spots.forEach(([x, z], k) => {
+    const s = 0.95 + r() * 0.45, h = 1.6 + r() * 0.9;
+    for (let n = 0; n < BALLS; n++) {
+      const top = n === BALLS - 1, a = r() * Math.PI * 2, d = top ? 0.1 : 0.55 * s;
+      const rad = (top ? 0.75 : 0.62 + r() * 0.2) * s;
+      m4.compose(p.set(x + Math.cos(a) * d, h + (top ? 0.55 * s : r() * 0.3), z + Math.sin(a) * d), q, sc.set(rad, rad * 0.9, rad)); leaf.setMatrixAt(k * BALLS + n, m4);
+      leaf.setColorAt(k * BALLS + n, c.set(top ? LIME[Math.floor(r() * 4)] : DARK[Math.floor(r() * 3)]));
     }
-    const base = LEAF[Math.floor(r() * 5)];
-    crown.setColorAt(k * 3, c.set(base)); crown.setColorAt(k * 3 + 1, c.set(base).offsetHSL(0, 0, 0.05)); crown.setColorAt(k * 3 + 2, c.set(base).offsetHSL(0, 0, -0.03));
   });
-  const pine = new THREE.InstancedMesh(new THREE.ConeGeometry(0.75, 2.3, 16), flat(0xffffff), pines.length * 2);
-  const pineTrunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.1, 0.14, 0.6, 8), flat(0x7a4f28), pines.length);
-  pines.forEach(([x, z, d], k) => {
-    const s = 0.85 + r() * 0.4 + Math.min(0.5, d * 0.025);
-    m4.compose(p.set(x, 0.3 * s, z), q, sc.set(s, s, s)); pineTrunk.setMatrixAt(k, m4);
-    m4.compose(p.set(x, 1.35 * s, z), q, sc.set(s, s, s)); pine.setMatrixAt(k * 2, m4);
-    m4.compose(p.set(x, 2.1 * s, z), q, sc.set(s * 0.7, s * 0.6, s * 0.7)); pine.setMatrixAt(k * 2 + 1, m4);
-    const col = [0x2e8b3a, 0x36964a, 0x2a7f35][k % 3]; pine.setColorAt(k * 2, c.set(col)); pine.setColorAt(k * 2 + 1, c.set(col).offsetHSL(0, 0, 0.04));
-  });
-  const bush = new THREE.InstancedMesh(new THREE.SphereGeometry(0.5, 12, 8), flat(0xffffff), bushes.length * 2);
-  bushes.forEach(([x, z], k) => {
-    const s = 0.7 + r() * 0.6;
-    m4.compose(p.set(x, 0.25 * s, z), q, sc.set(s, s * 0.75, s)); bush.setMatrixAt(k * 2, m4);
-    m4.compose(p.set(x + 0.4 * s, 0.2 * s, z + 0.2 * s), q, sc.set(s * 0.7, s * 0.55, s * 0.7)); bush.setMatrixAt(k * 2 + 1, m4);
-    bush.setColorAt(k * 2, c.set(0x5aab30)); bush.setColorAt(k * 2 + 1, c.set(0x66b836));
-  });
-  const flower = new THREE.InstancedMesh(new THREE.SphereGeometry(0.09, 8, 6), std(0xffffff, { roughness: 0.6 }), flowers.length * 4);
-  flowers.forEach(([x, z], k) => {
-    const col = [0xffffff, 0xfff27a, 0xff8ac0, 0xffb04a][k % 4];
-    for (let n = 0; n < 4; n++) { m4.compose(p.set(x + (r() - 0.5) * 0.8, 0.08, z + (r() - 0.5) * 0.8), q, sc.set(1, 1, 1)); flower.setMatrixAt(k * 4 + n, m4); flower.setColorAt(k * 4 + n, c.set(col)); }
-  });
-  for (const m of [crown, trunk, pine, pineTrunk, bush]) { m.castShadow = true; m.receiveShadow = true; g.add(m); }
-  g.add(flower);
+  leaf.castShadow = true; leaf.receiveShadow = true; g.add(leaf);
+  // The wood's floor: dark, so gaps between the trees read as shade.
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(out * 2 + 60, out * 2 + 60), std(0x2f5c1c, { roughness: 1 })); floor.rotation.x = -Math.PI / 2; floor.position.y = -0.03; g.add(floor);
 
-  // The sea on the left, the sandy shore, a jetty and a boat.
-  const sand = new THREE.Mesh(new THREE.PlaneGeometry(6, out * 2 + 40), std(0xead9a0, { roughness: 1 })); sand.rotation.x = -Math.PI / 2; sand.position.set(SEA_X + 1, 0.01, 0); sand.receiveShadow = true; g.add(sand);
-  const sea = new THREE.Mesh(new THREE.PlaneGeometry(200, out * 2 + 60), new THREE.MeshStandardMaterial({ color: 0x3aa6d8, roughness: 0.25, metalness: 0.1 })); sea.rotation.x = -Math.PI / 2; sea.position.set(SEA_X - 100, 0.02, 0); g.add(sea);
-  const foam = new THREE.Mesh(new THREE.PlaneGeometry(0.6, out * 2 + 40), new THREE.MeshBasicMaterial({ color: 0xe8f8ff, transparent: true, opacity: 0.8 })); foam.rotation.x = -Math.PI / 2; foam.position.set(SEA_X - 1.9, 0.03, 0); g.add(foam);
+  // The shore: orange sand with grey rocks, then the sea, deep and teal.
+  const sand = new THREE.Mesh(new THREE.PlaneGeometry(out * 2 + 60, SHORE - edge + 1.2), std(0xc8833e, { roughness: 1 })); sand.rotation.x = -Math.PI / 2; sand.position.set(0, 0.004, (edge + SHORE) / 2 - 0.4); sand.receiveShadow = true; g.add(sand);
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(out * 2 + 200, 140), new THREE.MeshStandardMaterial({ color: 0x1c8bb0, roughness: 0.3, metalness: 0.05 })); sea.rotation.x = -Math.PI / 2; sea.position.set(0, 0.01, SHORE + 70); g.add(sea);
+  const deep = new THREE.Mesh(new THREE.PlaneGeometry(out * 2 + 200, 120), new THREE.MeshStandardMaterial({ color: 0x125f86, roughness: 0.3 })); deep.rotation.x = -Math.PI / 2; deep.position.set(0, 0.012, SHORE + 74); g.add(deep);
+  const foam = new THREE.Mesh(new THREE.PlaneGeometry(out * 2 + 60, 0.5), new THREE.MeshBasicMaterial({ color: 0xd8f4ff, transparent: true, opacity: 0.6 })); foam.rotation.x = -Math.PI / 2; foam.position.set(0, 0.02, SHORE + 0.2); g.add(foam);
+  const stones = [];
+  for (let k = 0; k < 140; k++) { const x = (r() * 2 - 1) * (out + 10), z = edge + 0.8 + r() * (SHORE - edge - 0.4); if (r() < 0.35 && z < SHORE - 1.5) continue; stones.push([x, z, 0.25 + r() * r() * 0.9]); }
+  const stone = new THREE.InstancedMesh(boulder(1, 9), flat(0xffffff, { roughness: 0.8 }), stones.length);
+  stones.forEach(([x, z, s], k) => { m4.compose(p.set(x, s * 0.35, z), q.setFromEuler(new THREE.Euler(r(), r() * 6, r())), sc.set(s, s * 0.75, s)); stone.setMatrixAt(k, m4); stone.setColorAt(k, c.set([0x8f9399, 0x9da1a6, 0x7d8187][k % 3])); });
+  q.identity(); stone.castShadow = true; g.add(stone);
+  // The builder's boat at the shore.
   const wood = flat(0xa8743e), darkWood = flat(0x7a5230);
-  const jetty = new THREE.Group(); jetty.position.set(SEA_X - 2, 0, 6); g.add(jetty);
-  for (let k = 0; k < 7; k++) { const pl = new THREE.Mesh(new THREE.BoxGeometry(1, 0.12, 2.2), k % 2 ? wood : flat(0xb8844a)); pl.position.set(-k * 1.05 + 2, 0.35, 0); pl.castShadow = pl.receiveShadow = true; jetty.add(pl); }
-  for (let k = 0; k < 4; k++) for (const z of [-1.05, 1.05]) { const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.9, 10), darkWood); post.position.set(-k * 2 + 2, 0.15, z); jetty.add(post); }
-  const boat = new THREE.Group(); boat.position.set(SEA_X - 8, 0, 8.6); g.add(boat);
+  const boat = new THREE.Group(); boat.position.set(-12, 0, SHORE + 2.2); boat.rotation.y = 0.3; g.add(boat);
   const hull = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 0.8, 4.2, 16, 1, false, 0, Math.PI), flat(0x8b5a2b)); hull.rotation.set(Math.PI / 2, 0, Math.PI / 2); hull.position.y = 0.55; hull.scale.set(1, 1, 0.65); hull.castShadow = true; boat.add(hull);
   const deck = new THREE.Mesh(new THREE.BoxGeometry(4, 0.1, 1.5), wood); deck.position.y = 0.6; boat.add(deck);
   const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 3.4, 10), darkWood); mast.position.y = 2.2; boat.add(mast);
-  const sail = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.1, 6, 6), std(0xf6efdc, { side: THREE.DoubleSide })); sail.position.set(0.05, 2.4, 0); sail.rotation.y = Math.PI / 2; boat.add(sail);
+  const sail = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 2.1), std(0xf6efdc, { side: THREE.DoubleSide })); sail.position.set(0.05, 2.4, 0); sail.rotation.y = Math.PI / 2; boat.add(sail);
   const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.3), std(0xd8341a, { side: THREE.DoubleSide })); flag.position.set(0, 4.0, 0.25); flag.rotation.y = Math.PI / 2; boat.add(flag);
-  g.userData.tick = (t) => { boat.position.y = Math.sin(t * 1.3) * 0.06; boat.rotation.z = Math.sin(t * 1.1) * 0.03; foam.material.opacity = 0.6 + Math.sin(t * 2) * 0.2; };
-
-  // Cliffs far behind (the top of the screen), grey-brown and smooth.
-  const rock = flat(0xa39880), rock2 = flat(0x8c8170);
-  for (let k = 0; k < 18; k++) {
-    const a = -Math.PI * 0.75 + (k / 17 - 0.5) * 1.5, rr = out + 4 + r() * 8;
-    const m = new THREE.Mesh(boulder(5 + r() * 4, k + 11), k % 2 ? rock : rock2);
-    m.position.set(Math.cos(a) * rr * 1.3, 0, Math.sin(a) * rr * 1.3); m.scale.set(1.4, 1.2 + r() * 0.8, 1.2); m.rotation.y = r() * 6;
-    m.castShadow = false; m.receiveShadow = true; g.add(m);
-  }
+  // The cliff and the waterfall, far at the top right (the -z side, toward +x).
+  const cliff = new THREE.Group(); cliff.position.set(edge + 12, 0, -edge - 14); cliff.scale.setScalar(0.6); g.add(cliff);
+  const rockM = flat(0x55594f, { roughness: 0.9 });
+  for (let k = 0; k < 6; k++) { const m = new THREE.Mesh(boulder(3 + r() * 2, k + 21), rockM); m.position.set(-k * 3.2 + 4, 1.5, (k % 2) * 2); m.scale.set(1, 1.6, 1); cliff.add(m); }
+  const fall = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 7), new THREE.MeshStandardMaterial({ color: 0x9fd8f0, emissive: 0x3a7a9a, emissiveIntensity: 0.3, transparent: true, opacity: 0.9 })); fall.position.set(-1, 3.5, 3.6); cliff.add(fall);
+  const pool = new THREE.Mesh(new THREE.CircleGeometry(2.4, 20), std(0x5ab8e0)); pool.rotation.x = -Math.PI / 2; pool.position.set(-1, 0.05, 5); cliff.add(pool);
+  g.userData.tick = (t) => { boat.position.y = Math.sin(t * 1.3) * 0.06; boat.rotation.z = Math.sin(t * 1.1) * 0.03; foam.material.opacity = 0.45 + Math.sin(t * 2) * 0.2; fall.material.emissiveIntensity = 0.3 + Math.sin(t * 6) * 0.08; };
   return g;
 }
 
 // ---------- obstacles (2×2 or 3×3 cells) ----------
 const OB = {
+  // Clash's little tree: one round lime crown on a short brown trunk.
   tree(r) {
     const g = new THREE.Group();
-    mesh(g, new THREE.CylinderGeometry(0.14, 0.2, 0.9, 16), flat(0x7a5230), 0, 0.45, 0);
-    const leaf = [flat(0x4f9a2c), flat(0x5fae34)];
-    mesh(g, new THREE.SphereGeometry(0.66, 18, 14), leaf[0], 0, 1.35, 0);
-    mesh(g, new THREE.SphereGeometry(0.5, 18, 14), leaf[1], 0.38, 1.12, 0.2);
-    mesh(g, new THREE.SphereGeometry(0.48, 18, 14), leaf[1], -0.34, 1.18, -0.18);
-    mesh(g, new THREE.SphereGeometry(0.42, 18, 14), leaf[0], 0.05, 1.82, 0.05);
+    mesh(g, new THREE.CylinderGeometry(0.13, 0.18, 0.8, 10), flat(0x7a4a24), 0, 0.4, 0);
+    const lime = flat(0x8fcc2c), dark = flat(0x6fae22);
+    mesh(g, new THREE.SphereGeometry(0.72, 18, 14), lime, 0, 1.3, 0);
+    mesh(g, new THREE.SphereGeometry(0.45, 14, 10), dark, 0.3, 1.05, 0.3);
     g.scale.setScalar(0.95 + r() * 0.15); return g;
   },
   pine(r) {

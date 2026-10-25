@@ -6,7 +6,7 @@
 // Void Kings' camp with two archers and wins ⭐⭐⭐, 500 gold and 500 light.
 // Checkpoints are saved (st.onboard): 'intro' → 'built' → 'defended' → 'done'.
 import { mountVillage, GRID } from './village3d.js';
-import { ensureBase, grow, capacity } from './base.js';
+import { ensureBase, grow, capacity, builders, busyBuilders } from './base.js';
 import { createBaseUI } from './baseui.js';
 import { createPortraits } from './portrait3d.js';
 
@@ -20,7 +20,12 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
   const root = document.createElement('div'); root.className = 'ob'; host.appendChild(root);
   root.innerHTML = `
     <div class="ob-view"></div>
-    <div class="ob-res"><span>🪙 <b data-r="gold"></b></span><span>✨ <b data-r="nour"></b></span><span class="gem">💎 <b data-r="gems"></b></span></div>
+    <div class="ob-builders">🔨 <b></b></div>
+    <div class="ob-res">
+      <div class="ob-rbar gold"><small></small><div><i></i><b data-r="gold"></b></div><span>🪙</span></div>
+      <div class="ob-rbar nour"><small></small><div><i></i><b data-r="nour"></b></div><span>✨</span></div>
+      <div class="ob-rbar gems"><div><i></i><b data-r="gems"></b></div><span>💎</span></div>
+    </div>
     <div class="ob-talk" hidden><b class="ob-who"></b><p></p><small class="ob-tap">انقر للمتابعة ▼</small></div>
     <div class="ob-hint" hidden></div>
     <div class="ob-pop" hidden></div>
@@ -41,6 +46,10 @@ export function runOnboarding(host, { st, save, sfx = {}, onDone }) {
   const portraits = createPortraits(root);
   const res = () => {
     for (const el of root.querySelectorAll('[data-r]')) el.textContent = (st[el.dataset.r] || 0).toLocaleString('en');
+    // Clash's bars: how full the storages are, and the most they hold.
+    for (const r of ['gold', 'nour']) { const cap = capacity(st.base, r), bar = root.querySelector(`.ob-rbar.${r}`); bar.querySelector('small').textContent = `الحد: ${cap.toLocaleString('en')}`; bar.querySelector('i').style.width = `${Math.min(100, ((st[r] || 0) / cap) * 100)}%`; }
+    root.querySelector('.ob-rbar.gems i').style.width = '100%';
+    root.querySelector('.ob-builders b').textContent = `${builders(st.base) - Math.min(builders(st.base), busyBuilders(st.base))}/${builders(st.base)}`;
     village?.setStock({ gold: Math.min(1, (st.gold || 0) / capacity(st.base, 'gold')), nour: Math.min(1, (st.nour || 0) / capacity(st.base, 'nour')) });
   };
   const checkpoint = (k) => { st.onboard = k; save(); };

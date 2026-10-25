@@ -12,7 +12,7 @@ import { OrbitControls } from './vendor/OrbitControls.js';
 import { buildVoidKing, buildArcher, makeArrow, makeSoul, hpBars } from './units3d.js';
 import { glowTex } from './env3d.js';
 import { GRID, BORDER, BUILDINGS, OBSTACLES, ready } from './base.js';
-import { groundTexture, scenery, obstacleModel, buildingModel, bubble, GRASS } from './basemodels3d.js';
+import { groundTexture, scenery, obstacleModel, buildingModel, bubble, STRIP } from './basemodels3d.js';
 
 export { GRID };
 const HALF = GRID / 2;
@@ -32,15 +32,14 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
   renderer.toneMapping = THREE.NoToneMapping;
   container.appendChild(renderer.domElement);
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xa8dcf2); scene.fog = new THREE.Fog(0xb8e2f2, 90, 170);
+  scene.background = new THREE.Color(0x2f5c1c); scene.fog = new THREE.Fog(0x2f5c1c, 95, 170);
   const camera = new THREE.PerspectiveCamera(38, 1, 0.5, 600);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x6a8a3a, 1.25));
   const sun = new THREE.DirectionalLight(0xfff4dc, 1.9); sun.position.set(22, 40, 16); sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30, near: 1, far: 120 }); sun.shadow.bias = -0.0005; scene.add(sun);
 
   // Ground: the map and its grass strip (one texture), plain grass beyond, the forest round it, hills far off.
-  const far = new THREE.Mesh(new THREE.CircleGeometry(420, 64), std(GRASS.far, { roughness: 1 })); far.rotation.x = -Math.PI / 2; far.position.y = -0.02; far.receiveShadow = true; scene.add(far);
-  const SIDE = GRID + BORDER * 2;
+  const SIDE = GRID + STRIP * 2;
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(SIDE, SIDE), new THREE.MeshStandardMaterial({ map: groundTexture(), roughness: 1 })); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
   const tickers = [];
   const land = scenery(); scene.add(land); tickers.push(land);
@@ -70,7 +69,8 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
   controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
   controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
   controls.minDistance = 14; controls.maxDistance = 95;
-  const VIEW = new THREE.Vector3(24, 30, 26);
+  // Clash's view: the map a diamond, seen from 45° up.
+  const VIEW = new THREE.Vector3(24, 34, 24);
   const look = (x, z, dist = 1) => { controls.target.set(x, 0, z); camera.position.set(x, 0, z).addScaledVector(VIEW, dist); controls.update(); };
   controls.addEventListener('change', () => { const t = controls.target, cx = THREE.MathUtils.clamp(t.x, -HALF, HALF) - t.x, cz = THREE.MathUtils.clamp(t.z, -HALF, HALF) - t.z; if (cx || cz) { t.x += cx; t.z += cz; camera.position.x += cx; camera.position.z += cz; } });
   // Fly the view to a point (used by the tutorial).
@@ -81,7 +81,7 @@ export function mountVillage(container, { buildings = [], obstacles: obList = []
   let framed = false;
   const resize = () => {
     const w = container.clientWidth, h = container.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.fov = w / h < 0.8 ? 52 : 38; camera.updateProjectionMatrix();
-    if (!framed) { framed = true; const hfov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect); const d = (SIDE * 1.3) / (2 * Math.tan(hfov / 2)); look(0, 0, Math.min(2, Math.max(1, d / VIEW.length()))); }
+    if (!framed) { framed = true; const hfov = 2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect); const d = (SIDE * 1.2) / (2 * Math.tan(hfov / 2)); look(0, 0, Math.min(2, Math.max(1, d / VIEW.length()))); }
   };
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
 
