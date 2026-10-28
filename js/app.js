@@ -16,9 +16,6 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 const goldTxt = (n) => `<span class="gold-inline">🪙 ${n}</span>`;
 
 let storage, state, screen = 'world', tour = null;
-// The spiritual base and its tutorial (onboard.js). obPreview: the opening replayed from
-// settings on a throwaway copy, so the real save is never touched.
-let obRun = null, obPreview = null;
 
 // ---------- Save ----------
 let saveTimer;
@@ -57,7 +54,6 @@ async function loadGame() {
   try { raw = await storage.load(); } catch (e) { console.error(e); FX.toast('تعذّر تحميل الحفظ', 'err'); }
   state = raw ? E.migrate(raw) : E.demoState();
   syncClock();
-  if (state.base) screen = 'base';   // the game opens on the base (the spiritual dimension), as Clash opens on your village
   C.ensure(state);
   if (!raw) scheduleSave();
   $('#account').textContent = storage.accountName ? `👤 ${storage.accountName}` : '👤 حسابك';
@@ -151,9 +147,6 @@ function render() {
   document.body.classList.toggle('in-scene', (screen === 'character' && sceneFor(currentChar)) || screen === 'trophies' || screen === 'hq');
   document.body.classList.toggle('in-world', screen === 'world');
   document.body.classList.toggle('in-store', screen === 'shop');
-  document.body.classList.toggle('in-base', screen === 'base');
-  if (screen === 'base' && obRun && $('#base-view')) return;   // the base runs on its own
-  if (obRun) { obRun.dispose(); obRun = null; obPreview = null; }
   if (screen !== 'hq') document.body.classList.remove('view-mode');
   // A live 3D place only refreshes its overlay, so animations and camera survive.
   if (screen === 'character' && oasis && oasis.char === currentChar && $('#place-view')) {
@@ -178,37 +171,14 @@ function render() {
   isle?.dispose(); isle = null;
   if (screen === 'world' && disposeWorld && worldKey === worldSignature() && $('#world-view')) { const a = $('.world-atmo'); if (a) a.textContent = `${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}${timeOverride === "auto" ? ` · ${fmtTime(new Date())}` : ""}`; bind(); return; }
   oasis?.scene.dispose(); oasis = null;
-  const view = { world: renderWorld, character: renderCharacter, shop: renderShop, trophies: renderTrophies, hq: renderHQ, base: renderBase }[screen];
+  const view = { world: renderWorld, character: renderCharacter, shop: renderShop, trophies: renderTrophies, hq: renderHQ }[screen];
   $('#screen').innerHTML = view();
   bind();
   bindWorld();
   bindPlace();
   bindTrophies();
   bindHQ();
-  bindBase();
   refreshModal();
-}
-
-// ---------- The spiritual base (Clash-style) and its tutorial ----------
-function renderBase() { return '<div class="base-host" id="base-view"></div>'; }
-async function bindBase() {
-  const host = $('#base-view');
-  if (!host || obRun) return;
-  const st = obPreview || state;
-  const { runOnboarding } = await import('./onboard.js');
-  if (!host.isConnected || obRun) return;
-  obRun = runOnboarding(host, {
-    st, save: obPreview ? () => {} : scheduleSave, sfx: SND.sfx,
-    onDone: () => {
-      // After the tutorial: the way back to the rest of the game.
-      const bar = document.createElement('div'); bar.className = 'ob-done-bar';
-      bar.innerHTML = `<button data-ob-world>🗺 العالم</button>${obPreview ? '' : '<button data-ob-habits>📜 مهام البعد الروحي</button>'}`;
-      host.querySelector('.ob')?.appendChild(bar);
-      bar.querySelector('[data-ob-world]').onclick = () => { if (obPreview) FX.toast('خلصت التجربة — رجعت لتقدّمك الحقيقي'); go('world'); };
-      bar.querySelector('[data-ob-habits]')?.addEventListener('click', () => { currentChar = 'worshipper'; go('character'); });   // the old habits screen, until it moves into the base
-      if (!obPreview) render();
-    },
-  });
 }
 
 // ---------- Prayer times ----------
@@ -447,7 +417,6 @@ function openSpot(id) {
   const def = E.findRegion(id);
   if (def.kind === 'trophies') return go('trophies');
   if (def.kind === 'hq') return go('hq');
-  if (id === 'sanctuary' && state.base) return go('base');   // the spiritual dimension is the base now
   if (def.kind === 'leaders') {
     const st = E.shipStage(state);
     modal(`<div class="keyuse"><div class="keyuse-icon">🏝</div><h2>${def.name}</h2><p class="muted">${def.desc}</p>
@@ -733,8 +702,6 @@ function showSettings() {
     <section class="set-block">
       <h3>🎓 الدليل</h3>
       <button class="btn" id="tour-again">اعرض الدليل من جديد</button>
-      <button class="btn primary" id="ob-preview">🎬 جرّب بداية اللعبة الجديدة</button>
-      <p class="muted small-text">بتلعب البداية من أولها (البعد الروحي، رامي السهام، الهجوم) بدون ما يتأثر تقدّمك.</p>
     </section>
     <section class="set-block sandbox-block">
       <h3>🧪 وضع التجربة</h3>
@@ -749,7 +716,6 @@ function showSettings() {
            <button class="btn primary" id="sb-enter">🧪 افتح كل إشي</button>`}
     </section>`);
   if ($('#tour-again')) $('#tour-again').onclick = () => { tour?.restart(); closeModal(); go('world'); };
-  if ($('#ob-preview')) $('#ob-preview').onclick = () => { closeModal(); obRun?.dispose(); obRun = null; obPreview = { gold: 0, gems: 300, nour: 0, base: { buildings: [] }, onboard: 'intro' }; screen = 'base'; render(); };
   const swap = (next, msg) => { state = next; C.ensure(state); syncClock(); closeDays(); scheduleSave(); closeModal(); go('world'); render(); FX.toast(msg); };
   if ($('#sb-enter')) $('#sb-enter').onclick = () => swap(E.enterSandbox(state), '🧪 وضع التجربة: كل إشي مفتوح');
   if ($('#sb-leave')) $('#sb-leave').onclick = () => ask('ترجع لتقدّمك الحقيقي؟ كل إشي عملته بالتجربة بيروح.', () => swap(E.leaveSandbox(state), '↩ رجعت لتقدّمك الحقيقي'));

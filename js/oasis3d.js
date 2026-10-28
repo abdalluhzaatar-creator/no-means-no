@@ -185,12 +185,11 @@ export function buildWorshipper(pal) {
     // Warriors: a raised-hands salute, and kneeling before their commander.
     salute: () => play([{ pose: 'takbir', move: 0.35, hold: 0.9 }, { pose: 'stand', move: 0.5 }]),
     kneel: (hold = 2.4) => play([{ pose: 'jalsa', move: 0.9, hold }, { pose: 'stand', move: 1 }]),
-    stop: () => { seq = null; },   // break off any pose sequence (it eases back to standing)
   };
 }
 
 // ---------- scene pieces ----------
-export function palm(rand, h = 6) {
+function palm(rand, h = 6) {
   const g = new THREE.Group();
   const bark = std(0x7a5a3c, { roughness: 1 });
   const curve = 0.3 + rand() * 0.5, segs = 8;
@@ -267,7 +266,7 @@ function palaceHall(mats) {
   return g;
 }
 
-export function cypress(rand) {
+function cypress(rand) {
   const g = new THREE.Group();
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 1.2, 6), std(0x5b4330)); trunk.position.y = 0.6; g.add(trunk);
   const h = 5 + rand() * 2.5;
@@ -276,7 +275,7 @@ export function cypress(rand) {
   return g;
 }
 
-export function orangeTree(rand) {
+function orangeTree(rand) {
   const g = new THREE.Group();
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.22, 1.8, 7), std(0x5b4330)); trunk.position.y = 0.9; g.add(trunk);
   const leaf = std(0x3e7a33, { roughness: 0.85 });
@@ -288,7 +287,7 @@ export function orangeTree(rand) {
   return g;
 }
 
-export function flowerBed(w, d, rand) {
+function flowerBed(w, d, rand) {
   const g = new THREE.Group();
   const box = new THREE.Mesh(new THREE.BoxGeometry(w, 0.5, d), std(0xd9ccb0)); box.position.y = 0.25; g.add(box);
   const soil = new THREE.Mesh(new THREE.BoxGeometry(w - 0.3, 0.1, d - 0.3), std(0x4b8a3a, { roughness: 1 })); soil.position.y = 0.52; g.add(soil);
@@ -299,7 +298,7 @@ export function flowerBed(w, d, rand) {
   return g;
 }
 
-export function lantern() {
+function lantern() {
   const g = new THREE.Group();
   const metal = std(0x3a3128, { metalness: 0.6, roughness: 0.4 });
   const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 2.4, 8), metal); post.position.y = 1.2; g.add(post);
@@ -312,7 +311,7 @@ export function lantern() {
   return g;
 }
 
-export function fountain() {
+function fountain() {
   const g = new THREE.Group();
   const stone = std(0xd9ccb0, { roughness: 0.6 });
   const basin = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.8, 0.6, 8), stone); basin.position.y = 0.3; g.add(basin);
@@ -399,7 +398,7 @@ function mihrabArch() {
 }
 
 // A slender minaret with balconies and a crescent, rising over the courtyard.
-export function minaret() {
+function minaret() {
   const g = new THREE.Group();
   const stone = std(0xf1e6cf, { roughness: 0.6 }), band = std(0x2f7a8a, { roughness: 0.35 }), gold = std(0xd4a53a, { metalness: 0.9, roughness: 0.25 });
   const add = (geo, m, y) => { const o = new THREE.Mesh(geo, m); o.position.y = y; g.add(o); return o; };
