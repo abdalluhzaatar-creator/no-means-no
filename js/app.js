@@ -73,7 +73,6 @@ async function loadGame() {
   });
   // The rules changed (v4): show them once.
   // The rules changed (v5: stars and weekly wars): show them once to players who knew the old ones.
-  if (raw && (state.seenRules || 0) < 6) { state.seenRules = 6; scheduleSave(); setTimeout(() => { if ($('#modal').hidden) showRules(); }, 900); }
   setTimeout(maybeOffer, 1200);
 }
 
@@ -253,28 +252,6 @@ function chooseDim(kind, ids) {
   </div>`, { theme: 'game' });
   $('#offer-back').onclick = showOffer;
   document.querySelectorAll('[data-pick-dim]').forEach((b) => (b.onclick = () => (kind === 'build' ? pickHabit(b.dataset.pickDim, { mode: 'build' }) : pickHabit(E.findRegion(b.dataset.pickDim).characterId, { mode: 'open', regionId: b.dataset.pickDim }))));
-}
-
-// The rules, short and plain.
-function showRules() {
-  const R = E.RULES;
-  const li = (ic, b, sm = '') => `<li><span>${ic}</span><div><b>${b}</b>${sm ? `<small>${sm}</small>` : ''}</div></li>`;
-  modal(`<div class="keyuse">
-    <div class="keyuse-icon">📜</div>
-    <h2>قوانين اللعبة</h2>
-    <ul class="keyuse-list rules">
-      ${li('🏗', 'كل بُعد فيه 8 مباني صغيرة', 'كل مبنى = عادة يومية. 8 عادات = 8 رتب.')}
-      ${li('☪', 'بتبلّش بالبعد الروحي وعادة وحدة')}
-      ${li('📬', 'كل أحد بتجيك رسالة', 'ابني عادة · افتح بعد جديد · لا تستحق (كل إشي بيضل زي ما هو لأسبوع).')}
-      ${li('🎖', 'الرتب بتطلع لحالها', 'كل عادة جديدة بتبنيها بتطلّع رتبة البُعد، والقائد بيترقّى مع كل العادات.')}
-      ${li('⏱', 'كل عادة إلها عدّاد', 'بيعد الأيام والساعات من أول ما بنيتها. بتقدر توقفه ⏸ وترجّع تشغّله ▶، أو تصفّره ↺.')}
-      ${li('✨', 'زينة المكان بتزيد مع كل مبنى')}
-      ${li('🚢', 'السفينة بتتبنى مع كل عادة', `لما تفتح الأبعاد الـ8 وتبني بكل واحد 8 عادات (${E.HABITS_ALL()}) بتجهز السفينة وبتفتح جزيرة القادة.`)}
-      ${li('🤍', 'الصدق', 'إذا كسرت عادة صفّر عدّادها بصدق. الأيام ما إلها قيمة إذا ما كانت حقيقية.')}
-    </ul>
-    <button class="btn primary big" id="rules-ok">تمام</button>
-  </div>`);
-  $('#rules-ok').onclick = () => { closeModal(); setTimeout(maybeOffer, 300); };
 }
 
 function pickLocation() {
