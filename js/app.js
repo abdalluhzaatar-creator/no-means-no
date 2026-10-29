@@ -1171,7 +1171,7 @@ function showCupPicker() {
     <p class="muted">المبلغ بالدينار = عدد أيام الكأس، ويُخصم من رصيدك الحقيقي (💵 ${usd(state.cups.wallet)}).</p>
     <div class="cup-grid">${CUPS.map((c) => `
       <button class="cup-tile ${has(c.id) ? 'won' : ''}" data-start-cup="${c.id}" style="--c:${c.glow || c.color}">
-        ${cupIcon(c, 54)}<b>${c.name}</b><span>${c.days} يوم</span><small>${c.days} دينار · ${usd(C.stakeUsd(c))}</small>${C.keyReward(c) ? `<em>🗝 ${C.keyReward(c)}</em>` : ''}${has(c.id) ? '<i>✔</i>' : ''}
+        ${cupIcon(c, 54)}<b>${c.name}</b><span>${c.days} يوم</span><small>${c.days} دينار · ${usd(C.stakeUsd(c))}</small>${has(c.id) ? '<i>✔</i>' : ''}
       </button>`).join('')}</div>`);
   bind();
 }
