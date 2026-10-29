@@ -1157,7 +1157,7 @@ function showCup(cupId) {
   const wins = C.wonCups(state).filter((x) => x.cupId === cupId);
   isle?.focus(cupId);
   modal(`
-    <div class="cup-hero">${cupIcon(cup, 96)}<h2>${cup.name}</h2><p class="muted">${cup.days} يوم · تأمين ${cup.days} دينار (${usd(C.stakeUsd(cup))})${C.keyReward(cup) ? ` · الجائزة 🗝 ${C.keyReward(cup)}` : ''}</p></div>
+    <div class="cup-hero">${cupIcon(cup, 96)}<h2>${cup.name}</h2><p class="muted">${cup.days} يوم · تأمين ${cup.days} دينار (${usd(C.stakeUsd(cup))})</p></div>
     ${wins.length ? `<p class="ok-text">🏆 فزت فيه ${wins.length} مرة (${wins.map((w) => esc(C.regionName(w.channel))).join('، ')})</p>` : ''}
     ${act ? `<p>⏳ شغّال في «${esc(C.regionName(act.channel))}» — اليوم ${Math.min(cup.days, C.daysDone(act))} من ${cup.days}</p><button class="store-btn buy" data-judge="${act.id}">⚖️ حكم الطرف الثاني</button>`
       : `<button class="store-btn owned" data-start-cup="${cup.id}">ابدأ تحدّي ${cup.name}</button>`}`);
@@ -1232,7 +1232,7 @@ function judgeFlow(id) {
     const r = C.judge(state, id, e.currentTarget.pin.value, won);
     if (!r.ok) return FX.toast(r.reason, 'err');
     scheduleSave(); closeModal(); render();
-    if (won) { SND.sfx.fanfare(); FX.banner(`🏆 ${cup.name}`, `مبروك! رجع المبلغ لرصيدك${C.keyReward(cup) ? ` وربحت 🗝 ${C.keyReward(cup)}` : ''}.`, '🏆'); FX.confetti(); }
+    if (won) { SND.sfx.fanfare(); FX.banner(`🏆 ${cup.name}`, `مبروك! رجع المبلغ لرصيدك.`, '🏆'); FX.confetti(); }
     else { SND.sfx.lose(); } if (!won) FX.toast(`خسارة ${cup.name} — المبلغ صار لـ ${ch.partner}`, 'err');
   };
 }
