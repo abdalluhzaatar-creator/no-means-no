@@ -777,3 +777,8 @@ body.cine .hud, body.cine .move-pad, body.cine .door-btn, body.cine .cell-captio
 .dim.pickable:hover { border-color: #ffd66b; }
 .offer-box { cursor: pointer; color: #fff; border-color: #ffd66b; background: linear-gradient(135deg, #b8741a, #e0a83a) !important; animation: offer-pulse 1.4s ease-in-out infinite; }
 @keyframes offer-pulse { 50% { box-shadow: 0 0 0 6px #ffd66b33; } }
+/* A habit's counter (days and hours), pause / run and reset. */
+.habit-row .counter { display: inline-flex; gap: 6px; align-items: baseline; font-size: .95rem; color: #9fe3b8; }
+.habit-row .counter b { font-size: 1.05rem; color: #fff; }
+.habit-row.is-paused .counter { color: #f4d58d; }
+.habit-row.is-paused .counter b { color: #f4d58d; }

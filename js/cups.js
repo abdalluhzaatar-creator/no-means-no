@@ -2,9 +2,10 @@
 // Money here is real money the player tracks by hand in dollars (state.cups.wallet).
 import { CUPS, CHANNEL_UNLOCK_CUP, JOD_TO_USD, REGIONS } from './content.js';
 
-// Real money only after a proven start: this many days with at least one star, and one cup at a time.
+// Real money only after a proven start: this many days since the game began, and one cup at a time.
 export const CUP_DAYS = 30;
-export const cupsOpen = (s) => (s.stats?.activeDays || 0) >= CUP_DAYS;
+export const daysPlayed = (s, now = Date.now()) => (s.startDay ? Math.floor((now - Date.parse(s.startDay + 'T00:00:00Z')) / 86400000) : 0);
+export const cupsOpen = (s) => daysPlayed(s) >= CUP_DAYS;
 
 export const findCup = (id) => CUPS.find((c) => c.id === id);
 export const stakeJod = (cup) => cup.days;                       // rule 7: dinars = days
@@ -64,7 +65,7 @@ export function startChallenge(s, { channel, cupId, partner, pin, now = Date.now
   const c = ensure(s);
   const cup = findCup(cupId);
   channel = (channel || '').trim(); partner = (partner || '').trim(); pin = String(pin || '').trim();
-  if (!cupsOpen(s)) return fail(`الكؤوس بتنفتح بعد ${CUP_DAYS} يوم فيهم نجمة على الأقل (معك ${s.stats?.activeDays || 0})`);
+  if (!cupsOpen(s)) return fail(`الكؤوس بتنفتح بعد ${CUP_DAYS} يوم من بداية اللعبة (مرّ ${daysPlayed(s)})`);
   if (active(s).length) return fail('في كأس شغّالة — كأس وحدة بس بنفس الوقت');
   if (!cup) return fail('اختر كأسًا');
   if (!channel) return fail('اختر المكان');

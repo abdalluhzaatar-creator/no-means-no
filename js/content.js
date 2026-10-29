@@ -17,7 +17,7 @@ const plainStages = () => [{ id: 'start', name: 'البداية', levels: Array.
 
 // Ready-made habits the player can pick for each dimension (or write their own).
 export const SUGGEST = {
-  worshipper: [['🕌', 'الصلاة', 5], ['📖', 'قراءة صفحة قرآن', 1], ['📿', 'أذكار الصباح والمساء', 2], ['🤲', 'الاستغفار 100 مرة', 1], ['💝', 'صدقة ولو بسيطة', 1], ['🌙', 'ركعتين قيام ليل', 1], ['🎧', 'سماع درس ديني', 1]],
+  worshipper: [['🕌', 'الصلوات الخمس', 1], ['📖', 'قراءة صفحة قرآن', 1], ['📿', 'أذكار الصباح والمساء', 2], ['🤲', 'الاستغفار 100 مرة', 1], ['💝', 'صدقة ولو بسيطة', 1], ['🌙', 'ركعتين قيام ليل', 1], ['🎧', 'سماع درس ديني', 1]],
   scholar: [['📚', 'قراءة 10 صفحات', 1], ['🧠', 'تعلّم شي جديد 20 دقيقة', 1], ['🔁', 'مراجعة اللي تعلّمته', 1], ['🗣', 'تعلّم 5 كلمات بلغة جديدة', 1], ['✍', 'لخّص فكرة بدفترك', 1], ['🎧', 'بودكاست مفيد', 1]],
   athlete: [['🏋', 'تمرين 30 دقيقة', 1], ['💧', 'كاسة مي', 8], ['😴', 'نوم 7 ساعات', 1], ['🚶', 'مشي 6000 خطوة', 1], ['🥗', 'أكل صحي بدون سكر', 1], ['🤸', 'تمارين تمدّد 10 دقايق', 1]],
   empath: [['🤝', 'ساعد حدا بدون ما يطلب', 1], ['🕊', 'سامح شخص زعّلك', 1], ['🎁', 'آثِر غيرك بإشي بتحبه', 1], ['👂', 'اسمع لحدا للآخر بدون مقاطعة', 1], ['🏥', 'زور مريض أو اتصل فيه', 1], ['🤲', 'ادعِ لغيرك بظهر الغيب', 1], ['🧓', 'اخدم أبوك أو أمك', 1], ['🫡', 'وفّي بوعد وعدته', 1], ['🙊', 'امسك لسانك عن الغيبة', 1], ['🍞', 'أطعم محتاج', 1]],
@@ -36,10 +36,9 @@ export const CHARACTERS = [
     cost: {},
     starter: true,
     requires: [],
-    // A "perfect day" = every task done as many times as it needs that day.
     keyEveryDays: 7, // consecutive perfect days → 1 key (RULES.keyDays)
     daysPerLevel: 7,
-    // No preset tasks: the player writes each rank's tasks (and times per day).
+    // No preset habits: the player picks each building's habit.
     tasks: [],
     stages: plainStages(),
     palette: { robe: '#fbfaf6', accent: '#3f7d6e', skin: '#f3d3b6', glow: '#f4d58d' },

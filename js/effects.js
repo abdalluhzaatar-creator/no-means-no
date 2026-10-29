@@ -42,7 +42,7 @@ function coinBurst(origin, n = 10) {
     setTimeout(() => c.remove(), 900);
   }
   const g = document.getElementById('gold-box');
-  g.classList.remove('pulse'); void g.offsetWidth; g.classList.add('pulse');
+  if (g) { g.classList.remove('pulse'); void g.offsetWidth; g.classList.add('pulse'); }
 }
 
 export function confetti() {

@@ -8,12 +8,11 @@ import { createStorage } from './storage.js';
 import { characterSVG, regionSVG, worldMapSVG } from './scenes.js';
 import * as FX from './effects.js';
 import * as SND from './audio.js';
-import { CITIES, METHODS, prayerDay, windowState, fmtTime } from './prayer.js';
+import { CITIES, METHODS, prayerDay, fmtTime } from './prayer.js';
 import { createTour } from './tour.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const goldTxt = (n) => `<span class="gold-inline">🪙 ${n}</span>`;
 
 let storage, state, screen = 'world', tour = null;
 
@@ -59,10 +58,9 @@ async function loadGame() {
   $('#account').textContent = storage.accountName ? `👤 ${storage.accountName}` : '👤 حسابك';
   $('#app').hidden = false;
   closeDays();
-  autoMissPrayers();
   render();
   // Keep following the clock: close finished days and refresh the prayer windows.
-  setInterval(() => { closeDays(); autoMissPrayers(); if ($('#modal').hidden) render(); }, 30000);
+  setInterval(() => { closeDays(); if ($('#modal').hidden) render(); }, 30000);
   // The guided first steps: new players get them; players who already set habits don't.
   if (state.tour == null) { state.tour = raw && CHARACTERS.some((c) => state.characters[c.id] && E.activeTasks(c, state.characters[c.id]).length) ? 'done' : 0; scheduleSave(); }
   tour?.dispose();
@@ -129,14 +127,13 @@ function sandboxBadge() {
   document.body.classList.toggle('sandbox', !!state?.sandbox);
   let b = document.getElementById('sandbox-badge');
   if (state?.sandbox && !b) { b = document.createElement('button'); b.id = 'sandbox-badge'; b.className = 'sandbox-badge'; b.onclick = showSettings; document.body.appendChild(b); }
-  if (b && state?.sandbox) b.textContent = state.sandbox.shift ? `🧪 وضع التجربة · ${DAY_NAMES[new Date(dayFor() + 'T00:00:00Z').getUTCDay()]} (+${state.sandbox.shift} يوم)` : '🧪 وضع التجربة';
+  if (b && state?.sandbox) b.textContent = state.sandbox.shift ? `🧪 وضع التجربة · مرّ ${state.sandbox.shift / 7} ${state.sandbox.shift === 7 ? 'أسبوع' : 'أسابيع'}` : '🧪 وضع التجربة';
   if (!state?.sandbox && b) b.remove();
 }
 function render() {
   sandboxBadge();
   checkCommander();
   syncSound();
-  $('#gold').textContent = state.gold;
   $('#habits').innerHTML = `<bdi>${E.habitsBuilt(state)}/${E.HABITS_ALL()}</bdi>`;
   $('#offer-box').hidden = !E.pendingOffer(state, dayFor());
   const navScreen = screen === 'character' ? 'world' : screen;
@@ -185,18 +182,12 @@ const noonOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12);
 const prayerNow = () => (state.location ? prayerDay(noonOf(new Date(Date.now() - E.RULES.dayEnds * 3600000)), state.location) : null);
 const dayFor = () => E.today();
 
-const starTxt = (n) => (n ? '⭐'.repeat(n) : '✖');
-
-// When the game day closes (3 at night) every dimension's stars for the day are counted
-// and the habits left undone are marked missed. In the morning: yesterday's stars.
+// The game day closes at 3 at night; then the Sunday message, if one is waiting.
 function closeDays() {
   const before = state.lastDay;
   const rep = E.closeDays(state);
   if (state.lastDay !== before) scheduleSave();
-  if (!rep.days) return;
-  const lastDate = rep.stars.at(-1)?.date, last = rep.stars.filter((x) => x.date === lastDate);
-  if (last.length) setTimeout(() => FX.banner('🌙 نجوم مبارح', last.map((x) => `${x.name} ${starTxt(x.stars)}`).join(' · '), '⭐'), 500);
-  setTimeout(maybeOffer, 1500);
+  if (rep.days) setTimeout(maybeOffer, 1500);
 }
 
 // ---------- The Sunday message ----------
@@ -252,54 +243,27 @@ function showRules() {
       ${li('☪', 'بتبلّش بالبعد الروحي وعادة وحدة')}
       ${li('📬', 'كل أحد بتجيك رسالة', 'ابني عادة · افتح بعد جديد · لا تستحق (كل إشي بيضل زي ما هو لأسبوع).')}
       ${li('🎖', 'الرتب بتطلع لحالها', 'كل عادة جديدة بتبنيها بتطلّع رتبة البُعد، والقائد بيترقّى مع كل العادات.')}
-      ${li('⭐', 'كل يوم نجوم لكل بُعد', 'ثلث عاداتك = ⭐ · ثلثينها = ⭐⭐ · كلها = ⭐⭐⭐.')}
-      ${li('✔', `خلّصت عادة = +${R.reward} 🪙`, 'والذهب بتزيّن فيه أماكن الأبعاد.')}
-      ${li('🌙', `اليوم بيخلص الساعة ${R.dayEnds} بالليل`, 'مش الساعة 12.')}
+      ${li('⏱', 'كل عادة إلها عدّاد', 'بيعد الأيام والساعات من أول ما بنيتها. بتقدر توقفه ⏸ وترجّع تشغّله ▶، أو تصفّره ↺.')}
+      ${li('✨', 'زينة المكان بتزيد مع كل مبنى')}
       ${li('🚢', 'السفينة بتتبنى مع كل عادة', `لما تفتح الأبعاد الـ8 وتبني بكل واحد 8 عادات (${E.HABITS_ALL()}) بتجهز السفينة وبتفتح جزيرة القادة.`)}
-      ${li('🤍', 'الصدق', 'سجّل فشلك بصدق. النجوم ما إلها قيمة إذا ما كانت حقيقية.')}
+      ${li('🤍', 'الصدق', 'إذا كسرت عادة صفّر عدّادها بصدق. الأيام ما إلها قيمة إذا ما كانت حقيقية.')}
     </ul>
     <button class="btn primary big" id="rules-ok">تمام</button>
   </div>`);
   $('#rules-ok').onclick = () => { closeModal(); setTimeout(maybeOffer, 300); };
 }
 
-// A task tied to a prayer time can't count before that prayer's time begins.
-const hasPrayers = (c) => !!state.characters[c.id] && E.activeTasks(c, state.characters[c.id]).some((t) => t.prayer);
-function autoMissPrayers() {
-  if (!state.location) return;
-  const pd = prayerNow();
-  const now = new Date();
-  const revoked = [];
-  for (const c of CHARACTERS) {
-    const ch = state.characters[c.id];
-    if (!ch) continue;
-    for (const t of E.activeTasks(c, ch)) {
-      if (!t.prayer) continue;
-      const w = pd.windows[t.prayer];
-      const p = E.taskProgress(state, c.id, t.id);
-      if (p.lastDate !== pd.day || p.lastResult !== 'success') continue;
-      const early = windowState(w, now) === 'upcoming' || (p.at && p.at < +w.start);
-      if (early && E.revokeTask(state, c.id, t.id, pd.day)) revoked.push(t.title);
-    }
-  }
-  if (revoked.length) {
-    scheduleSave();
-    FX.banner('أُلغيت مهام سُجّلت قبل وقتها', revoked.join('، '), '↩');
-  }
-}
-
 function pickLocation() {
   const cur = state.location;
   modal(`
-    <h2>أوقات الصلاة</h2>
-    <p class="muted">اختر مدينتك لتعرف اللعبة أوقات الصلاة. تُسجَّل الصلاة بعد دخول وقتها، ولك حتى الساعة ${E.RULES.dayEnds} بالليل لتسجيلها؛ بعدها تُحسب فائتة.</p>
+    <h2>📍 مدينتك</h2>
+    <p class="muted">اختر مدينتك: السما بالأماكن بتمشي على وقتك الحقيقي (الفجر، الظهر، المغرب…) وعلى طقس مدينتك.</p>
     <div class="chips">${CITIES.map((c, i) => `<button class="chip ${cur?.name === c.name ? 'on' : ''}" data-city="${i}">${c.name}</button>`).join('')}</div>
     <p><button class="btn ghost small" id="geo">📍 استخدم موقعي الحالي</button></p>
     <label class="form">طريقة الحساب
       <select id="method">${Object.entries(METHODS).map(([k, m]) => `<option value="${k}" ${cur?.method === k ? 'selected' : ''}>${m.name}</option>`).join('')}</select>
     </label>`);
-  // `since`: prayers that ended before the player set up times are not counted as missed.
-  const save = (loc) => { state.location = { since: state.location?.since ?? Date.now(), ...loc }; scheduleSave(); closeModal(); autoMissPrayers(); oasis?.scene.refreshSky(); loadWeather(true); render(); FX.toast(`📍 ${loc.name}`); };
+  const save = (loc) => { state.location = { ...loc }; scheduleSave(); closeModal(); oasis?.scene.refreshSky(); loadWeather(true); render(); FX.toast(`📍 ${loc.name}`); };
   document.querySelectorAll('[data-city]').forEach((b) => (b.onclick = () => save({ ...CITIES[+b.dataset.city] })));
   $('#method').onchange = (e) => { if (state.location) { state.location.method = e.target.value; scheduleSave(); render(); } };
   $('#geo').onclick = () => {
@@ -311,33 +275,26 @@ function pickLocation() {
   };
 }
 
+// A habit's counter: "3 أيام · 5 ساعات" (and whether it is paused).
+const ar = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n <= 10 ? `${n} ${few}` : `${n} ${many}`);
+const counterTxt = (t) => {
+  const { days, hours, minutes } = E.habitDays(t);
+  const d = ar(days, 'يوم', 'يومين', 'أيام', 'يوم'), h = ar(hours, 'ساعة', 'ساعتين', 'ساعات', 'ساعة');
+  return days ? `${d}${hours ? ` و${h}` : ''}` : hours ? `${h}${minutes ? ` و${minutes} د` : ''}` : `${minutes} دقيقة`;
+};
+// One habit in a list: its counter, pause / run, reset.
 function taskRow(charId, t) {
-  const date = dayFor(charId);
-  const p = E.taskProgress(state, charId, t.id);
-  const doneToday = E.taskDoneToday(p, date);
-  const times = E.timesOf(t), count = E.countToday(p, date);
-  const pd = t.prayer ? prayerNow() : null;
-  const w = pd?.windows[t.prayer];
-  const ws = w ? windowState(w, new Date()) : null;
-  const timeInfo = w ? `<small class="ptime ${ws}">🕰 ${fmtTime(w.start)} – ${fmtTime(w.end)}</small>` : '';
-  const five = E.isFivePrayers(t.title) && times === 5;
-  const dots = five ? `<span class="times prayers">${PRAYER_LABELS.map((x, i) => `<i class="${i < count ? 'on' : ''}">${x}</i>`).join('')}<b><bdi>${count}/5</bdi></b></span>`
-    : times > 1 ? `<span class="times">${Array.from({ length: times }, (_, i) => `<i class="${i < count ? 'on' : ''}"></i>`).join('')}<b><bdi>${count}/${times}</bdi></b></span>` : '';
-  let actions;
-  if (doneToday) actions = `<span class="result">${p.lastResult === 'success' ? '✔ أنجزتها' : '✘ فاتت'}</span>`;
-  else if (t.prayer && !state.location) actions = '<button class="btn small" data-pick-location>اختر مدينتك</button>';
-  else if (ws === 'upcoming') actions = `<span class="result">لم يدخل وقتها بعد</span>`;
-  else actions = `<button class="btn ok" data-task-ok="${charId}:${t.id}">${five ? `صلّيت ${PRAYER_LABELS[Math.min(4, count)]}` : times > 1 ? `أنجزت مرة (+1)` : 'أنجزت'}</button>
-           <button class="btn bad" data-task-fail="${charId}:${t.id}">لم أنجز</button>`;
+  const paused = t.paused != null;
   return `
-  <li class="task ${doneToday ? 'is-' + p.lastResult : ''} ${ws === 'open' && !doneToday ? 'is-open' : ''}">
+  <li class="task habit-row ${paused ? 'is-paused' : 'is-running'}">
     <div class="task-main">
-      <strong><span class="t-ic">${taskIcon(charId, t)}</span> ${esc(t.title)}${times > 1 ? ` <small class="muted">× ${times} باليوم</small>` : ''}${E.findCharacter(charId)?.stages ? ` <button class="edit-task" data-edit-task="${charId}:${t.id}" title="عدّل" aria-label="عدّل">✎</button>` : ''}</strong>
-      ${dots}
-      ${timeInfo}
-      <small class="muted"><bdi>+${t.reward ?? E.RULES.reward}</bdi> 🪙 · 🔥 ${E.currentStreak(p, date)}</small>
+      <strong><span class="t-ic">${taskIcon(charId, t)}</span> ${esc(t.title)}${E.findCharacter(charId)?.stages ? ` <button class="edit-task" data-edit-task="${charId}:${t.id}" title="عدّل" aria-label="عدّل">✎</button>` : ''}</strong>
+      <span class="counter">⏱ <b>${counterTxt(t)}</b>${paused ? ' <small>⏸ موقوف</small>' : ''}</span>
     </div>
-    <div class="task-actions">${actions}</div>
+    <div class="task-actions">
+      ${paused ? `<button class="btn ok" data-habit-run="${charId}:${t.id}">▶ شغّل</button>` : `<button class="btn" data-habit-pause="${charId}:${t.id}">⏸ وقّف</button>`}
+      <button class="btn bad" data-habit-reset="${charId}:${t.id}">↺ صفّر</button>
+    </div>
   </li>`;
 }
 
@@ -428,7 +385,7 @@ function progressionPanel(c, ch) {
     <p class="muted small-text">كل عادة جديدة بتبنيها (من رسالة الأحد) بتطلّعك رتبة لحالها.</p>
     <ol class="path">${ladder.map((r, i) => {
       const n = i + 1, cls = n < cur ? 'done' : n === cur ? 'current' : '';
-      const what = r.adds.length ? r.adds.map((a) => (n === 1 ? '' : '+ ') + a.title + (E.timesOf(a) > 1 ? ` ×${E.timesOf(a)}` : '')).join('، ') : n > cur ? 'عادة جديدة بتختارها' : '—';
+      const what = r.adds.length ? r.adds.map((a) => (n === 1 ? '' : '+ ') + a.title).join('، ') : n > cur ? 'عادة جديدة بتختارها' : '—';
       const unlock = n === cur + 1
         ? '<small class="muted">📬 من رسالة الأحد</small>' : '';
       return `<li class="${cls}" style="--rank:${r.color}"><b class="rk">${esc(r.name)}</b><span>${esc(what)}</span>${unlock}</li>`;
@@ -455,7 +412,6 @@ const DIM_ICONS = {
   keeper: ['🌳', '🌱', '♻', '🚯', '💧', '☀', '🌬', '🐝', '🐦', '🌻', '🚶', '🚲', '🌍', '🧹', '🪴', '🍃', '🔋', '🌊'],
 };
 const ICONS = ['⭐', '🔥', '✅', '🎯', '⏰', '📵', '🚭', '☕', '🍎', '💧', '😴', '🧹', '🎨', '🎸', '🧩', '📖', '✍', '💪', '🙏', '❤', '🌙', '☀', '🕯', '🎵', '🏠', '🚗', '📞', '💬', '🛑', '🧠', '👀', '🗝', '🏅', '🌟', '🍀', '🕐'];
-const PRAYER_LABELS = ['الفجر', 'الظهر', 'العصر', 'المغرب', 'العشاء'];
 const DIM_ICON = { worshipper: '☪', scholar: '📚', athlete: '🏋', empath: '🕊', host: '🤝', builder: '🛠', merchant: '🪙', keeper: '🌳' };
 const taskIcon = (charId, t) => t.icon || (SUGGEST[charId] || []).find(([, x]) => x === t.title)?.[0] || DIM_ICON[charId] || '⭐';
 function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) {
@@ -468,8 +424,8 @@ function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) 
   const ideas = (SUGGEST[id] || []).filter(([, t]) => !have.has(t));
   // What is being built: { from: suggestion title | 'own', title, icon, times }
   const cur = editing
-    ? { from: ideas.some(([, t]) => t === editing.title) ? editing.title : 'own', title: editing.title, icon: taskIcon(id, editing), times: E.timesOf(editing) }
-    : { from: null, title: '', icon: '', times: 1 };
+    ? { from: ideas.some(([, t]) => t === editing.title) ? editing.title : 'own', title: editing.title, icon: taskIcon(id, editing) }
+    : { from: null, title: '', icon: '' };
   const head = mode === 'build' ? { k: `🏗 ${esc(c.name)} · مبنى ${(rd?.habits || 0) + 1} من 8`, t: 'العادة الجديدة' }
     : mode === 'open' ? { k: `🔓 ${esc(E.findRegion(regionId).name)}`, t: 'أول عادة لهاد البعد' }
     : mode === 'edit' ? { k: 'تعديل المهمة', t: 'غيّر اسمها أو صورتها أو عدد مراتها' } : { k: esc(c.name), t: 'اختار أول عادة إلك' };
@@ -482,7 +438,7 @@ function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) 
       <p class="pk-lead">${lead}</p>
       <div class="pk-step"><b>1</b> اختار عادة</div>
       <div class="habit-grid">
-        ${ideas.map(([ic, t, n], i) => `<button class="habit" type="button" data-h="${esc(t)}" data-n="${n}" data-ic="${ic}" style="--i:${i}"><span class="hb-ic">${ic}</span><b>${esc(t)}</b>${n > 1 ? `<small>× ${n} باليوم</small>` : ''}<i class="hb-check">✔</i></button>`).join('')}
+        ${ideas.map(([ic, t], i) => `<button class="habit" type="button" data-h="${esc(t)}" data-ic="${ic}" style="--i:${i}"><span class="hb-ic">${ic}</span><b>${esc(t)}</b><i class="hb-check">✔</i></button>`).join('')}
         <button class="habit own" type="button" data-own style="--i:${ideas.length}"><span class="hb-ic">✍</span><b>مهمة من عندي</b><i class="hb-check">✔</i></button>
       </div>
       <div class="pk-custom" id="pk-custom" hidden>
@@ -497,9 +453,6 @@ function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) 
           <small>صور عامة</small>
           <div class="pk-icons">${ICONS.filter((x) => !(DIM_ICONS[id] || []).includes(x)).map((x) => `<button type="button" data-icon="${x}">${x}</button>`).join('')}</div>
         </div>
-        <div class="pk-step"><b>3</b> كم مرة باليوم؟</div>
-        <div class="hp-times"><button type="button" class="step" data-step="-1" aria-label="أقل">−</button><b id="hp-n">1</b><button type="button" class="step" data-step="1" aria-label="أكثر">+</button></div>
-        <div class="pk-prayers" id="pk-prayers" hidden>${PRAYER_LABELS.map((x) => `<span>${x}</span>`).join('')}</div>
         <div class="hp-sum" id="hp-sum"></div>
       </div>
       <div class="pk-actions">
@@ -509,28 +462,21 @@ function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) 
       </div>
     </div>`, { theme: 'game' });
   modalRefresh = null;
-  const nEl = $('#hp-n'), ok = $('#hp-ok'), sum = $('#hp-sum'), title = $('#pk-title'), iconBtn = $('#pk-icon'), icons = $('#pk-icons');
+  const ok = $('#hp-ok'), sum = $('#hp-sum'), title = $('#pk-title'), iconBtn = $('#pk-icon'), icons = $('#pk-icons');
   const draw = () => {
     document.querySelectorAll('.habit').forEach((b) => b.classList.toggle('on', cur.from === 'own' ? b.hasAttribute('data-own') : b.dataset.h === cur.from));
     $('#pk-custom').hidden = !cur.from;
-    const t = cur.title.trim(), five = E.isFivePrayers(t);
-    if (five) cur.times = 5;
-    $('.hp-times').hidden = five;
-    nEl.textContent = cur.times;
+    const t = cur.title.trim();
     iconBtn.textContent = cur.icon || '⭐';
-    $('#pk-prayers').hidden = !five;
-    document.querySelector('[data-step="-1"]').disabled = cur.times <= (five ? 5 : 1);
     ok.disabled = !t;
     sum.innerHTML = t
-      ? `<p><span>📅</span>كل يوم: <b>${esc(cur.icon || '⭐')} ${esc(t)}${cur.times > 1 ? ` × ${cur.times}` : ''}</b> — تسجّلها قبل الساعة ${E.RULES.dayEnds} بالليل.</p>
-         ${five ? '<p><span>🕌</span>الصلاة خمس صلوات باليوم — لا أقل ولا أكثر.</p>' : ''}
-         <p><span>⭐</span>كل يوم بتاخذ نجوم حسب قديش خلّصت، وكل أحد بتجيك رسالة: تبني عادة، تفتح بعد، أو لا.</p>
-         ${cur.times > 10 && !five ? '<p class="warn"><span>⚠</span>رقم كبير. ابدأ أقل وزيد مع الوقت.</p>' : ''}`
-      : '<p class="muted">اكتب اسم المهمة 👆</p>';
+      ? `<p><span>🏗</span>مبنى جديد اسمه <b>${esc(cur.icon || '⭐')} ${esc(t)}</b>.</p>
+         <p><span>⏱</span>إله عدّاد بيبلّش من هلأ، بيعد الأيام والساعات. بتقدر توقفه أو تصفّره.</p>`
+      : '<p class="muted">اكتب اسم العادة 👆</p>';
   };
   document.querySelectorAll('.habit').forEach((b) => (b.onclick = () => {
-    if (b.hasAttribute('data-own')) Object.assign(cur, { from: 'own', title: cur.from === 'own' ? cur.title : '', icon: cur.from === 'own' ? cur.icon : '✍', times: cur.from === 'own' ? cur.times : 1 });
-    else Object.assign(cur, { from: b.dataset.h, title: b.dataset.h, icon: b.dataset.ic, times: +b.dataset.n || 1 });
+    if (b.hasAttribute('data-own')) Object.assign(cur, { from: 'own', title: cur.from === 'own' ? cur.title : '', icon: cur.from === 'own' ? cur.icon : '✍' });
+    else Object.assign(cur, { from: b.dataset.h, title: b.dataset.h, icon: b.dataset.ic });
     title.value = cur.title; SND.sfx.click(); draw();
     if (cur.from === 'own') setTimeout(() => title.focus(), 0);
     $('#pk-custom').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -539,11 +485,10 @@ function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) 
   title.oninput = () => { cur.title = title.value; draw(); };
   iconBtn.onclick = () => { icons.hidden = !icons.hidden; };
   icons.querySelectorAll('[data-icon]').forEach((b) => (b.onclick = () => { cur.icon = b.dataset.icon; icons.hidden = true; SND.sfx.click(); draw(); }));
-  document.querySelectorAll('[data-step]').forEach((b) => (b.onclick = () => { cur.times = Math.max(1, Math.min(E.MAX_TIMES, cur.times + +b.dataset.step)); SND.sfx.click(); draw(); }));
   $('#hp-cancel').onclick = () => (mode === 'build' || mode === 'open' ? showOffer() : closeModal());
   if ($('#hp-del')) $('#hp-del').onclick = () => ask(`تحذف "${editing.title}"؟`, () => { const r = act(E.removeHabit(state, id, taskId)); if (r.ok) closeModal(); });
   ok.onclick = () => {
-    const habit = { title: cur.title.trim(), icon: cur.icon, times: cur.times };
+    const habit = { title: cur.title.trim(), icon: cur.icon };
     if (mode === 'build' || mode === 'open') {
       const r = act(E.answerOffer(state, mode, { id: mode === 'open' ? regionId : id, habit }, dayFor()), ok);
       if (r.ok) { closeModal(); enter(id); }
@@ -564,7 +509,7 @@ function showStartInfo() {
     <div class="keyuse">
       <div class="keyuse-icon">🏗</div>
       <h2>أول مبنى بالبعد الروحي جاهز</h2>
-      <p class="muted">كل بُعد فيه 8 مباني صغيرة، وكل مبنى = عادة. خلّص عادتك كل يوم وبتاخد ⭐⭐⭐.</p>
+      <p class="muted">كل بُعد فيه 8 مباني صغيرة، وكل مبنى = عادة إلها عدّاد ⏱ بيعد الأيام والساعات. إذا كسرتها صفّرها ↺، وإذا بدك توقفها ⏸.</p>
       <h3 class="keyuse-title">📬 كل أحد بتجيك رسالة</h3>
       <ul class="keyuse-list">
         <li><span>🏗</span><div><b>ابني عادة</b><small>مبنى جديد بأي بُعد مفتوح، والرتبة بتطلع لحالها.</small></div></li>
@@ -603,8 +548,8 @@ const placeState = () => {
   return { features: E.regionFeatures(state, c.regionId), level: artLevel(ch), rank: rankState(c, ch), habits: habitsFor(c) };
 };
 // The dimension's habits for its eight small buildings (done today = the lamp on the roof lit).
-const habitsFor = (c) => { const ch = state.characters[c.id], d = dayFor(); return ch ? E.activeTasks(c, ch).slice(0, E.RANK_COUNT).map((t) => ({ id: t.id, title: t.title, icon: taskIcon(c.id, t), done: E.taskComplete(E.taskProgress(state, c.id, t.id), d) })) : []; };
-// Tapping a building: its habit, to mark it done (or not).
+const habitsFor = (c) => { const ch = state.characters[c.id]; return ch ? E.activeTasks(c, ch).slice(0, E.RANK_COUNT).map((t) => ({ id: t.id, title: t.title, icon: taskIcon(c.id, t), done: t.paused == null, counter: `⏱ ${E.habitDays(t).days} ي · ${E.habitDays(t).hours} س` })) : []; };
+// Tapping a building: its habit and its counter (pause / run, reset).
 function showHabit(charId, taskId) {
   const c = E.findCharacter(charId), t = E.activeTasks(c, state.characters[charId]).find((x) => x.id === taskId);
   if (!t) return;
@@ -647,7 +592,7 @@ async function bindPlace() {
 const LINES = ['الحمد لله', 'يلا نكمل!', 'خطوة كل يوم', 'سبحان الله وبحمده', 'الاستمرار سر النجاح'];
 const randomLine = () => LINES[Math.floor(Math.random() * LINES.length)];
 // Lucifer roams the places until the commander's warriors lock him in the vault.
-const luciFor = (id) => (state.story?.jailed ? null : { who: id, tasks: () => { const c = E.findCharacter(id), ch = state.characters[id], d = dayFor(id); return ch ? E.activeTasks(c, ch).filter((t) => !E.taskDoneToday(E.taskProgress(state, id, t.id), d)).map((t) => t.title) : []; } });
+const luciFor = (id) => (state.story?.jailed ? null : { who: id, tasks: () => { const c = E.findCharacter(id), ch = state.characters[id]; return ch ? E.activeTasks(c, ch).filter((t) => t.paused != null).map((t) => t.title) : []; } });
 
 // ---------- Sound ----------
 const WX_SOUND = { clear: [0, 0, 0.3], cloudy: [0, 0, 0.5], overcast: [0, 0, 0.6], fog: [0, 0, 0.2], rain: [1, 0, 0.6], storm: [1.4, 0, 1], snow: [0, 1, 0.4] };
@@ -689,33 +634,17 @@ function showSettings() {
       <h3>🧪 وضع التجربة</h3>
       ${state.sandbox
         ? `<p class="muted small-text">إنت هلأ بوضع التجربة. تقدّمك الحقيقي محفوظ وبيرجع لما تطلع.</p>
-           <div class="row wrap"><button class="btn primary" id="sb-refill">🔄 عبّي المصاري</button><button class="btn" id="sb-leave">↩ ارجع لتقدّمي الحقيقي</button></div>
-           <p class="muted small-text">جرّب كيف كل إشي مربوط ببعض:</p>
-           <div class="row wrap"><button class="btn primary" id="sb-day">⏭ خلّص اليوم</button><button class="btn" id="sb-week">📬 روح للأحد الجاي (الرسالة)</button></div>
-           <div class="row wrap"><button class="btn" id="sb-fill">🏗 ابني كل العادات (السفينة)</button><button class="btn" id="sb-story">📜 القصة من الأول</button></div>`
-        : `<p class="muted small-text">بيفتحلك كل الأبعاد والأماكن، وبيعطيك <b>🪙 ${E.SANDBOX.gold.toLocaleString('en')}</b>. تقدّمك الحقيقي بينحفظ وبيرجع لما تطلع.</p>
-           <button class="btn primary" id="sb-enter">🧪 افتح كل إشي</button>`}
+           <p class="muted small-text">كل كبسة = مرّ أسبوع: بتجيك رسالة الأحد، والعدّادات بتمشي أسبوع.</p>
+           <div class="row wrap"><button class="btn primary" id="sb-week">📬 مرّ أسبوع</button><button class="btn" id="sb-leave">↩ ارجع لتقدّمي الحقيقي</button></div>`
+        : `<p class="muted small-text">نسخة من لعبتك، وفيها زر واحد: <b>📬 مرّ أسبوع</b> — كل ما تكبسه بتجيك رسالة الأحد كأنه مرّ أسبوع، عشان تشوف اللعبة كيف بتمشي معك. تقدّمك الحقيقي بينحفظ وبيرجع لما تطلع.</p>
+           <button class="btn primary" id="sb-enter">🧪 ادخل وضع التجربة</button>`}
     </section>`);
   if ($('#tour-again')) $('#tour-again').onclick = () => { tour?.restart(); closeModal(); go('world'); };
   const swap = (next, msg) => { state = next; C.ensure(state); syncClock(); closeDays(); scheduleSave(); closeModal(); go('world'); render(); FX.toast(msg); };
-  if ($('#sb-enter')) $('#sb-enter').onclick = () => swap(E.enterSandbox(state), '🧪 وضع التجربة: كل إشي مفتوح');
+  if ($('#sb-enter')) $('#sb-enter').onclick = () => swap(E.enterSandbox(state), '🧪 وضع التجربة: كبسة 📬 = مرّ أسبوع');
   if ($('#sb-leave')) $('#sb-leave').onclick = () => ask('ترجع لتقدّمك الحقيقي؟ كل إشي عملته بالتجربة بيروح.', () => swap(E.leaveSandbox(state), '↩ رجعت لتقدّمك الحقيقي'));
-  // Move test mode's calendar: the day (or the week, up to Friday) closes as it would at 3 at night.
-  const skip = (n) => { closeModal(); state.sandbox.shift = (state.sandbox.shift || 0) + n; syncClock(); closeDays(); scheduleSave(); render(); oasis?.scene.update(placeState()); };
-  if ($('#sb-day')) $('#sb-day').onclick = () => skip(1);
-  if ($('#sb-week')) $('#sb-week').onclick = () => { const d = new Date(dayFor() + 'T00:00:00Z').getUTCDay(); skip(7 - d); };
-  if ($('#sb-refill')) $('#sb-refill').onclick = () => { E.refillSandbox(state); scheduleSave(); render(); FX.toast('🔄 تعبّوا'); };
-  // Test: every dimension open with its 8 habits (the ship ready, the island open).
-  if ($('#sb-fill')) $('#sb-fill').onclick = () => {
-    for (const c of CHARACTERS.filter((x) => x.stages)) {
-      const ch = state.characters[c.id] ||= { stage: 0, level: 1, perfectStreak: 0, lastPerfectDate: null };
-      state.regions[c.regionId] ||= { level: 1 };
-      for (let k = 0; k < E.RANK_COUNT; k++) if (E.activeTasks(c, ch).length <= k) { E.setRankPlan(state, c.id, k, [{ title: `${c.name} ${k + 1}` }]); ch.stage = Math.floor(k / 5); ch.level = (k % 5) + 1; }
-      ch.stage = 1; ch.level = 3;
-    }
-    scheduleSave(); hqScene?.setShip(E.shipStage(state)); closeModal(); render(); FX.toast('🏗 كل العادات انبنت — السفينة جاهزة');
-  };
-  if ($('#sb-story')) $('#sb-story').onclick = () => { state.story = { speech: false, jailed: false, phase: 'none' }; scheduleSave(); closeModal(); go('world'); FX.toast('📜 القصة رجعت من الأول'); };
+  // Test mode: a week passes — the counters run on a week and the Sunday message comes.
+  if ($('#sb-week')) $('#sb-week').onclick = () => { E.weekPasses(state); syncClock(); closeModal(); scheduleSave(); render(); setTimeout(showOffer, 200); };
   $('#snd-on').onchange = (e) => { SND.set('enabled', e.target.checked); };
   document.querySelectorAll('[data-snd]').forEach((el) => (el.oninput = () => { SND.set(el.dataset.snd, +el.value); el.nextElementSibling.textContent = Math.round(el.value * 100); }));
   document.querySelectorAll('[data-snd-test]').forEach((el) => (el.onclick = () => SND.sfx[el.dataset.sndTest]()));
@@ -790,16 +719,6 @@ function showAtmosphere() {
   bind();
 }
 
-const PRAYER_NAMES = { fajr: 'الفجر', dhuhr: 'الظهر', asr: 'العصر', maghrib: 'المغرب', isha: 'العشاء' };
-function prayerNowLine() {
-  const pd = prayerNow();
-  if (!pd) return '';
-  const now = new Date();
-  const open = Object.entries(pd.windows).find(([, w]) => windowState(w, now) === 'open');
-  if (open) return `<div class="hud-chip now">🕌 وقت ${PRAYER_NAMES[open[0]]} الآن · حتى ${fmtTime(open[1].end)}</div>`;
-  const next = Object.entries(pd.windows).find(([, w]) => windowState(w, now) === 'upcoming');
-  return next ? `<div class="hud-chip">⏳ ${PRAYER_NAMES[next[0]]} ${fmtTime(next[1].start)}</div>` : '';
-}
 
 // One dimension in a line: its buildings (habits) of 8, its rank, today's stars.
 function dimLine(id) {
@@ -807,7 +726,7 @@ function dimLine(id) {
   if (!rd || !rd.habits) return '';
   return `<div class="road">
     <div class="road-bar"><i style="width:${Math.round((rd.habits / rd.max) * 100)}%"></i></div>
-    <p>🏗 <b><bdi>${rd.habits}/${rd.max}</bdi></b> عادات · ${esc(rd.rank.name)} · اليوم ${starTxt(E.starsToday(state, id, dayFor()) || 0)}</p>
+    <p>🏗 <b><bdi>${rd.habits}/${rd.max}</bdi></b> عادات · ${esc(rd.rank.name)}</p>
     ${E.pendingOffer(state, dayFor()) ? '<button class="btn small primary" data-show-offer>📬 رسالة الأحد</button>' : ''}
   </div>`;
 }
@@ -819,54 +738,45 @@ function placeHUD() {
   const r = E.findRegion(c.regionId);
   const stage = c.stages?.[ch.stage];
   const tasks = E.activeTasks(c, ch);
-  const date = dayFor(c.id);
-  const done = tasks.filter((t) => E.taskComplete(E.taskProgress(state, c.id, t.id), date)).length;
-  const best = Math.max(0, ...tasks.map((t) => E.currentStreak(E.taskProgress(state, c.id, t.id), date)));
-  const next = E.nextRegionUpgrade(state, r.id);
+  const best = Math.max(0, ...tasks.map((t) => E.habitDays(t).days));
   return `
   <div class="hud-top">
     <div class="plate">
       <div class="plate-avatar" style="--glow:${c.palette.glow}">☪</div>
       <div class="plate-body">
         <div class="plate-name">${c.name === r.name ? r.name : `${c.name} <span class="plate-place">· ${r.name}</span>`}</div>
-        <div class="plate-row"><span class="plate-streak" title="أطول سلسلة">🔥 ${best}</span></div>
+        <div class="plate-row"><span class="plate-streak" title="أطول عدّاد (أيام)">⏱ ${best}</span></div>
 
       </div>
     </div>
-    ${hasPrayers(c) ? prayerNowLine() : ''}
     <button class="hud-chip atmo" data-open-atmo>${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}${timeOverride === "auto" ? ` · ${fmtTime(new Date())}` : ""}${liveWeather?.temp != null && weatherOverride === 'auto' ? ` · ${liveWeather.temp}°` : ''}</button>
   </div>
 
   <aside class="quests ${questsCollapsed ? 'collapsed' : ''}" id="quests">
     <button class="quests-head" data-toggle-quests>
-      <span>📜 مهام اليوم</span><b>${done} / ${tasks.length}</b>
+      <span>⏱ عاداتي</span><b>${tasks.length} / 8</b>
     </button>
-    <ul class="tasks">${tasks.length ? tasks.map((t) => taskRow(c.id, t)).join('') : `<li class="task"><div class="task-main"><strong>ما حدّدت مهامك لسا</strong><small class="muted">اختار عادة وحدة بتعملها كل يوم.</small></div><div class="task-actions"><button class="btn ok" data-set-tasks="${c.id}">🎯 اختار مهمتك</button></div></li>`}</ul>
+    <ul class="tasks">${tasks.length ? tasks.map((t) => taskRow(c.id, t)).join('') : `<li class="task"><div class="task-main"><strong>ما بنيت ولا عادة لسا</strong><small class="muted">اختار أول عادة إلك.</small></div><div class="task-actions"><button class="btn ok" data-set-tasks="${c.id}">🎯 اختار مهمتك</button></div></li>`}</ul>
     ${tasks.length ? roadLine(c.id) : ''}
   </aside>
 
   <div class="dock">
-    <button class="dock-btn" data-open-upgrades>🛠<span>طوّر ${r.name}</span>${next && state.gold >= next.cost ? '<i class="dot"></i>' : ''}</button>
-    ${hasPrayers(c) ? `<button class="dock-btn" data-pick-location>📍<span>${state.location ? esc(state.location.name) : 'مدينتك'}</span></button>` : ''}
+    <button class="dock-btn" data-open-upgrades>✨<span>زينة ${r.name}</span></button>
   </div>`;
 }
 
+// The place's decorations: one more with every building.
 function showUpgrades() {
-  const c = E.findCharacter(currentChar);
-  const r = E.findRegion(c.regionId);
-  const region = state.regions[r.id];
-  const next = E.nextRegionUpgrade(state, r.id);
+  const c = E.findCharacter(currentChar), r = E.findRegion(c.regionId), have = E.regionFeatures(state, r.id);
   modal(`
-    <h2>🛠 طوّر ${r.name} <span class="lvl">مستوى ${region.level}</span></h2>
-    <p class="muted">كل تطوير يظهر في المكان نفسه.</p>
+    <h2>✨ زينة ${r.name}</h2>
+    <p class="muted">كل مبنى جديد (عادة) بيزيد زينة على المكان.</p>
     <div class="upgrade-list">
-      ${r.upgrades.map((u) => `<div class="upg ${u.level <= region.level ? 'have' : ''}">${u.level <= region.level ? '✔' : '○'} ${u.label} <small>${goldTxt(u.cost)}</small></div>`).join('')}
-    </div>
-    ${next ? `<button class="btn primary" data-upgrade="${r.id}" ${state.gold < next.cost ? 'disabled' : ''}>طوّر: ${next.label} — ${goldTxt(next.cost)}</button>` : '<span class="muted">المكان مكتمل ✨</span>'}`);
+      ${r.upgrades.map((u) => `<div class="upg ${have.has(u.adds) ? 'have' : ''}">${have.has(u.adds) ? '✔' : '○'} ${u.label} <small>🏗 ${u.level}</small></div>`).join('')}
+    </div>`);
   modalRefresh = showUpgrades;
   bind();
 }
-
 
 // Commander's desk (HQ): every opened dimension, its rank and its habits (buildings).
 function showDimRanks() {
@@ -878,7 +788,7 @@ function showDimRanks() {
       const ch = state.characters[c.id], rd = E.road(state, c.id), tasks = E.activeTasks(c, ch);
       return `<li>
         <div class="dr-head"><b>${esc(c.name)}</b><span class="rank" style="--rank:${rd.rank.color}">${esc(rd.rank.name)}</span></div>
-        <div class="dr-habits">${tasks.length ? tasks.map((t) => `<span>${taskIcon(c.id, t)} ${esc(t.title)}${E.timesOf(t) > 1 ? ` ×${E.timesOf(t)}` : ''}</span>`).join('') : '<span class="muted">ما في مهام لسا</span>'}</div>
+        <div class="dr-habits">${tasks.length ? tasks.map((t) => `<span>${taskIcon(c.id, t)} ${esc(t.title)} · ⏱ ${E.habitDays(t).days} ي</span>`).join('') : '<span class="muted">ما في مهام لسا</span>'}</div>
         ${dimLine(c.id)}
         ${!tasks.length ? `<div class="row wrap"><button class="btn small" data-set-tasks="${c.id}">🎯 اختار أول مهمة</button></div>` : ''}
       </li>`;
@@ -896,8 +806,6 @@ function renderCharacter() {
   }
   const ch = state.characters[c.id];
   const r = E.findRegion(c.regionId);
-  const region = state.regions[r.id];
-  const next = region ? E.nextRegionUpgrade(state, r.id) : null;
   const stage = c.stages?.[ch.stage];
   return `
   <button class="btn ghost small back" data-go="world">→ العودة للعالم</button>
@@ -906,17 +814,11 @@ function renderCharacter() {
     <div class="hero-info">
       <h2>${c.name} ${stage ? `<button class="lvl lvl-btn" data-ranks="${c.id}" title="اعرض الرتب">${esc(E.rankName(ch))} ▾</button>` : ''}</h2>
       <p class="muted">${c.desc}</p>
-      <h3 class="sub">${r.name} ${region ? `<span class="lvl">مستوى ${region.level}</span>` : ''}</h3>
-      ${region ? `
-        <div class="upgrade-list">
-          ${r.upgrades.map((u) => `<div class="upg ${u.level <= region.level ? 'have' : ''}">${u.level <= region.level ? '✔' : '○'} ${u.label} <small>${goldTxt(u.cost)}</small></div>`).join('')}
-        </div>
-        ${next ? `<button class="btn" data-upgrade="${r.id}" ${state.gold < next.cost ? 'disabled' : ''}>طوّر: ${next.label} — ${goldTxt(next.cost)}</button>` : '<span class="muted">المنطقة مكتملة ✨</span>'}`
-        : ''}
+      <h3 class="sub">${r.name}</h3>
     </div>
   </section>
   <section class="card">
-    <div class="row between"><h3>مهام اليوم</h3>${hasPrayers(c) ? `<button class="chip" data-pick-location>📍 ${state.location ? esc(state.location.name) + ' · تغيير' : 'اختر مدينتك'}</button>` : ''}</div>
+    <div class="row between"><h3>⏱ عاداتي</h3></div>
     <ul class="tasks">${E.activeTasks(c, ch).map((t) => taskRow(c.id, t)).join('')}</ul>
   </section>
   ${progressionPanel(c, ch)}`;
@@ -1341,20 +1243,6 @@ function showCupHistory() {
     ${list.length ? `<ul class="wallet-log">${list.map((x) => `<li><span>${cupIcon(C.findCup(x.cupId), 26)} ${C.findCup(x.cupId).name} · ${esc(C.regionName(x.channel))} · ${esc(x.partner)}</span><b class="${x.status === 'won' ? 'plus' : x.status === 'lost' ? 'minus' : ''}">${label[x.status]}</b></li>`).join('')}</ul>` : '<p class="muted">لا يوجد تحديات بعد.</p>'}`);
 }
 
-// Failure: no choosing the punishment — say plainly what it will cost when the day closes.
-function failDialog(title, penalty, onYes) {
-  modal(`
-    <h2>ما عملتها؟</h2>
-    <p><b>${esc(title)}</b></p>
-    <p class="muted">الصدق مع نفسك أول خطوة — والنجوم ما إلها قيمة إذا ما كانت حقيقية. هالعادة ما رح تنحسب بنجوم اليوم.</p>
-    <div class="row wrap">
-      <button class="btn bad" id="pen-yes">ما عملتها</button>
-      <button class="btn ghost" id="pen-no">رجوع</button>
-    </div>`);
-  $('#pen-yes').onclick = () => { closeModal(); onYes(); };
-  $('#pen-no').onclick = closeModal;
-}
-
 // ---------- Events ----------
 function enter(id) {
   if (id === 'shop') return go('shop');
@@ -1368,19 +1256,10 @@ document.addEventListener('click', (e) => { if (e.target.closest('button, [data-
 
 function bind() {
   const on = (attr, fn) => document.querySelectorAll(`[${attr}]`).forEach((el) => (el.onclick = () => fn(el.getAttribute(attr), el)));
-  const inWindow = (c, t) => {
-    const def = E.activeTasks(E.findCharacter(c), state.characters[c]).find((x) => x.id === t);
-    if (!def?.prayer || !state.location) return true;
-    const ok = windowState(prayerNow().windows[def.prayer], new Date()) !== 'upcoming';
-    if (!ok) { FX.toast('لم يدخل وقت هذه الصلاة بعد', 'err'); render(); }
-    return ok;
-  };
-  on('data-task-ok', (v, el) => {
-    const [c, t] = v.split(':');
-    if (!inWindow(c, t)) return;
-    const r = act(() => E.reportTask(state, c, t, true, { date: dayFor(c) }), el);
-    if (r.ok && oasis?.char === c) { oasis.scene.pray(); oasis.scene.react?.('done'); if (c === 'worshipper') SND.sfx.prayer(); }
-  });
+  const habit = (attr, fn) => on(attr, (v, el) => { const [c, t] = v.split(':'); fn(c, t, el); });
+  habit('data-habit-pause', (c, t, el) => act(E.pauseHabit(state, c, t), el));
+  habit('data-habit-run', (c, t, el) => { const r = act(E.resumeHabit(state, c, t), el); if (r.ok && oasis?.char === c) oasis.scene.pray(); });
+  habit('data-habit-reset', (c, t) => { const d = E.activeTasks(E.findCharacter(c), state.characters[c]).find((x) => x.id === t); ask(`تصفّر عدّاد "${d.title}"؟ بيرجع لصفر.`, () => { act(E.resetHabit(state, c, t)); oasis?.scene.react?.('fail'); }); });
   on('data-open-upgrades', showUpgrades);
   on('data-dim-ranks', showDimRanks);
   on('data-open-atmo', showAtmosphere);
@@ -1400,13 +1279,7 @@ function bind() {
   on('data-set-time', (k) => { timeOverride = k; oasis?.scene.refreshSky(); disposeWorld?.refreshSky?.(); hqScene?.refreshSky?.(); render(); });
   on('data-toggle-quests', () => { questsCollapsed = !questsCollapsed; $('#quests')?.classList.toggle('collapsed', questsCollapsed); });
   on('data-pick-location', pickLocation);
-  on('data-task-fail', (v) => {
-    const [c, t] = v.split(':');
-    const def = E.activeTasks(E.findCharacter(c), state.characters[c]).find((x) => x.id === t);
-    failDialog(def.title, 0, () => { const r = act(() => E.reportTask(state, c, t, false, { date: dayFor(c) })); if (r.ok && oasis?.char === c) oasis.scene.react?.('fail'); });
-  });
   on('data-cmd-ranks', showCommandRanks);
-  on('data-upgrade', (id, el) => act(E.upgradeRegion(state, id), el));
   on('data-enter-realm', (id) => enter(E.findRegion(id).characterId));
   on('data-go', go);
   on('data-spot', openSpot);
@@ -1430,7 +1303,7 @@ $('#account').onclick = () => {
     <h2>الحساب</h2>
     <p>${storage.mode === 'cloud' ? 'تقدّمك محفوظ في السحابة ومرتبط بحسابك في Claude.' : `الحساب المحلي: <b>${esc(storage.accountName)}</b>`}</p>
     <div class="row wrap">
-      <button class="btn" data-pick-location>📍 أوقات الصلاة: ${state.location ? esc(state.location.name) : 'غير محددة'}</button>
+      <button class="btn" data-pick-location>📍 مدينتك: ${state.location ? esc(state.location.name) : 'غير محددة'}</button>
       ${storage.mode === 'local' ? '<button class="btn" id="logout">تبديل الحساب</button>' : ''}
       <button class="btn bad" id="reset">إعادة اللعبة من البداية</button>
     </div>`);

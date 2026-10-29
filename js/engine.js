@@ -1,29 +1,31 @@
 // Pure game logic. No DOM, no storage. Every action takes the state and
 // returns { ok, events } after mutating state in place; the UI turns events
-// into effects (gold burst, level-up, unlock).
+// into effects (level-up, unlock).
 import { CHARACTERS, REGIONS, RANKS } from './content.js';
 
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 // The rules of the game, in one place:
 //   every dimension    8 small buildings, one for each daily habit (8 habits = 8 ranks)
 //   the start          the spiritual dimension, with one habit
 //   every Sunday       a clear message: build a habit · open a new dimension · not this week.
 //                      Building a habit raises that dimension's rank by itself.
+//   every habit        a counter running in days and hours since it began; the player can
+//                      reset it to zero or pause it (and run it again)
+//   decorations        each dimension's place gets one more with every building
 //   dayEnds            the game day closes at 3 at night, not at midnight
-//   every day          each dimension gets stars: ⭐ ⅓ of its habits done, ⭐⭐ ⅔, ⭐⭐⭐ all
-//   reward             gold for a habit fully done (spent on the dimensions' decorations)
 //   the ship           grows with every habit built; all 8 dimensions × 8 habits = ready,
 //                      and the Island of Leaders opens.
-export const RULES = { dayEnds: 3, reward: 20, habitsPer: 8, offerDay: 0 };
+export const RULES = { dayEnds: 3, habitsPer: 8, offerDay: 0 };
 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 // Test mode can move its own calendar forward (setDayShift) to try a day's close at once.
 let dayShift = 0;
 export const setDayShift = (n) => { dayShift = n || 0; };
 export const today = (d = new Date()) => ymd(new Date(+d - RULES.dayEnds * 3600000 + dayShift * 86400000));
+// The clock the habit counters run on (test mode moves it forward a week at a time).
+export const nowMs = () => Date.now() + dayShift * 86400000;
 const addDays = (date, n) => { const d = new Date(date + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
-const nextDay = (date) => addDays(date, 1);
 const weekday = (date) => new Date(date + 'T00:00:00Z').getUTCDay();   // 0 = Sunday
 
 const dayDiff = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
@@ -93,7 +95,7 @@ export function newState() {
   const s = {
     version: SAVE_VERSION,
     gold: 0,
-    stats: { goldEarned: 0, goldLost: 0, tasksCompleted: 0, tasksFailed: 0, bestStreak: 0 },
+    stats: {},
     startDay: null,    // the day the game began (the first Sunday message comes after it)
     offerDone: null,   // the Sunday whose message was answered
     characters: {},
@@ -125,7 +127,7 @@ export function migrate(raw) {
   s.tasks = raw.tasks && typeof raw.tasks === 'object' ? raw.tasks : {};
   delete s.habits; delete s.projects; delete s.activeCharacter;
   s.log = Array.isArray(raw.log) ? raw.log : [];
-  // The spiritual dimension no longer comes with the five prayers: the player sets its tasks.
+  // The spiritual dimension no longer comes with the five prayers: the player sets its habits.
   const w = s.characters.worshipper;
   if (w?.plan) w.plan = w.plan.map((r) => (r || []).filter((t) => !OLD_PRAYER_IDS.includes(t.id)));
   // Habit picker (planV 2): dimensions start empty. Saves from before keep their old preset tasks.
@@ -145,6 +147,11 @@ export function migrate(raw) {
     if (ch.plan) ch.plan = ch.plan.slice(0, RANK_COUNT);
   }
   s.startDay ||= today();
+  // v7: habits are counters (no times a day, no prayers tied to a time, no gold).
+  for (const id in s.characters) {
+    const ch = s.characters[id];
+    if (ch.plan) ch.plan = ch.plan.map((r) => (r || []).map(({ times, prayer, reward, added, ...t }) => ({ start: Date.now(), paused: null, ...t })));
+  }
   if (s.story.speech && (!raw.story?.phase || raw.story.phase === 'none')) s.story.phase = 'march';
   s.version = SAVE_VERSION;
   return s;
@@ -153,21 +160,6 @@ export function migrate(raw) {
 function addLog(s, text, delta = 0) {
   s.log.unshift({ t: Date.now(), text, delta });
   s.log.length = Math.min(s.log.length, 60);
-}
-
-function gainGold(s, amount, reason, events) {
-  s.gold += amount;
-  s.stats.goldEarned += amount;
-  addLog(s, reason, amount);
-  events.push({ type: 'gold', amount });
-}
-
-function loseGold(s, amount, reason, events) {
-  const lost = Math.min(s.gold, amount);
-  s.gold -= lost;
-  s.stats.goldLost += lost;
-  addLog(s, reason, -lost);
-  events.push({ type: 'penalty', amount: lost });
 }
 
 const done = (s, events) => ({ ok: true, events });
@@ -190,20 +182,9 @@ export function defaultPlan(def) {
 }
 export function planOf(def, ch) { return ch?.plan || defaultPlan(def); }
 
-// Replace one rank's tasks with the player's written lines. A line matching an
-// existing task keeps it (and its streak / prayer time); new lines become new tasks.
-const PRAYER_WORDS = { fajr: 'فجر', dhuhr: 'ظهر', asr: 'عصر', maghrib: 'مغرب', isha: 'عشاء' };
-export const prayerIn = (title) => (/صلا[ةه]|صلي|أصلي/.test(title) ? Object.keys(PRAYER_WORDS).find((k) => title.includes(PRAYER_WORDS[k])) : undefined);
-
-// Lines like "صلاة × 5" or "مشي x2" carry a times-per-day count.
-const parseLine = (l) => {
-  const m = String(l).replace(/^[\s\-•*+\d.)]+(?=\D)/, '').trim().match(/^(.*?)\s*(?:[×xX*]\s*(\d{1,2}))?$/);
-  return { title: (m?.[1] || '').trim(), times: +m?.[2] || 1 };
-};
-export const MAX_TIMES = 20;
-// The five daily prayers as one habit: never less than five times a day.
-export const isFivePrayers = (title) => /^(ال)?صل[اوي][ةهت]?$|^الصلوات|صلواتي|(الخمس|5|خمس)\s*صلوات|الصلاة?\s*(الخمس|5)/.test(String(title || '').trim());
-const fixTimes = (title, n) => (isFivePrayers(title) ? 5 : Math.max(1, Math.min(MAX_TIMES, Math.round(+n) || 1)));   // the prayers are exactly five
+// Replace one rank's habits with the player's list. A title matching an existing habit
+// keeps it (and its counter); new titles become new habits, their counter starting now.
+const parseLine = (l) => ({ title: String(l).replace(/^[\s\-•*+\d.)]+(?=\D)/, '').replace(/\s*[×xX*]\s*\d{1,2}$/, '').trim() });
 const cleanIcon = (i) => (typeof i === 'string' ? [...i.trim()].slice(0, 4).join('') : '');
 
 export function setRankPlan(s, id, rankIndex, input) {
@@ -211,28 +192,21 @@ export function setRankPlan(s, id, rankIndex, input) {
   if (!def || !ch) return fail('غير مملوكة');
   if (rankIndex < 0 || rankIndex >= RANK_COUNT) return fail('رتبة غير موجودة');
   const items = (Array.isArray(input) ? input : String(input).split('\n').map(parseLine))
-    .map((x) => { const title = String(x.title || '').trim().slice(0, 80); return { title, icon: cleanIcon(x.icon), times: fixTimes(title, x.times) }; })
+    .map((x) => ({ title: String(x.title || '').trim().slice(0, 80), icon: cleanIcon(x.icon) }))
     .filter((x) => x.title);
   const seen = new Set();
   const uniq = items.filter((x) => !seen.has(x.title) && seen.add(x.title)).slice(0, 12);
   const plan = planOf(def, ch).map((r) => r.map((t) => ({ ...t })));
   const known = plan.flat();
-  // Prayers already tied to a task in another rank (or earlier in this list).
-  const taken = new Set(plan.filter((_, i) => i !== rankIndex).flat().map((t) => t.prayer).filter(Boolean));
-  plan[rankIndex] = uniq.map(({ title, times, icon }) => {
+  plan[rankIndex] = uniq.map(({ title, icon }) => {
     const old = known.find((t) => t.title === title);
     if (old) {
       plan.forEach((r, i) => { if (i !== rankIndex) plan[i] = r.filter((t) => t.id !== old.id); });
-      const t = { ...old, times }; if (icon) t.icon = icon;
-      if (times > 1) delete t.prayer; else if (old.prayer) taken.add(old.prayer);
+      const t = { ...old }; if (icon) t.icon = icon;
       return t;
     }
-    // `added`: a habit added today is not held against you when this day closes.
-    const t = { id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title, times, reward: RULES.reward, added: s.sandbox ? null : today() };   // in test mode a new habit counts at once
+    const t = { id: `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, title, start: nowMs(), paused: null };
     if (icon) t.icon = icon;
-    // A once-a-day line naming one of the five prayers is tied to that prayer's time (once per plan).
-    const pr = times === 1 ? prayerIn(title) : undefined;
-    if (pr && !taken.has(pr)) { t.prayer = pr; taken.add(pr); }
     return t;
   });
   ch.plan = plan;
@@ -241,9 +215,8 @@ export function setRankPlan(s, id, rankIndex, input) {
 }
 
 // ---------- Habits: one habit per rank ----------
-// Each rank brings one new daily habit, chosen by the player when they get there
-// (Bronze 1 = the first habit; every promotion with a key adds the next one).
-const cleanHabit = (h) => { const title = String(h?.title || '').trim().slice(0, 80); return { title, icon: cleanIcon(h?.icon), times: fixTimes(title, h?.times) }; };
+// Each rank brings one new habit (a new building), chosen from the Sunday message.
+const cleanHabit = (h) => ({ title: String(h?.title || '').trim().slice(0, 80), icon: cleanIcon(h?.icon) });
 
 // Change (taskId given) or add a habit in one rank.
 export function setHabit(s, id, rankIndex, taskId, habit) {
@@ -253,7 +226,7 @@ export function setHabit(s, id, rankIndex, taskId, habit) {
   if (!h.title) return fail('اختار مهمة أو اكتب اسمها');
   const all = activeTasks(def, ch);
   if (all.some((t) => t.title === h.title && t.id !== taskId)) return fail('هاي المهمة عندك أصلًا');
-  const list = (planOf(def, ch)[rankIndex] || []).map((t) => ({ title: t.title, times: t.times, icon: t.icon, id: t.id }));
+  const list = (planOf(def, ch)[rankIndex] || []).map((t) => ({ title: t.title, icon: t.icon, id: t.id }));
   const i = list.findIndex((t) => t.id === taskId);
   if (i >= 0) list[i] = h; else list.push(h);
   return setRankPlan(s, id, rankIndex, list);
@@ -290,150 +263,37 @@ export function nextLevel(def, ch) {
   return { stage: Math.floor(n / 5), level: (n % 5) + 1, adds: planOf(def, ch)[n] };
 }
 
-// Full days in a row (shown as a streak).
-export function liveProgress(ch, date = today()) {
-  const alive = ch.lastPerfectDate && dayDiff(ch.lastPerfectDate, date) <= 1;
-  return { perfectStreak: alive ? ch.perfectStreak : 0 };
+// ---------- The habit counters ----------
+// Every habit counts the time since it began (days and hours). Reset: back to zero.
+// Pause: the counter stops where it is; run: it goes on from there.
+const findTask = (s, charId, taskId) => { const def = findCharacter(charId), ch = s.characters[charId]; return def && ch ? activeTasks(def, ch).find((t) => t.id === taskId) : null; };
+export const habitElapsed = (t, now = nowMs()) => Math.max(0, (t?.paused ?? now) - (t?.start ?? now));
+export const habitDays = (t, now) => { const ms = habitElapsed(t, now); return { days: Math.floor(ms / 86400000), hours: Math.floor((ms % 86400000) / 3600000), minutes: Math.floor((ms % 3600000) / 60000) }; };
+export function pauseHabit(s, charId, taskId) {
+  const t = findTask(s, charId, taskId); if (!t) return fail('غير موجودة');
+  if (t.paused != null) return fail('موقوف أصلًا');
+  t.paused = nowMs(); addLog(s, `⏸ ${t.title}`);
+  return done(s, [{ type: 'habitPause' }]);
+}
+export function resumeHabit(s, charId, taskId) {
+  const t = findTask(s, charId, taskId); if (!t) return fail('غير موجودة');
+  if (t.paused == null) return fail('شغّال أصلًا');
+  t.start += nowMs() - t.paused; t.paused = null; addLog(s, `▶ ${t.title}`);
+  return done(s, [{ type: 'habitResume' }]);
+}
+export function resetHabit(s, charId, taskId) {
+  const t = findTask(s, charId, taskId); if (!t) return fail('غير موجودة');
+  const now = nowMs(); t.start = now; if (t.paused != null) t.paused = now;
+  addLog(s, `↺ ${t.title}`);
+  return done(s, [{ type: 'habitReset' }]);
 }
 
-// ---------- Stars ----------
-// How much of a dimension's day is done (0..1): every habit counts by its share of
-// times (prayer 4/5 = 0.8). Habits added that day don't count. null = nothing to fight with.
-export function dayShare(s, id, date = today(), { all = false } = {}) {
-  const def = findCharacter(id), ch = s.characters[id];
-  if (!def || !ch) return null;
-  const list = activeTasks(def, ch).filter((t) => all || t.added !== date);
-  if (!list.length) return null;
-  return list.reduce((a, t) => a + Math.min(1, countToday(taskProgress(s, id, t.id), date) / timesOf(t)), 0) / list.length;
-}
-export const starsOf = (share) => (share == null ? null : share >= 0.999 ? 3 : share >= 0.666 ? 2 : share >= 0.333 ? 1 : 0);
-export const starsToday = (s, id, date = today()) => starsOf(dayShare(s, id, date));
-
-// Called after every task report: if all of today's tasks are done, count a perfect day.
-function checkPerfectDay(s, def, ch, date, events) {
-  if (ch.lastPerfectDate === date) return;
-  const list = activeTasks(def, ch);
-  if (!list.length || !list.every((t) => taskComplete(s.tasks[`${def.id}.${t.id}`], date))) return;
-  if (!ch.lastPerfectDate || dayDiff(ch.lastPerfectDate, date) > 1) ch.perfectStreak = 0;
-  ch.lastPerfectDate = date;
-  ch.perfectStreak++;
-  s.stats.bestStreak = Math.max(s.stats.bestStreak, ch.perfectStreak);
-  events.push({ type: 'perfectDay', streak: ch.perfectStreak });
-}
-
-// ---------- Daily character tasks ----------
-const taskKey = (charId, taskId) => `${charId}.${taskId}`;
-
-export function taskProgress(s, charId, taskId) {
-  return s.tasks[taskKey(charId, taskId)] || { streak: 0, lastDate: null, lastResult: null };
-}
-
-// A task may be needed several times a day (`times`). Today's progress lives in
-// { lastDate, count, lastResult: 'partial' | 'success' | 'fail' }; `doneDate` is the
-// last day it was fully completed (older saves only have lastResult 'success').
-export const timesOf = (task) => Math.max(1, task?.times || 1);
-export const taskComplete = (p, date) => p?.lastDate === date && p.lastResult === 'success';
-// Settled for the day: completed or failed (a partial day is still open).
-export const taskDoneToday = (p, date = today()) => p.lastDate === date && p.lastResult !== 'partial';
-export const countToday = (p, date = today()) => (p.lastDate !== date ? 0 : p.lastResult === 'partial' ? p.count || 0 : p.lastResult === 'success' ? p.count || 1 : p.count || 0);
-const lastDone = (p) => p.doneDate ?? (p.lastResult === 'success' ? p.lastDate : null);
-
-export function currentStreak(p, date = today()) {
-  const d = lastDone(p);
-  if (!d || p.lastResult === 'fail') return 0;
-  return dayDiff(d, date) <= 1 ? p.streak || 0 : 0;
-}
-
-// Success: the habit's gold comes once it is fully done for the day (all its times).
-// Failure is only marked here; what it costs is settled when the day closes (closeDays).
-export function reportTask(s, charId, taskId, success, { date = today() } = {}) {
-  const ch = s.characters[charId];
-  if (!ch) return fail('الشخصية غير مملوكة');
-  const def = findCharacter(charId);
-  const task = activeTasks(def, ch).find((t) => t.id === taskId);
-  if (!task) return fail('غير موجودة');
-  const p = { ...taskProgress(s, charId, taskId) };
-  if (taskDoneToday(p, date)) return fail('سجّلت نتيجة اليوم بالفعل');
-  const events = [];
-  const times = timesOf(task);
-  p.doneDate = lastDone(p);
-  const count = countToday(p, date) + (success ? 1 : 0);
-  if (success) {
-    if (count >= times) {
-      s.stats.tasksCompleted++;
-      gainGold(s, task.reward ?? RULES.reward, `✔ ${task.title}`, events);
-      p.streak = currentStreak(p, date) + 1; p.doneDate = date;
-    } else events.push({ type: 'step', count, times });
-  } else {
-    p.streak = 0;
-    // Honesty is its own reward: a symbolic count, never anything that can be spent.
-    s.stats.honest = (s.stats.honest || 0) + 1;
-    addLog(s, `✘ ${task.title} — سجّلتها بصدق`);
-    events.push({ type: 'failMark' });
-  }
-  p.lastDate = date;
-  p.count = count;
-  p.lastResult = !success ? 'fail' : count >= times ? 'success' : 'partial';
-  p.at = Date.now(); // when it was reported (used to reject reports made outside a prayer's time)
-  s.tasks[taskKey(charId, taskId)] = p;
-  if (p.lastResult === 'success') checkPerfectDay(s, def, ch, date, events);
-  return done(s, events);
-}
-
-// Cancel a success that should not have counted (e.g. a prayer marked before its
-// time began): remove the record and take back its gold and any perfect day.
-export function revokeTask(s, charId, taskId, date) {
-  const key = taskKey(charId, taskId);
-  const p = s.tasks[key];
-  const ch = s.characters[charId];
-  if (!p || !ch || p.lastDate !== date || p.lastResult !== 'success') return false;
-  const task = activeTasks(findCharacter(charId), ch).find((t) => t.id === taskId);
-  delete s.tasks[key];
-  const back = Math.min(s.gold, task?.reward ?? RULES.reward);
-  s.gold -= back;
-  s.stats.goldEarned = Math.max(0, s.stats.goldEarned - back);
-  s.stats.tasksCompleted = Math.max(0, s.stats.tasksCompleted - 1);
-  if (ch.lastPerfectDate === date) {
-    ch.perfectStreak = Math.max(0, ch.perfectStreak - 1);
-    const prev = new Date(date);
-    prev.setUTCDate(prev.getUTCDate() - 1);
-    ch.lastPerfectDate = ch.perfectStreak ? prev.toISOString().slice(0, 10) : null;
-  }
-  addLog(s, `↩ أُلغي: ${task?.title ?? taskId} (سُجّلت قبل وقتها)`, -back);
-  return true;
-}
-
-// ---------- End of day ----------
-// When the game day closes (3 at night) every dimension's stars for that day are counted
-// (days the game was not opened count as 0) and habits left undone are marked missed.
-// Returns what happened, for the morning summary.
+// ---------- The day ----------
+// The game day closes at 3 at night; nothing is settled any more — the counters just run.
 export function closeDays(s, now = today()) {
   const last = s.lastDay;
   s.lastDay = now;
-  const rep = { days: 0, missed: [], stars: [] };
-  if (!last || last >= now) return rep;
-  let d = last;
-  for (let n = 0; d < now && n < 60; n++, d = nextDay(d)) {
-    rep.days++;
-    let active = false;
-    for (const def of CHARACTERS) {
-      const ch = s.characters[def.id];
-      const share = ch && dayShare(s, def.id, d);
-      if (share == null) continue;
-      for (const t of activeTasks(def, ch)) {
-        const k = taskKey(def.id, t.id), p = taskProgress(s, def.id, t.id);
-        if (t.added === d || taskComplete(p, d) || (p.lastDate && p.lastDate > d)) continue;
-        if (!(p.lastDate === d && p.lastResult === 'fail')) s.stats.tasksFailed++;
-        s.tasks[k] = { ...p, lastDate: d, lastResult: 'fail', count: p.lastDate === d ? p.count || 0 : 0, streak: 0 };
-        if (!rep.missed.includes(t.title)) rep.missed.push(t.title);
-      }
-      const st = starsOf(share);
-      if (st > 0) active = true;
-      rep.stars.push({ id: def.id, name: def.name, date: d, stars: st, share });
-    }
-    if (active) s.stats.activeDays = (s.stats.activeDays || 0) + 1;   // days with at least one star (cups open at CUP_DAYS)
-  }
-  return rep;
+  return { days: last && last < now ? dayDiff(last, now) : 0 };
 }
 
 // Set the overall level (1 = the first rank).
@@ -487,29 +347,13 @@ export function answerOffer(s, choice, { id, habit } = {}, date = today()) {
 }
 
 // ---------- Regions ----------
-export const nextRegionUpgrade = (s, id) => {
-  const def = findRegion(id);
-  const r = s.regions[id];
-  return def && r ? def.upgrades.find((u) => u.level === r.level + 1) ?? null : null;
-};
-
+// A place's decorations: one more with every building (habit) of its dimension.
 export const regionFeatures = (s, id) => {
   const def = findRegion(id);
-  const lvl = s.regions[id]?.level ?? 0;
-  return new Set(def.upgrades.filter((u) => u.level <= lvl).map((u) => u.adds));
+  const c = def?.characterId && findCharacter(def.characterId), ch = c && s.characters[c.id];
+  const n = ch ? activeTasks(c, ch).length : 0;
+  return new Set((def?.upgrades || []).filter((u) => u.level <= n).map((u) => u.adds));
 };
-
-export function upgradeRegion(s, id) {
-  const up = nextRegionUpgrade(s, id);
-  if (!up) return fail('لا يوجد تطوير متاح');
-  if (s.gold < up.cost) return fail('ذهب غير كافٍ');
-  const events = [];
-  s.gold -= up.cost;
-  s.regions[id].level = up.level;
-  addLog(s, `🏗 ${up.label}`, -up.cost);
-  events.push({ type: 'levelUp', kind: 'region', name: findRegion(id).name, level: up.level, label: up.label });
-  return done(s, events);
-}
 
 // ---------- World map ----------
 // Visible: owned places. Teaser: a locked place whose `revealedBy` place is owned.
@@ -521,21 +365,16 @@ export function mapVisibility(s, region) {
   return by && s.regions[by] ? 'teaser' : 'hidden';
 }
 
-// ---------- Starting data ----------
-// Test mode: everything open, gold to spare, one habit a dimension — the player
-// spends them to see how things change. The real save waits inside and comes back on exit.
-export const SANDBOX = { gold: 99999 };
+// ---------- Test mode ----------
+// A copy of the real game; its clock moves a week at a time (a new Sunday message each
+// time). The real save waits inside and comes back on exit.
 export function enterSandbox(real) {
-  const t = newState();
-  for (const c of CHARACTERS) t.characters[c.id] = newCharacter();
-  for (const r of REGIONS) if (r.kind !== 'leaders') t.regions[r.id] = { level: 1 };
-  t.gold = SANDBOX.gold; t.startDay = addDays(today(), -7);
-  t.location = real.location;
-  t.sandbox = { backup: JSON.stringify({ ...real, sandbox: undefined }) };
+  const t = migrate(JSON.parse(JSON.stringify({ ...real, sandbox: undefined })));
+  t.sandbox = { backup: JSON.stringify({ ...real, sandbox: undefined }), shift: 0 };
   addLog(t, '🧪 وضع التجربة');
   return t;
 }
-export function refillSandbox(s) { if (s.sandbox) s.gold = Math.max(s.gold, SANDBOX.gold); }
+export function weekPasses(s) { if (s.sandbox) s.sandbox.shift = (s.sandbox.shift || 0) + 7; }
 export function leaveSandbox(s) { return s.sandbox ? migrate(JSON.parse(s.sandbox.backup)) : s; }
 
 // ---------- The story: the speech, Lucifer locked away, the ship ----------
@@ -567,9 +406,7 @@ export function demoState() {
   const s = newState();
   s.tour = 0;
   s.startDay = today();
-  s.gold = 100;
-  s.stats.goldEarned = 100;
-  addLog(s, 'مرحبًا بك في No Means No', 100);
+  addLog(s, 'مرحبًا بك في No Means No');
   return s;
 }
 

@@ -9,188 +9,14 @@ const day = (n) => new Date(Date.UTC(2026, 0, n)).toISOString().slice(0, 10);
 const def = () => E.findCharacter(W);
 const ids = (s) => E.activeTasks(def(), s.characters[W]).map((x) => x.id);
 
-// A player whose spiritual dimension has: prayer ×5 and one Quran page a day.
-function setup() {
-  const s = E.newState();
-  assert.ok(E.setRankPlan(s, W, 0, [{ title: 'الصلاة', times: 5 }, { title: 'صفحة قرآن', times: 1 }]).ok);
-  return s;
-}
-const task = (s, title) => E.activeTasks(def(), s.characters[W]).find((x) => x.title === title);
-
-// Complete every active task (as many times as it needs) on day n; returns events.
-function perfectDay(s, n) {
-  const ev = [];
-  for (const x of E.activeTasks(def(), s.characters[W])) for (let k = 0; k < E.timesOf(x); k++) ev.push(...E.reportTask(s, W, x.id, true, { date: day(n) }).events);
-  return ev;
-}
-
-t('the spiritual dimension starts with no preset tasks (no prayers)', () => {
-  const s = E.newState();
-  assert.deepEqual(ids(s), []);
-  assert.equal(def().title, undefined);
-  assert.ok(!JSON.stringify(def()).includes('المصل'));
-});
-
-t('a task needed 5 times a day is complete only after the 5th time', () => {
-  const s = setup();
-  const pr = task(s, 'الصلاة');
-  assert.equal(pr.times, 5);
-  for (let k = 1; k <= 4; k++) {
-    assert.ok(E.reportTask(s, W, pr.id, true, { date: day(1) }).ok);
-    const p = E.taskProgress(s, W, pr.id);
-    assert.equal(E.countToday(p, day(1)), k);
-    assert.equal(E.taskComplete(p, day(1)), false);
-    assert.equal(E.taskDoneToday(p, day(1)), false, 'still open');
-  }
-  E.reportTask(s, W, task(s, 'صفحة قرآن').id, true, { date: day(1) });
-  assert.equal(s.characters[W].perfectStreak, 0, 'prayer is at 4/5');
-  const ev = E.reportTask(s, W, pr.id, true, { date: day(1) }).events;
-  assert.ok(ev.some((e) => e.type === 'perfectDay'));
-  assert.equal(E.reportTask(s, W, pr.id, true, { date: day(1) }).ok, false, 'no 6th time');
-  assert.equal(E.currentStreak(E.taskProgress(s, W, pr.id), day(1)), 1);
-});
-
-t('a partial day keeps yesterday\'s streak going', () => {
-  const s = setup();
-  perfectDay(s, 1);
-  const pr = task(s, 'الصلاة');
-  E.reportTask(s, W, pr.id, true, { date: day(2) });
-  assert.equal(E.currentStreak(E.taskProgress(s, W, pr.id), day(2)), 1);
-});
-
-t('unfinished tasks count as missed when the next day starts', () => {
-  const s = setup();
-  for (let d = 1; d <= 5; d++) perfectDay(s, d);
-  E.closeDays(s, day(6));
-  const pr = task(s, 'الصلاة');
-  E.reportTask(s, W, pr.id, true, { date: day(6) });
-  E.reportTask(s, W, pr.id, true, { date: day(6) });
-  s.shields = 0;
-  assert.deepEqual(E.closeDays(s, day(7)).missed.sort(), ['الصلاة', 'صفحة قرآن'].sort());
-  assert.equal(E.taskProgress(s, W, pr.id).lastResult, 'fail');
-  assert.deepEqual(E.liveProgress(s.characters[W], day(7)), { perfectStreak: 0 });
-  assert.deepEqual(E.closeDays(s, day(7)).missed, [], 'runs once per day');
-});
-
-t('the end-of-day sweep never overwrites progress already logged today', () => {
-  const s = setup();
-  E.closeDays(s, day(1));
-  const q = task(s, 'صفحة قرآن');
-  E.reportTask(s, W, q.id, true, { date: day(2) });
-  E.closeDays(s, day(2));
-  assert.equal(E.taskComplete(E.taskProgress(s, W, q.id), day(2)), true);
-});
-
-t('times per day can be written as "× 5" and edited later keeping the task', () => {
-  const s = E.newState();
-  assert.ok(E.setRankPlan(s, W, 0, 'الصلاة × 5\nمشي x2\nذكر').ok);
-  assert.deepEqual(E.activeTasks(def(), s.characters[W]).map((x) => [x.title, x.times]), [['الصلاة', 5], ['مشي', 2], ['ذكر', 1]]);
-  const id = task(s, 'مشي').id;
-  assert.ok(E.setRankPlan(s, W, 0, [{ title: 'مشي', times: 3 }]).ok);
-  assert.equal(task(s, 'مشي').id, id);
-  assert.equal(task(s, 'مشي').times, 3);
-});
-
-t('an empty task list never counts as a perfect day', () => {
-  const s = E.newState();
-  E.closeDays(s, day(1));
-  assert.deepEqual(E.closeDays(s, day(2)).missed, []);
-  assert.equal(s.characters[W].perfectStreak, 0);
-});
-
-t('gold comes once per habit, however many times a day it is needed', () => {
-  const s = setup();
-  for (let k = 0; k < 4; k++) E.reportTask(s, W, task(s, 'الصلاة').id, true, { date: day(1) });
-  assert.equal(s.gold, 0);
-  E.reportTask(s, W, task(s, 'الصلاة').id, true, { date: day(1) });
-  assert.equal(s.gold, 20);
-});
-
-t('the game day closes at 3 at night, not at midnight', () => {
-  assert.equal(E.today(new Date(2026, 9, 21, 1, 30)), '2026-10-20');
-  assert.equal(E.today(new Date(2026, 9, 21, 3, 5)), '2026-10-21');
-});
-
-t('a habit added today is not held against you when the day closes', () => {
-  const s = E.newState();
-  assert.ok(E.setHabit(s, W, 0, null, { title: 'ورد', times: 1 }).ok);
-  s.lastDay = E.today();
-  const d = new Date(); d.setDate(d.getDate() + 2);
-  const rep = E.closeDays(s, E.today(d));
-  assert.equal(rep.days, 2); assert.equal(rep.stars.length, 1, 'only the day after counts');
-});
-t('a skipped day also resets the chain', () => {
-  const s = setup();
-  for (let d = 1; d <= 10; d++) perfectDay(s, d);
-  perfectDay(s, 12);
-  assert.equal(s.characters[W].perfectStreak, 1);
-});
-
-const stars = (s, n, k) => {   // reach k stars on day n (prayer ×5 + Quran)
-  const pr = task(s, 'الصلاة').id, q = task(s, 'صفحة قرآن').id;
-  const plan = [[], [[pr, 4]], [[pr, 4], [q, 1]], [[pr, 5], [q, 1]]][k];
-  for (const [id, c] of plan) for (let i = 0; i < c; i++) E.reportTask(s, W, id, true, { date: day(n) });
-};
-
-t('stars: ⭐ a third of the day, ⭐⭐ two thirds, ⭐⭐⭐ everything (a habit counts by its share)', () => {
-  const s = setup();
-  for (const k of [0, 1, 2, 3]) { stars(s, k + 1, k); assert.equal(E.starsToday(s, W, day(k + 1)), k, `${k} stars`); }
-  assert.equal(E.starsOf(1 / 3), 1, 'exactly a third is a star'); assert.equal(E.starsOf(2 / 3), 2);
-  assert.equal(E.starsOf(0.32), 0); assert.equal(E.starsOf(0.99), 2);
-  const one = E.newState(); E.setHabit(one, W, 0, null, { title: 'ورد', times: 1 });
-  E.activeTasks(def(), one.characters[W])[0].added = null;
-  assert.equal(E.starsToday(one, W, day(1)), 0);
-  E.reportTask(one, W, E.activeTasks(def(), one.characters[W])[0].id, true, { date: day(1) });
-  assert.equal(E.starsToday(one, W, day(1)), 3, 'one habit done = 3 stars');
-});
-
-t('an honest failure is counted, but only as a symbol', () => {
-  const s = setup(); const g = s.gold;
-  E.reportTask(s, W, task(s, 'صفحة قرآن').id, false, { date: day(1) });
-  assert.equal(s.stats.honest, 1); assert.equal(s.gold, g);
-});
+const MAKKAH = { lat: 21.3891, lng: 39.8579, method: 'makkah' };
+const hm = (h) => Math.round(h * 60);
 
 t('headquarters and the trophy island are visible from the start', () => {
   const s = E.newState();
   assert.equal(E.mapVisibility(s, E.findRegion('hq')), 'owned');
   assert.equal(E.mapVisibility(s, E.findRegion('trophies')), 'owned');
 });
-
-t('cannot report a task that is not unlocked yet', () => {
-  assert.equal(E.reportTask(E.newState(), W, 'quran', true).ok, false);
-});
-
-t('migrate v2 save: keeps gold/regions, restarts character levels', () => {
-  const s = E.migrate({ version: 2, gold: 42, characters: { worshipper: { level: 4 } }, regions: { sanctuary: { level: 3 } } });
-  assert.equal(s.gold, 42);
-  assert.equal(s.regions.sanctuary.level, 3);
-  assert.equal(s.characters[W].level, 1);
-  assert.equal(s.characters[W].stage, 0);
-});
-
-t('migrate removes the old five prayers from a saved spiritual plan', () => {
-  const old = [['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'].map((id) => ({ id, title: id, reward: 20, penalty: 10 })), [{ id: 'quran', title: 'قرآن', reward: 20, penalty: 10 }]];
-  const s = E.migrate({ version: 3, characters: { worshipper: { stage: 0, level: 2, plan: old } } });
-  assert.deepEqual(ids(s), ['quran']);
-});
-
-t('revokeTask cancels an early prayer and takes back its gold and perfect day', () => {
-  const s = E.newState();
-  assert.ok(E.setRankPlan(s, W, 0, 'صلاة العشاء').ok);
-  const isha = E.activeTasks(def(), s.characters[W])[0];
-  assert.equal(isha.prayer, 'isha');
-  perfectDay(s, 1);
-  const gold = s.gold;
-  assert.equal(s.characters[W].perfectStreak, 1);
-  assert.ok(E.revokeTask(s, W, isha.id, day(1)));
-  assert.equal(s.gold, gold - 20);
-  assert.equal(s.characters[W].perfectStreak, 0);
-  assert.equal(E.taskDoneToday(E.taskProgress(s, W, isha.id), day(1)), false);
-  assert.ok(E.reportTask(s, W, isha.id, true, { date: day(1) }).ok, 'can be reported again in its time');
-});
-
-const MAKKAH = { lat: 21.3891, lng: 39.8579, method: 'makkah' };
-const hm = (h) => Math.round(h * 60);
 
 t('Makkah prayer times match the Umm al-Qura timetable (±2 min)', () => {
   const x = P.prayerTimes(new Date(2026, 8, 27), MAKKAH, 3);
@@ -212,16 +38,6 @@ t('after midnight, Isha still belongs to the previous prayer day', () => {
   const pd = P.prayerDay(now, MAKKAH);
   assert.equal(pd.day, '2026-09-27');
   assert.equal(P.windowState(pd.windows.isha, now), 'open');
-});
-
-t('a written line naming a prayer is tied to that prayer time', () => {
-  const s = E.newState();
-  assert.equal(E.prayerIn('صلاة الضحى'), undefined);
-  assert.equal(E.prayerIn('قراءة سورة العصر'), undefined, 'needs the word صلاة');
-  assert.ok(E.setRankPlan(s, W, 0, 'صلاة المغرب بالمسجد\nصلاة الفجر جماعة').ok);
-  assert.deepEqual(E.activeTasks(def(), s.characters[W]).map((x) => x.prayer), ['maghrib', 'fajr']);
-  assert.ok(E.setRankPlan(s, W, 0, 'صلاة الفجر × 2').ok);
-  assert.equal(E.activeTasks(def(), s.characters[W])[0].prayer, undefined, 'a task done several times a day is not tied to one prayer time');
 });
 
 t('new dimensions start empty; old saves keep their preset tasks', () => {
@@ -296,7 +112,7 @@ t('the ship grows with every habit built; all 64 = the island opens', () => {
 });
 
 t('the story: after the speech Lucifer is jailed; the cage is found empty at the end', () => {
-  const s = setup();
+  const s = E.newState();
   assert.ok(E.finishSpeech(s).ok);
   assert.equal(s.story.jailed, true);
   E.storyStep(s, 'back'); E.storyStep(s, 'done');
@@ -312,15 +128,69 @@ t('old saves: keys, shields, medals and wars are gone; at most eight ranks', () 
   assert.ok(m.startDay);
 });
 
-t('test mode opens everything with gold and gives the real save back', () => {
-  const real = E.newState(); real.gold = 7;
-  assert.ok(E.setHabit(real, W, 0, null, { title: 'الصلاة', times: 5 }).ok);
+
+t('the spiritual dimension starts with no preset habits (no prayers)', () => {
+  const s = E.newState();
+  assert.deepEqual(ids(s), []);
+});
+
+t('every habit is a counter: days and hours since it began', () => {
+  const s = E.newState();
+  assert.ok(E.setHabit(s, W, 0, null, { title: 'الصلاة', icon: '🕌' }).ok);
+  const h = E.activeTasks(def(), s.characters[W])[0];
+  assert.equal(h.times, undefined, 'no times a day any more'); assert.equal(h.prayer, undefined);
+  const t0 = h.start;
+  assert.deepEqual(E.habitDays(h, t0 + 3 * 86400000 + 5 * 3600000 + 60000), { days: 3, hours: 5, minutes: 1 });
+});
+
+t('a counter can be paused, run again (going on from where it stopped), and reset to zero', () => {
+  const s = E.newState(); E.setHabit(s, W, 0, null, { title: 'ورد' });
+  const h = () => E.activeTasks(def(), s.characters[W])[0];
+  h().start = E.nowMs() - 2 * 86400000;   // two days in
+  assert.ok(E.pauseHabit(s, W, h().id).ok);
+  assert.equal(E.pauseHabit(s, W, h().id).ok, false, 'already paused');
+  const frozen = E.habitElapsed(h());
+  assert.equal(E.habitElapsed(h(), E.nowMs() + 86400000), frozen, 'a paused counter does not move');
+  h().paused -= 3600000;   // paused an hour ago
+  const at = E.habitElapsed(h());
+  assert.ok(E.resumeHabit(s, W, h().id).ok);
+  assert.ok(Math.abs(E.habitElapsed(h()) - at) < 1000, 'runs on from where it stopped');
+  assert.ok(E.resetHabit(s, W, h().id).ok);
+  assert.ok(E.habitElapsed(h()) < 1000, 'reset: back to zero');
+});
+
+t('a habit name written with "× 5" keeps only the name', () => {
+  const s = E.newState();
+  assert.ok(E.setRankPlan(s, W, 0, 'الصلاة × 5').ok);
+  assert.equal(E.activeTasks(def(), s.characters[W])[0].title, 'الصلاة');
+});
+
+t('a renamed habit keeps its counter only if the name stays', () => {
+  const s = E.newState(); E.setHabit(s, W, 0, null, { title: 'ورد' });
+  const h = E.activeTasks(def(), s.characters[W])[0]; h.start -= 86400000;
+  assert.ok(E.setHabit(s, W, 0, h.id, { title: 'ورد', icon: '📿' }).ok);
+  assert.equal(E.activeTasks(def(), s.characters[W])[0].start, h.start);
+  assert.equal(E.activeTasks(def(), s.characters[W])[0].icon, '📿');
+});
+
+t('the decorations of a place come one by one with its buildings', () => {
+  const s = E.newState(); E.setHabit(s, W, 0, null, { title: 'ورد' });
+  assert.equal(E.regionFeatures(s, 'sanctuary').size, 0);
+  E.setRankPlan(s, W, 1, [{ title: 'ب' }]); E.setRankPlan(s, W, 2, [{ title: 'ج' }]); s.characters[W].level = 3;
+  assert.deepEqual([...E.regionFeatures(s, 'sanctuary')], ['lanterns', 'palms']);
+});
+
+t('test mode: a copy of the game whose clock moves a week each time, and the real save comes back', () => {
+  const real = E.newState(); real.startDay = E.today();
+  assert.ok(E.setHabit(real, W, 0, null, { title: 'الصلاة' }).ok);
   const t2 = E.enterSandbox(real);
-  assert.equal(t2.gold, E.SANDBOX.gold);
-  assert.ok(Object.keys(t2.characters).length >= 8 && t2.regions.nature && t2.regions.hq);
-  assert.equal(t2.regions.leaders, undefined);
+  assert.equal(E.activeTasks(def(), t2.characters[W])[0].title, 'الصلاة');
+  E.weekPasses(t2); E.setDayShift(t2.sandbox.shift);
+  assert.ok(E.pendingOffer(t2), 'a week later: the Sunday message');
+  assert.ok(E.habitElapsed(E.activeTasks(def(), t2.characters[W])[0]) >= 6 * 86400000, 'the counters ran a week too');
+  E.setDayShift(0);
   const back = E.leaveSandbox(JSON.parse(JSON.stringify(t2)));
-  assert.equal(back.gold, 7); assert.equal(back.sandbox, undefined);
+  assert.equal(back.sandbox, undefined);
   assert.equal(E.activeTasks(def(), back.characters[W])[0].title, 'الصلاة');
 });
 console.log(`\n${passed} tests passed`);

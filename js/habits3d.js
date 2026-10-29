@@ -23,7 +23,7 @@ function label(text, { size = 0.5, bg = 'rgba(20,24,30,.78)', color = '#fff', fo
 
 // A little house (about 2 × 2): stone base, walls in the dimension's colour, a roof, a door,
 // a sign with the habit's icon, and a lamp on top that lights up when it's done today.
-function house(color, roof, icon, title) {
+function house(color, roof, icon, title, counter) {
   const g = new THREE.Group();
   const base = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.25, 2.2), std(0xcfc6b2)); base.position.y = 0.12; g.add(base);
   const walls = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.3, 1.6), std(color)); walls.position.y = 0.9; g.add(walls);
@@ -31,7 +31,8 @@ function house(color, roof, icon, title) {
   const door = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.75, 0.05), std(0x4a2f1a)); door.position.set(0, 0.62, 0.81); g.add(door);
   for (const x of [-0.55, 0.55]) { const w = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.05), std(0xfff2c0, { emissive: 0xffd27a, emissiveIntensity: 0.25 })); w.position.set(x, 1.05, 0.81); g.add(w); }
   const sign = label(icon, { size: 0.62, emoji: true, bg: 'rgba(255,250,235,.95)', font: '64px system-ui, sans-serif' }); sign.position.set(0, 1.55, 0.95); g.add(sign);
-  const name = label(title, { size: 0.42 }); name.position.set(0, 3.05, 0); g.add(name);
+  const name = label(title, { size: 0.42 }); name.position.set(0, 3.35, 0); g.add(name);
+  if (counter) { const c = label(counter, { size: 0.34, bg: 'rgba(47,125,79,.85)' }); c.position.set(0, 2.95, 0); g.add(c); }
   const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), std(0x666666, { emissive: 0x000000 })); lamp.position.y = 2.6; g.add(lamp);
   g.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
   g.userData = { lamp, name };
@@ -70,7 +71,8 @@ function spots({ blocked, inside, spawn: [sx, sz], center = [0, 0], avoid = [], 
   return list;
 }
 
-// habits: [{ id, title, icon, done }] — the dimension's habits in order (at most 8).
+// habits: [{ id, title, icon, done, counter }] — the dimension's habits in order (at most 8);
+// done = its counter is running (the lamp on the roof lit), counter = the time shown.
 export function habitHouses(scene, { blocked, inside, groundAt = () => 0, spawn, center, avoid, minR, color = 0xe8dcc4, roof = 0xb8432e, habits = [] } = {}) {
   const at = spots({ blocked, inside, spawn, center, avoid, minR });
   const root = new THREE.Group(); scene.add(root);
@@ -78,7 +80,7 @@ export function habitHouses(scene, { blocked, inside, groundAt = () => 0, spawn,
   const build = (list) => {
     for (const s of slots) root.remove(s.obj);
     slots = at.map(([x, z], i) => {
-      const h = list[i], obj = h ? house(color, roof, h.icon || '⭐', h.title) : plot();
+      const h = list[i], obj = h ? house(color, roof, h.icon || '⭐', h.title, h.counter) : plot();
       obj.position.set(x, groundAt(x, z), z);
       obj.rotation.y = Math.atan2(spawn[0] - x, spawn[1] - z);   // face where he arrives
       if (h) { const L = obj.userData.lamp; L.material.color.set(h.done ? 0xffd040 : 0x666666); L.material.emissive.set(h.done ? 0xffb020 : 0x000000); L.material.emissiveIntensity = h.done ? 1.4 : 0; }
