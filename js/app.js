@@ -548,7 +548,7 @@ const placeState = () => {
   return { features: E.regionFeatures(state, c.regionId), level: artLevel(ch), rank: rankState(c, ch), habits: habitsFor(c) };
 };
 // The dimension's habits for its eight small buildings (done today = the lamp on the roof lit).
-const habitsFor = (c) => { const ch = state.characters[c.id]; return ch ? E.activeTasks(c, ch).slice(0, E.RANK_COUNT).map((t) => ({ id: t.id, title: t.title, icon: taskIcon(c.id, t), done: t.paused == null, counter: `⏱ ${E.habitDays(t).days} ي · ${E.habitDays(t).hours} س` })) : []; };
+const habitsFor = (c) => { const ch = state.characters[c.id]; return ch ? E.activeTasks(c, ch).slice(0, E.RANK_COUNT).map((t) => ({ id: t.id, title: t.title, icon: taskIcon(c.id, t), time: E.habitDays(t), paused: t.paused != null })) : []; };
 // Tapping a building: its habit and its counter (pause / run, reset).
 function showHabit(charId, taskId) {
   const c = E.findCharacter(charId), t = E.activeTasks(c, state.characters[charId]).find((x) => x.id === taskId);
@@ -754,9 +754,9 @@ function placeHUD() {
 
   <aside class="quests ${questsCollapsed ? 'collapsed' : ''}" id="quests">
     <button class="quests-head" data-toggle-quests>
-      <span>⏱ عاداتي</span><b>${tasks.length} / 8</b>
+      <span>🏗 مباني ${esc(r.name)}</span><b>${tasks.length} / 8</b>
     </button>
-    <ul class="tasks">${tasks.length ? tasks.map((t) => taskRow(c.id, t)).join('') : `<li class="task"><div class="task-main"><strong>ما بنيت ولا عادة لسا</strong><small class="muted">اختار أول عادة إلك.</small></div><div class="task-actions"><button class="btn ok" data-set-tasks="${c.id}">🎯 اختار مهمتك</button></div></li>`}</ul>
+    <ul class="tasks">${tasks.length ? '<li class="task"><div class="task-main"><small class="muted">كل مبنى عليه عدّاد عادته ⏱. اكبس على المبنى عشان توقف عدّاده أو تصفّره.</small></div></li>' : `<li class="task"><div class="task-main"><strong>ما بنيت ولا عادة لسا</strong><small class="muted">اختار أول عادة إلك.</small></div><div class="task-actions"><button class="btn ok" data-set-tasks="${c.id}">🎯 اختار مهمتك</button></div></li>`}</ul>
     ${tasks.length ? roadLine(c.id) : ''}
   </aside>
 
