@@ -10,6 +10,7 @@ import * as FX from './effects.js';
 import * as SND from './audio.js';
 import { CITIES, METHODS, prayerDay, fmtTime } from './prayer.js';
 import { createTour } from './tour.js';
+import { watchNoEmoji } from './noemoji.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -306,13 +307,18 @@ const counterTxt = (t) => {
   return days ? `${d}${hours ? ` و${h}` : ''}` : hours ? `${h}${minutes ? ` و${minutes} د` : ''}` : `${minutes} دقيقة`;
 };
 // One habit in a list: its counter, pause / run, reset.
+// When a habit began (its counter's start), as day/month/year.
+const startDate = (t) => { const d = new Date(t.start); return `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`; };
+// A building's number (1–8): the order it was built in.
+const habitNo = (charId, t) => E.activeTasks(E.findCharacter(charId), state.characters[charId]).findIndex((x) => x.id === t.id) + 1;
 function taskRow(charId, t) {
   const paused = t.paused != null;
   return `
   <li class="task habit-row ${paused ? 'is-paused' : 'is-running'}">
     <div class="task-main">
-      <strong><span class="t-ic">${taskIcon(charId, t)}</span> ${esc(t.title)}${E.findCharacter(charId)?.stages ? ` <button class="edit-task" data-edit-task="${charId}:${t.id}" title="عدّل" aria-label="عدّل">✎</button>` : ''}</strong>
-      <span class="counter">⏱ <b>${counterTxt(t)}</b>${paused ? ' <small>⏸ موقوف</small>' : ''}</span>
+      <strong><span class="t-no">${habitNo(charId, t)}</span> ${esc(t.title)}${E.findCharacter(charId)?.stages ? ` <button class="edit-task" data-edit-task="${charId}:${t.id}" title="عدّل الاسم">تعديل</button>` : ''}</strong>
+      <span class="counter"><b>${counterTxt(t)}</b>${paused ? ' <small>موقوف</small>' : ''}</span>
+      <small class="muted">بدأت: ${startDate(t)}</small>
     </div>
     <div class="task-actions">
       ${paused ? `<button class="btn ok" data-habit-run="${charId}:${t.id}">▶ شغّل</button>` : `<button class="btn" data-habit-pause="${charId}:${t.id}">⏸ وقّف</button>`}
@@ -451,10 +457,10 @@ function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) 
     : { from: null, title: '', icon: '' };
   const head = mode === 'build' ? { k: `🏗 ${esc(c.name)} · مبنى ${(rd?.habits || 0) + 1} من 8`, t: 'العادة الجديدة' }
     : mode === 'open' ? { k: `🔓 ${esc(E.findRegion(regionId).name)}`, t: 'أول عادة لهاد البعد' }
-    : mode === 'edit' ? { k: 'تعديل العادة', t: 'غيّر اسمها أو صورتها' } : { k: esc(c.name), t: 'اختار أول عادة إلك' };
+    : mode === 'edit' ? { k: 'تعديل العادة', t: 'غيّر اسمها' } : { k: esc(c.name), t: 'اختار أول عادة إلك' };
   const lead = mode === 'build' ? `بتنبني بمبنى جديد، وبتطلع رتبة ${esc(c.name)} لـ <b>${esc(rd?.next?.name || '')}</b>.`
     : mode === 'open' ? 'البعد بيفتح بمبنى واحد: هاي العادة.'
-    : mode === 'edit' ? 'العدّاد بيضل زي ما هو، بس الاسم والصورة بيتغيروا.' : 'عادة وحدة بتعملها كل يوم. ابدأ بإشي صغير بتقدر تلتزم فيه 💪';
+    : mode === 'edit' ? 'العدّاد بيضل زي ما هو. الصورة والملاحظات من شباك المبنى.' : 'عادة وحدة بتعملها كل يوم. ابدأ بإشي صغير بتقدر تلتزم فيه 💪';
   modal(`
     <div class="picker" style="--glow:${c.palette.glow}">
       <header class="pk-head"><div class="pk-medal">${DIM_ICON[id] || '⭐'}</div><div><small>${head.k}</small><h2>${head.t}</h2></div></header>
@@ -467,7 +473,7 @@ function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) 
       <div class="pk-custom" id="pk-custom" hidden>
         <div class="pk-step"><b>2</b> خصّصها على كيفك</div>
         <div class="pk-name">
-          <button type="button" class="pk-icon" id="pk-icon" title="غيّر الصورة">⭐</button>
+          <button type="button" class="pk-icon" id="pk-icon" title="غيّر الصورة" hidden>⭐</button>
           <input id="pk-title" maxlength="80" placeholder="اسم المهمة">
         </div>
         <div class="pk-icons-wrap" id="pk-icons" hidden>
@@ -572,13 +578,37 @@ const placeState = () => {
   return { features: E.regionFeatures(state, c.regionId), level: artLevel(ch), rank: rankState(c, ch), habits: habitsFor(c) };
 };
 // The dimension's habits for its eight small buildings (done today = the lamp on the roof lit).
-const habitsFor = (c) => { const ch = state.characters[c.id]; return ch ? E.activeTasks(c, ch).slice(0, E.RANK_COUNT).map((t) => ({ id: t.id, title: t.title, icon: taskIcon(c.id, t), time: E.habitDays(t), paused: t.paused != null })) : []; };
-// Tapping a building: its habit and its counter (pause / run, reset).
+const habitsFor = (c) => { const ch = state.characters[c.id]; return ch ? E.activeTasks(c, ch).slice(0, E.RANK_COUNT).map((t, i) => ({ id: t.id, n: i + 1, title: t.title, img: t.img || null, start: t.start, time: E.habitDays(t), paused: t.paused != null })) : []; };
+// A picture from the device, made small (at most 360 px) to keep in the save.
+function shrinkImage(file, max = 360) {
+  return new Promise((ok, bad) => {
+    const url = URL.createObjectURL(file), im = new Image();
+    im.onload = () => { const k = Math.min(1, max / Math.max(im.width, im.height)), cv = document.createElement('canvas'); cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); URL.revokeObjectURL(url); ok(cv.toDataURL('image/jpeg', 0.82)); };
+    im.onerror = () => { URL.revokeObjectURL(url); bad(new Error('image')); };
+    im.src = url;
+  });
+}
+if (typeof window !== "undefined") window.__nmnHabit = (c, t) => window.__nmnDebug && showHabit(c, t);
+// Tapping a building: its habit, its counter (pause / run, reset), its picture and its notes.
 function showHabit(charId, taskId) {
   const c = E.findCharacter(charId), t = E.activeTasks(c, state.characters[charId]).find((x) => x.id === taskId);
   if (!t) return;
-  modal(`<h2>${taskIcon(charId, t)} ${esc(t.title)}</h2><p class="muted">مبنى من مباني ${esc(c.name)}.</p><ul class="tasks">${taskRow(charId, t)}</ul><div class="pk-actions"><button class="pk-ok" data-edit-task="${charId}:${taskId}">✎ عدّل الاسم والصورة</button></div>`);
-  modalRefresh = () => showHabit(charId, taskId);
+  modal(`<h2>مبنى ${habitNo(charId, t)} · ${esc(t.title)}</h2><p class="muted">من مباني ${esc(c.name)}.</p>
+    <ul class="tasks">${taskRow(charId, t)}</ul>
+    <div class="habit-pic">
+      ${t.img ? `<img src="${t.img}" alt="">` : '<div class="no-pic">ما في صورة</div>'}
+      <div class="row wrap"><label class="btn">${t.img ? 'غيّر الصورة' : 'أضف صورة'}<input type="file" accept="image/*" id="hb-img" hidden></label>${t.img ? '<button class="btn" id="hb-noimg">شيل الصورة</button>' : ''}</div>
+    </div>
+    <div class="habit-notes"><b>ورقة الملاحظات</b>
+      <textarea id="hb-notes" rows="8" placeholder="اكتب هون كل اللي بدك إياه: عادات صغيرة جوا هالعادة، شرح، أهداف…">${esc(t.notes || '')}</textarea>
+      <div class="row"><button class="btn primary" id="hb-save">احفظ الملاحظات</button><small class="muted" id="hb-saved"></small></div>
+    </div>`);
+  // Kept fresh as the counter runs, without losing what is being written.
+  modalRefresh = () => { const ta = $('#hb-notes'), v = ta?.value, f = document.activeElement === ta, a = ta?.selectionStart, b = ta?.selectionEnd; showHabit(charId, taskId); const n = $('#hb-notes'); if (n && v != null) { n.value = v; if (f) { n.focus(); n.setSelectionRange(a, b); } } };
+  const saveHabit = (patch, msg) => { const r = act(E.editHabit(state, charId, taskId, patch)); if (r.ok && msg) FX.toast(msg); return r; };
+  $('#hb-save').onclick = () => { if (saveHabit({ notes: $('#hb-notes').value }).ok) $('#hb-saved').textContent = 'انحفظت'; };
+  $('#hb-img').onchange = async (e) => { const f = e.target.files?.[0]; if (!f) return; try { const img = await shrinkImage(f); if (saveHabit({ img }, 'تمّت إضافة الصورة').ok) showHabit(charId, taskId); } catch { FX.toast('ما قدرت أفتح الصورة', 'err'); } };
+  if ($('#hb-noimg')) $('#hb-noimg').onclick = () => { if (saveHabit({ img: null }).ok) showHabit(charId, taskId); };
   bind();
 }
 // What the rank stand shows: every rank, the current one, and the buildings (habits) so far.
@@ -766,26 +796,14 @@ function placeHUD() {
   return `
   <div class="hud-top">
     <div class="plate">
-      <div class="plate-avatar" style="--glow:${c.palette.glow}">☪</div>
+      <div class="plate-avatar" style="--glow:${c.palette.glow}">${esc([...c.name][0])}</div>
       <div class="plate-body">
         <div class="plate-name">${c.name === r.name ? r.name : `${c.name} <span class="plate-place">· ${r.name}</span>`}</div>
-        <div class="plate-row"><span class="plate-streak" title="أطول عدّاد (أيام)">⏱ ${best}</span></div>
+        <div class="plate-row"><span class="plate-streak" title="أطول عدّاد (أيام)">أطول عدّاد: ${best} يوم</span></div>
 
       </div>
     </div>
     <button class="hud-chip atmo" data-open-atmo>${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}${timeOverride === "auto" ? ` · ${fmtTime(new Date())}` : ""}${liveWeather?.temp != null && weatherOverride === 'auto' ? ` · ${liveWeather.temp}°` : ''}</button>
-  </div>
-
-  <aside class="quests ${questsCollapsed ? 'collapsed' : ''}" id="quests">
-    <button class="quests-head" data-toggle-quests>
-      <span>🏗 مباني ${esc(r.name)}</span><b>${tasks.length} / 8</b>
-    </button>
-    <ul class="tasks">${tasks.length ? '<li class="task"><div class="task-main"><small class="muted">كل مبنى عليه عدّاد عادته ⏱. اكبس على المبنى عشان توقف عدّاده أو تصفّره.</small></div></li>' : `<li class="task"><div class="task-main"><strong>ما بنيت ولا عادة لسا</strong><small class="muted">اختار أول عادة إلك.</small></div><div class="task-actions"><button class="btn ok" data-set-tasks="${c.id}">🎯 اختار مهمتك</button></div></li>`}</ul>
-    ${tasks.length ? roadLine(c.id) : ''}
-  </aside>
-
-  <div class="dock">
-    <button class="dock-btn" data-open-upgrades>✨<span>زينة ${r.name}</span></button>
   </div>`;
 }
 
@@ -981,7 +999,7 @@ function hqHUD() {
   return `
   <div class="hud-top">
     <div class="plate">
-      <div class="plate-avatar" style="--glow:#ffc83d">🫡</div>
+      <div class="plate-avatar" style="--glow:#ffc83d">ق</div>
       <div class="plate-body">
         <div class="plate-name">القائد <span class="plate-place">· مقر القيادة</span></div>
         <div class="plate-row"><button class="rank" data-cmd-ranks style="--rank:#7a5a1f" title="اعرض كل الرتب">${cm.rank} ▾</button></div>
@@ -1114,7 +1132,7 @@ function trophyHUD() {
   return `
   <div class="hud-top">
     <div class="plate">
-      <div class="plate-avatar" style="--glow:#ffc83d">🏆</div>
+      <div class="plate-avatar" style="--glow:#ffc83d">ك</div>
       <div class="plate-body">
         <div class="plate-name">جزيرة الكؤوس</div>
         <div class="plate-row"><span class="plate-streak">🏆 ${won} / ${CUPS.length}</span></div>
@@ -1341,6 +1359,7 @@ $('#account').onclick = () => {
 };
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#modal').dataset.closable === 'true') closeModal(); });
 
+watchNoEmoji();
 boot();
 
 // The top bar: the habits built (the dimensions' ranks) and the Sunday message.

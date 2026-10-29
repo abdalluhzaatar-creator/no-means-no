@@ -180,6 +180,10 @@ t('editing a habit (name and picture) keeps its building and its counter', () =>
   const n = E.activeTasks(def(), s.characters[W])[0];
   assert.deepEqual([n.id, n.start, n.title, n.icon], [id, start, 'قراءة', '📖']);
   assert.equal(E.editHabit(s, W, id, { title: '' }).ok, false);
+  assert.ok(E.editHabit(s, W, id, { notes: 'سطر 1\nسطر 2', img: 'data:image/jpeg;base64,AAAA' }).ok);
+  const m = E.activeTasks(def(), s.characters[W])[0];
+  assert.deepEqual([m.notes, m.img, m.title, m.start], ['سطر 1\nسطر 2', 'data:image/jpeg;base64,AAAA', 'قراءة', start]);
+  assert.ok(E.editHabit(s, W, id, { img: null }).ok); assert.equal(E.activeTasks(def(), s.characters[W])[0].img, undefined);
 });
 
 t('the decorations of a place come one by one with its buildings', () => {

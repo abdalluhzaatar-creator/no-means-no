@@ -793,3 +793,15 @@ body.cine .hud, body.cine .move-pad, body.cine .door-btn, body.cine .cell-captio
 .telegram h2 { margin: 8px 0; font-size: 1.5rem; color: #5a1f10; }
 .telegram .muted { color: #6b5536; }
 .telegram .tg-stamp { font-size: 3rem; animation: offer-pulse 1.4s ease-in-out infinite; }
+
+/* No emoji in the game: the picker's emoji icons are not shown. */
+.habit .hb-ic { display: none; }
+.t-no { display: inline-grid; place-items: center; min-width: 1.6em; height: 1.6em; border-radius: 50%; background: #d4a53a; color: #2a1a06; font-weight: 800; font-size: .85em; margin-inline-end: 4px; }
+.edit-task { font-size: .75rem; padding: 2px 8px; }
+/* A building's picture and its notes sheet. */
+.habit-pic { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 12px 0; }
+.habit-pic img { max-width: 220px; max-height: 220px; border-radius: 12px; border: 3px solid #d4a53a; object-fit: cover; }
+.habit-pic .no-pic { width: 160px; height: 110px; border-radius: 12px; border: 2px dashed #888; display: grid; place-items: center; color: #999; }
+.habit-pic label.btn { cursor: pointer; }
+.habit-notes { display: flex; flex-direction: column; gap: 6px; }
+.habit-notes textarea { width: 100%; min-height: 160px; resize: vertical; font: inherit; padding: 10px; border-radius: 10px; border: 1px solid #c9b996; background: #fffaf0; color: #2a1a06; line-height: 1.7; }

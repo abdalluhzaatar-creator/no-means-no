@@ -1,5 +1,6 @@
 // Small building kit shared by the seven dimension scenes.
 import * as THREE from './vendor/three.module.min.js';
+import { noEmoji } from './noemoji.js';
 import { canvasTex, glowTex } from './env3d.js';
 
 export { canvasTex, glowTex };
@@ -73,7 +74,7 @@ export function textTex(lines, { w = 512, h = 256, bg = '#1b2a3a', fg = '#fff', 
   return canvasTex(w, h, (g) => {
     g.fillStyle = bg; g.fillRect(0, 0, w, h);
     g.direction = 'rtl'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = fg;
-    lines.forEach((t, i) => { g.font = `${i ? 600 : 800} ${i ? h * 0.16 : h * 0.26}px ${font}`; g.fillText(t, w / 2, h * (lines.length > 1 ? 0.36 + i * 0.32 : 0.5)); });
+    lines.forEach((t, i) => { g.font = `${i ? 600 : 800} ${i ? h * 0.16 : h * 0.26}px ${font}`; g.fillText(noEmoji(t), w / 2, h * (lines.length > 1 ? 0.36 + i * 0.32 : 0.5)); });
   });
 }
 

@@ -232,14 +232,18 @@ export function setHabit(s, id, rankIndex, taskId, habit) {
   return setRankPlan(s, id, rankIndex, list);
 }
 
-// Rename a habit or change its picture in place: same building, same counter.
+// Rename a habit, change its picture or its notes in place: same building, same counter.
 export function editHabit(s, id, taskId, habit) {
   const def = findCharacter(id), ch = s.characters[id];
   if (!def || !ch) return fail('غير مملوكة');
-  const h = cleanHabit(habit);
-  if (!h.title) return fail('اكتب اسم العادة');
   const t = activeTasks(def, ch).find((x) => x.id === taskId);
   if (!t) return fail('غير موجودة');
+  // Its notes (any length of writing) and its picture (an image from outside the game).
+  if ('notes' in habit) t.notes = String(habit.notes || '').slice(0, 20000);
+  if ('img' in habit) { if (typeof habit.img === 'string' && habit.img.startsWith('data:image/') && habit.img.length < 400000) t.img = habit.img; else delete t.img; }
+  if (!('title' in habit)) { addLog(s, `✎ ${def.name}: ${t.title}`); return done(s, []); }
+  const h = cleanHabit(habit);
+  if (!h.title) return fail('اكتب اسم العادة');
   if (activeTasks(def, ch).some((x) => x.title === h.title && x.id !== taskId)) return fail('هاي العادة عندك أصلًا');
   t.title = h.title; if (h.icon) t.icon = h.icon;
   addLog(s, `✎ ${def.name}: ${h.title}`);

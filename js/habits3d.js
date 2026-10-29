@@ -6,6 +6,7 @@
 // he arrives to the middle, facing it; the spots are found once, clear of everything in
 // the scene, the decorations not shown yet too.
 import * as THREE from './vendor/three.module.min.js';
+import { noEmoji } from './noemoji.js';
 
 export const HOUSES = 8;
 const SCALE = 1.35;   // a little bigger than life, so the counters read from afar
@@ -18,7 +19,7 @@ function label(text, { size = 0.5, bg = 'rgba(20,24,30,.78)', color = '#fff', fo
   cv.width = emoji ? 96 : w; cv.height = h;
   g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle';
   if (bg) { g.fillStyle = bg; g.beginPath(); g.roundRect(2, 2, cv.width - 4, h - 4, emoji ? 48 : 20); g.fill(); }
-  g.fillStyle = color; g.direction = 'rtl'; g.fillText(text, cv.width / 2, h / 2 + 2);
+  g.fillStyle = color; g.direction = 'rtl'; g.fillText(noEmoji(text), cv.width / 2, h / 2 + 2);
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthWrite: false }));
   s.scale.set((cv.width / h) * size, size, 1); s.renderOrder = 3; return s;
@@ -31,43 +32,52 @@ function counterBoard() {
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   const m = new THREE.Mesh(new THREE.PlaneGeometry(1.55, 0.67), new THREE.MeshStandardMaterial({ map: t, roughness: 0.7, emissive: 0xffffff, emissiveMap: t, emissiveIntensity: 0.35 }));
   const ar = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n <= 10 ? `${n} ${few}` : `${n} ${many}`);
-  m.userData.draw = ({ days = 0, hours = 0, minutes = 0 } = {}, paused = false) => {
+  m.userData.draw = ({ days = 0, hours = 0, minutes = 0 } = {}, paused = false, start = null) => {
     const g = cv.getContext('2d');
     g.fillStyle = '#3a2414'; g.fillRect(0, 0, 512, 220);
     g.strokeStyle = paused ? '#f4b84a' : '#e8c46a'; g.lineWidth = 12; g.strokeRect(6, 6, 500, 208);
     g.textAlign = 'center'; g.textBaseline = 'middle'; g.direction = 'rtl';
-    g.fillStyle = '#fff6dc'; g.font = 'bold 92px system-ui, sans-serif';
-    g.fillText(days ? ar(days, 'يوم', 'يومين', 'أيام', 'يوم') : `${hours} س`, 256, 84);
-    g.fillStyle = paused ? '#f4b84a' : '#9fe3b8'; g.font = 'bold 50px system-ui, sans-serif';
-    g.fillText(paused ? '⏸ موقوف' : days ? `${hours} ساعة · ${minutes} دقيقة` : `${minutes} دقيقة`, 256, 170);
+    g.fillStyle = '#fff6dc'; g.font = 'bold 78px system-ui, sans-serif';
+    g.fillText(days ? ar(days, 'يوم', 'يومين', 'أيام', 'يوم') : `${hours} س`, 256, 66);
+    g.fillStyle = paused ? '#f4b84a' : '#9fe3b8'; g.font = 'bold 42px system-ui, sans-serif';
+    g.fillText(paused ? 'موقوف' : days ? `${hours} ساعة · ${minutes} دقيقة` : `${minutes} دقيقة`, 256, 132);
+    if (start) { const d = new Date(start); g.fillStyle = '#e8d6a8'; g.font = '600 32px system-ui, sans-serif'; g.fillText(`بدأت ${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`, 256, 186); }
     t.needsUpdate = true;
   };
   return m;
 }
 
+// A picture from outside the game on the gable, in a golden frame.
+function picture(src) {
+  const t = new THREE.TextureLoader().load(src); t.colorSpace = THREE.SRGBColorSpace;
+  const g = new THREE.Group();
+  const frame = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0xd4a53a, depthWrite: false })); frame.scale.set(0.86, 0.86, 1); frame.renderOrder = 2; g.add(frame);
+  const pic = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthWrite: false })); pic.scale.set(0.76, 0.76, 1); pic.renderOrder = 3; g.add(pic);
+  return g;
+}
 // A little house (about 2 × 2): stone base, walls in the dimension's colour, a roof, a door,
-// the counter board over the door, the habit's icon on the gable, its name above, and a
-// lamp on top that burns while the counter runs.
-function house(color, roof, icon, title) {
+// the counter board over the door, its number (or its picture) on the gable, its number and
+// name above, and a lamp on top that burns while the counter runs.
+function house(color, roof, n, img, title) {
   const g = new THREE.Group();
   const base = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.25, 2.2), std(0xcfc6b2)); base.position.y = 0.12; g.add(base);
   const walls = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.3, 1.6), std(color)); walls.position.y = 0.9; g.add(walls);
   const r = new THREE.Mesh(new THREE.ConeGeometry(1.42, 0.95, 4), std(roof, { roughness: 0.6 })); r.position.y = 2.02; r.rotation.y = Math.PI / 4; g.add(r);
   const door = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.62, 0.05), std(0x4a2f1a)); door.position.set(0, 0.56, 0.81); g.add(door);
   const board = counterBoard(); board.position.set(0, 1.2, 0.83); g.add(board);
-  const sign = label(icon, { size: 0.55, emoji: true, bg: 'rgba(255,250,235,.95)', font: '64px system-ui, sans-serif' }); sign.position.set(0, 2.05, 1.0); g.add(sign);
-  const name = label(title, { size: 0.42 }); name.position.set(0, 3.25, 0); g.add(name);
+  const sign = img ? picture(img) : label(String(n), { size: 0.6, emoji: true, bg: '#d4a53a', color: '#2a1a06', font: '800 62px system-ui, sans-serif' }); sign.position.set(0, 2.1, 1.0); g.add(sign);
+  const name = label(`${n} · ${title}`, { size: 0.42 }); name.position.set(0, 3.25, 0); g.add(name);
   const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), std(0x666666, { emissive: 0x000000 })); lamp.position.y = 2.6; g.add(lamp);
   g.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
   g.userData = { lamp, name, board };
   return g;
 }
-// A foundation not built yet: a stone outline, a few stones, a lock.
-function plot() {
+// A foundation not built yet: a stone outline and the number its building will have.
+function plot(n) {
   const g = new THREE.Group();
   const edge = std(0xb8ad98);
   for (const [x, z, w, d] of [[0, -1, 2.2, 0.2], [0, 1, 2.2, 0.2], [-1, 0, 0.2, 2.2], [1, 0, 0.2, 2.2]]) { const b = new THREE.Mesh(new THREE.BoxGeometry(w, 0.18, d), edge); b.position.set(x, 0.09, z); b.receiveShadow = true; g.add(b); }
-  const lock = label('🔒', { size: 0.55, emoji: true, bg: 'rgba(20,24,30,.6)', font: '58px system-ui, sans-serif' }); lock.position.y = 0.7; g.add(lock);
+  const lock = label(String(n), { size: 0.55, emoji: true, bg: 'rgba(20,24,30,.6)', color: '#bbb', font: '700 54px system-ui, sans-serif' }); lock.position.y = 0.7; g.add(lock);
   return g;
 }
 
@@ -185,7 +195,7 @@ export function habitHouses(scene, { blocked, inside, groundAt = () => 0, spawn,
   const build = (list) => {
     for (const s of slots) root.remove(s.obj);
     slots = at.map(([x, z], i) => {
-      const h = list[i], obj = h ? house(color, roof, h.icon || '⭐', h.title) : plot();
+      const h = list[i], obj = h ? house(color, roof, h.n || i + 1, h.img, h.title) : plot(i + 1);
       obj.scale.setScalar(SCALE);
       obj.position.set(x, groundAt(x, z), z);
       obj.rotation.y = faceOf(x, z);
@@ -197,15 +207,15 @@ export function habitHouses(scene, { blocked, inside, groundAt = () => 0, spawn,
   const show = (list) => slots.forEach((s, i) => {
     const h = list[i]; if (!h || !s.habit) return;
     s.habit = h;
-    s.obj.userData.board.userData.draw(h.time, h.paused);
+    s.obj.userData.board.userData.draw(h.time, h.paused, h.start);
     const L = s.obj.userData.lamp, on = !h.paused;
     L.material.color.set(on ? 0xffd040 : 0x666666); L.material.emissive.set(on ? 0xffb020 : 0x000000); L.material.emissiveIntensity = on ? 1.4 : 0;
   });
   let key = '', shown = '';
   const update = (list) => {
-    const k = JSON.stringify(list.map((h) => [h.id, h.title, h.icon]));
+    const k = JSON.stringify(list.map((h) => [h.id, h.n, h.title, h.img]));
     if (k !== key) { key = k; build(list); shown = ''; }
-    const t = JSON.stringify(list.map((h) => [h.time, h.paused]));
+    const t = JSON.stringify(list.map((h) => [h.time, h.paused, h.start]));
     if (t !== shown) { shown = t; show(list); }
   };
   update(habits);

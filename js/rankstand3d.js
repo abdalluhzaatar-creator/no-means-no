@@ -3,6 +3,7 @@
 // (glass). An arrow labelled with this week's war stars points from the current
 // rank to the next. View only: tapping it opens the rank ladder.
 import * as THREE from './vendor/three.module.min.js';
+import { noEmoji } from './noemoji.js';
 
 const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.5, ...o });
 
@@ -18,7 +19,7 @@ function label(lines, { w = 512, h = 160, bg = 'rgba(18,24,30,.78)', fg = '#fff'
     g.fillStyle = bg; g.beginPath(); g.roundRect(4, 4, w - 8, h - 8, h / 2.6); g.fill();
     g.direction = 'rtl'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = color;
     const n = ls.length;
-    ls.forEach((t, i) => { g.font = `${i ? 600 : 800} ${i ? h * 0.24 : h * (n > 1 ? 0.34 : 0.46)}px Tajawal, system-ui, sans-serif`; g.fillText(t, w / 2, n > 1 ? h * (i ? 0.74 : 0.37) : h / 2); });
+    ls.forEach((t, i) => { g.font = `${i ? 600 : 800} ${i ? h * 0.24 : h * (n > 1 ? 0.34 : 0.46)}px Tajawal, system-ui, sans-serif`; g.fillText(noEmoji(t), w / 2, n > 1 ? h * (i ? 0.74 : 0.37) : h / 2); });
     tex.needsUpdate = true;
   };
   draw(lines);

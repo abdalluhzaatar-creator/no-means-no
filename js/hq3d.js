@@ -9,7 +9,7 @@ import { setCry, creak, chains } from './audio.js';
 import { buildWorshipper } from './oasis3d.js';
 import { warMapCanvas } from './warmap.js';
 import { buildHeaven, HX } from './heaven3d.js';
-import { buildVestibule } from './vestibule3d.js';
+import { buildVestibule, VZ } from './vestibule3d.js';
 import { buildMarionette } from './marionette3d.js';
 import { buildShore, SZ } from './shore3d.js';
 import { createLucifer, buildLucifer } from './lucifer3d.js';
@@ -434,6 +434,26 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
 
   // ---------- the story: Lucifer, the speech, the march to the shore, the empty cage ----------
   const storyState = { phase: 'none', ...story };
+  // After the commander's telegram: golden arrows on the floor from the palace hall, through
+  // the gallery, to the light that opens on the Hall of Warriors (until the speech is given).
+  const summonArrows = (() => {
+    const g = new THREE.Group(); scene.add(g);
+    const shape = new THREE.Shape(); shape.moveTo(0, 0.9); shape.lineTo(0.9, 0); shape.lineTo(0.35, 0); shape.lineTo(0.35, -0.9); shape.lineTo(-0.35, -0.9); shape.lineTo(-0.35, 0); shape.lineTo(-0.9, 0); shape.closePath();
+    const geo = new THREE.ShapeGeometry(shape), list = [];
+    const along = (pts) => {
+      for (let i = 1; i < pts.length; i++) {
+        const [ax, az] = pts[i - 1], [bx, bz] = pts[i], len = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.round(len / 2.4));
+        for (let k = 0; k < n; k++) {
+          const f = (k + 0.5) / n, holder = new THREE.Group(); holder.position.set(ax + (bx - ax) * f, 0.07, az + (bz - az) * f); holder.rotation.y = Math.atan2(-(bx - ax), -(bz - az));
+          const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false })); m.rotation.x = -Math.PI / 2; m.scale.setScalar(0.9);
+          holder.add(m); g.add(holder); list.push(m);
+        }
+      }
+    };
+    along([[0, 8], [7, 15.5], [HW - 0.5, 15.5]]);              // the hall: to the side door
+    along([[0, VZ + 23], [0, VZ - 27]]);                        // the gallery: to the light
+    return { g, tick(t) { g.visible = !!storyState.summoned && !storyState.speech; if (g.visible) list.forEach((m, i) => (m.material.opacity = 0.35 + 0.6 * Math.max(0, Math.sin(t * 4 - i * 0.6)))); } };
+  })();
   let hallLuci = storyState.jailed ? null : createLucifer(scene, { camera, container, hero: cmd.root, who: 'commander', groundAt: () => 0, first: 12 });
   // Lucifer locked in the golden cage in the warriors' hall (until he escapes).
   let caged = null;
@@ -915,6 +935,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
       });
     }
     dungeon.tick(t, dt);
+    summonArrows.tick(t);
     for (const w of wellFlames) { const k = 0.85 + Math.sin(t * 11 + w.l.position.y) * 0.12; w.fl.scale.y = k; w.l.intensity = 14 * k; }
     if (room === 'heaven') { heaven.tick(t, rdt, cmd.root.position, cmd.root.rotation.y); heaven.weatherTick(t, dt); }
     if (cheering) heaven.warriors.forEach((w, i) => { w.hero.root.position.y = Math.abs(Math.sin(t * 6 + i)) * 0.5; });

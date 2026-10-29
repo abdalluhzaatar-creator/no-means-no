@@ -6,6 +6,7 @@
 // dimension is not opened yet stand as translucent spirits. When the commander
 // passes they salute; when he stands on the seal before the arch they kneel.
 import * as THREE from './vendor/three.module.min.js';
+import { noEmoji } from './noemoji.js';
 import { buildWorshipper } from './oasis3d.js';
 import { CHARACTERS, REGIONS } from './content.js';
 
@@ -25,7 +26,7 @@ function label(text, color) {
     g.fillStyle = grd; g.fillRect(0, 22, w, 84);
     g.fillStyle = color; g.fillRect(70, 22, w - 140, 3); g.fillRect(70, 103, w - 140, 3);
     g.direction = 'rtl'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '800 50px Tajawal, system-ui, sans-serif';
-    g.shadowColor = color; g.shadowBlur = 18; g.fillStyle = '#fff8e6'; g.fillText(text, w / 2, h / 2 + 2);
+    g.shadowColor = color; g.shadowBlur = 18; g.fillStyle = '#fff8e6'; g.fillText(noEmoji(text), w / 2, h / 2 + 2);
   });
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
   sp.scale.set(3.2, 0.8, 1);
