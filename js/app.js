@@ -1349,7 +1349,7 @@ $('#account').onclick = () => {
     <div class="row wrap">
       <button class="btn" data-pick-location>📍 مدينتك: ${state.location ? esc(state.location.name) : 'غير محددة'}</button>
       ${storage.mode === 'local' ? '<button class="btn" id="logout">تبديل الحساب</button>' : ''}
-      <button class="btn bad" id="reset">إعادة اللعبة من البداية</button>
+      <button class="btn bad" id="reset">🔄 إعادة اللعبة من البداية</button>
     </div>`);
   $('#modal-body [data-pick-location]').onclick = pickLocation;
   const lo = $('#logout');

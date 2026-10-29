@@ -804,3 +804,7 @@ body.cine .hud, body.cine .move-pad, body.cine .door-btn, body.cine .cell-captio
 .habit-notes { display: flex; flex-direction: column; gap: 6px; }
 .habit-notes textarea { width: 100%; min-height: 160px; resize: vertical; font: inherit; padding: 10px; border-radius: 10px; border: 1px solid #c9b996; background: #fffaf0; color: #2a1a06; line-height: 1.7; }
 .hud-chip.dim-reset { background: linear-gradient(135deg, #7a4fc4, #a774e8) !important; color: #fff; border-color: #ffd66b; }
+
+/* A computer with a mouse: walking is by the keyboard (WASD / arrows, Space to jump),
+   so the on-screen joystick and jump button are not shown. */
+@media (hover: hover) and (pointer: fine) { .move-pad { display: none !important; } }
