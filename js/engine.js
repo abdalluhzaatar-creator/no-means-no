@@ -232,6 +232,20 @@ export function setHabit(s, id, rankIndex, taskId, habit) {
   return setRankPlan(s, id, rankIndex, list);
 }
 
+// Rename a habit or change its picture in place: same building, same counter.
+export function editHabit(s, id, taskId, habit) {
+  const def = findCharacter(id), ch = s.characters[id];
+  if (!def || !ch) return fail('غير مملوكة');
+  const h = cleanHabit(habit);
+  if (!h.title) return fail('اكتب اسم العادة');
+  const t = activeTasks(def, ch).find((x) => x.id === taskId);
+  if (!t) return fail('غير موجودة');
+  if (activeTasks(def, ch).some((x) => x.title === h.title && x.id !== taskId)) return fail('هاي العادة عندك أصلًا');
+  t.title = h.title; if (h.icon) t.icon = h.icon;
+  addLog(s, `✎ ${def.name}: ${h.title}`);
+  return done(s, []);
+}
+
 // Remove a habit (never the last one left).
 export function removeHabit(s, id, taskId) {
   const def = findCharacter(id), ch = s.characters[id];

@@ -132,6 +132,7 @@ export function mountPlace(container, { regionId, palette, rank, features = new 
       bGeo.attributes.position.needsUpdate = true;
     }
     bMat.opacity = Math.min(1, burst * 2);
+    if (window.__nmnTop) { const [y, z] = window.__nmnTop; camera.position.set(0, y, z); camera.lookAt(0, 0, 0); }   // tests: a view from above
     renderer.render(scene, camera);
     raf = requestAnimationFrame(tick);
   };

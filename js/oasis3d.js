@@ -522,7 +522,7 @@ export function mountOasis(container, { palette, features, level, rank, habits =
   water.position.set(0, 0.68, 13.5); scene.add(water);
   // Gardens around the pool
   [[-8, 12, 6, 4], [8, 12, 6, 4], [-8, -14, 7, 3], [8, -14, 7, 3]].forEach(([x, z, w, d]) => { const f = flowerBed(w, d, rng); f.position.set(x, 0.4, z); scene.add(f); });
-  [[-19, -19], [19, -19], [-19, 19], [19, 19], [-19, 0], [19, 0]].forEach(([x, z]) => { const c = cypress(rng); c.position.set(x, 0.4, z); scene.add(c); });
+  [[-19, -19], [19, -19], [-19, 19], [19, 19]].forEach(([x, z]) => { const c = cypress(rng); c.position.set(x, 0.4, z); scene.add(c); });
   // Outside the walls: tall cypress rows and trees.
   for (let i = 0; i < 60; i++) { const a = rng() * Math.PI * 2, r = 32 + rng() * 60; const c = cypress(rng); c.position.set(Math.cos(a) * r, 0, Math.sin(a) * r); c.scale.setScalar(1.4 + rng()); scene.add(c); }
 
@@ -742,6 +742,8 @@ export function mountOasis(container, { palette, features, level, rank, habits =
   // The eight small buildings (one for every habit), round the courtyard's sides.
   const houses = habitHouses(scene, {
     blocked: sceneBlocked, groundAt: () => 0.4, spawn: [0, 0], center: [0, -8], minR: 7,
+    // Four on the right, four on the left, along the side arcades behind the orange trees.
+    slots: [[17.2, -5], [-17.2, -5], [17.2, -15], [-17.2, -15], [17.2, 5], [-17.2, 5], [17.2, 15], [-17.2, 15]],
     inside: (x, z) => Math.abs(x) < 18.6 && Math.abs(z) < 18.6,
     avoid: [[0, 5, 2.6], [0, -7.5, 2.6], [0, -1, 2], [STAND.x, STAND.z, 1.2],
       [-14, 6, 1], [14, 6, 1], [-14, -6, 1], [14, -6, 1], [-6, 20, 1], [6, 20, 1], [-14, 18, 1], [14, 18, 1],
@@ -848,6 +850,7 @@ export function mountOasis(container, { palette, features, level, rank, habits =
     snowCover.material.opacity = snowAcc;
     if (kind === 'storm' && t > nextBolt) { flash.intensity = 6; setTimeout(sfx.thunder, 600 + Math.random() * 1500); nextBolt = t + 4 + Math.random() * 8; }
     flash.intensity *= 0.86;
+    if (window.__nmnTop) { const [y, z] = window.__nmnTop; camera.position.set(0, y, z); camera.lookAt(0, 0, 0); }   // tests: a view from above
     renderer.render(scene, camera);
     raf = requestAnimationFrame(tick);
   };

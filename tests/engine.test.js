@@ -173,6 +173,15 @@ t('a renamed habit keeps its counter only if the name stays', () => {
   assert.equal(E.activeTasks(def(), s.characters[W])[0].icon, '📿');
 });
 
+t('editing a habit (name and picture) keeps its building and its counter', () => {
+  const s = E.newState(); E.setHabit(s, W, 0, null, { title: 'ورد' });
+  const h = E.activeTasks(def(), s.characters[W])[0]; h.start -= 3 * 86400000; const { id, start } = h;
+  assert.ok(E.editHabit(s, W, id, { title: 'قراءة', icon: '📖' }).ok);
+  const n = E.activeTasks(def(), s.characters[W])[0];
+  assert.deepEqual([n.id, n.start, n.title, n.icon], [id, start, 'قراءة', '📖']);
+  assert.equal(E.editHabit(s, W, id, { title: '' }).ok, false);
+});
+
 t('the decorations of a place come one by one with its buildings', () => {
   const s = E.newState(); E.setHabit(s, W, 0, null, { title: 'ورد' });
   assert.equal(E.regionFeatures(s, 'sanctuary').size, 0);

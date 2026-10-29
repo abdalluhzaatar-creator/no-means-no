@@ -1,7 +1,8 @@
 // The marionette in the vault: a wooden controller of four crossed sticks (eight
 // ends), a string from every end, and on every string a puppet of one of the eight
 // dimension leaders. It hangs on a stand; the commander can take it and play them —
-// the eight inner struggles are puppets in his hand.
+// the eight inner struggles are puppets in his hand. Only the dimensions opened hang on
+// their strings; the leaders of the ones still closed lie on the stage under their empty end.
 import * as THREE from './vendor/three.module.min.js';
 import { buildWorshipper } from './oasis3d.js';
 import { arm } from './heaven3d.js';
@@ -18,7 +19,7 @@ const POSTS = 1.75;             // stand posts at ±POSTS
 // Where the controller sits in the commander's hands (his local space, facing +z).
 const HOLD = new THREE.Vector3(0, 3.55, 1.95);
 
-export function buildMarionette(scene, { at, face = 0 }) {
+export function buildMarionette(scene, { at, face = 0, owned = null }) {
   const wood = std(0x7a4e2a, { roughness: 0.55 });
   const dark = std(0x4a2e18, { roughness: 0.6 });
   const brass = std(0xd4a53a, { metalness: 0.8, roughness: 0.3, emissive: 0x3a2604, emissiveIntensity: 0.3 });
@@ -63,11 +64,22 @@ export function buildMarionette(scene, { at, face = 0 }) {
 
   // ---- the eight leaders ----
   const chars = CHARACTERS.filter((c) => REGIONS.some((r) => r.characterId === c.id)).slice(0, 8);
-  const puppets = chars.map((c, i) => {
+  const opened = (c) => !owned || owned.includes(c.id);
+  const puppets = [], lying = [];
+  chars.forEach((c, i) => {
     const hero = buildWorshipper(c.palette); arm(hero, c.palette, false);
-    hero.root.scale.multiplyScalar(S); scene.add(hero.root);
+    hero.root.scale.multiplyScalar(S);
+    if (!opened(c)) {
+      // On its back on the stage, feet toward the middle, head out, under its empty end.
+      const a = Math.atan2(ends[i].z, ends[i].x), r = 0.5;
+      hero.root.position.set(Math.cos(a) * r, 0.24, Math.sin(a) * r);
+      hero.root.rotation.set(-Math.PI / 2, Math.atan2(-Math.cos(a), -Math.sin(a)), 0, 'YXZ');
+      stand.add(hero.root); lying.push(hero);
+      return;
+    }
+    scene.add(hero.root);
     const pos = new THREE.Vector3(), prev = new THREE.Vector3();
-    return { c, hero, pos, prev, end: ends[i], A: new THREE.Vector3(), yaw: face, taut: true, ph: i * 0.7, speed: 0 };
+    puppets.push({ c, hero, pos, prev, end: ends[i], A: new THREE.Vector3(), yaw: face, taut: true, ph: i * 0.7, speed: 0 });
   });
 
   // Strings: one line per puppet, from a stick end to the top of the head.
@@ -159,6 +171,7 @@ export function buildMarionette(scene, { at, face = 0 }) {
       sp.set([p.A.x, p.A.y, p.A.z, headW.x, headW.y, headW.z], i * 6);
     });
     strings.geometry.attributes.position.needsUpdate = true;
+    for (const h of lying) h.update(t, dt, 0, false);
   };
 
   // Blocking in world coordinates: the posts always, the hanging puppets while on the stand.

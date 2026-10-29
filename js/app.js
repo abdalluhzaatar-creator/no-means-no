@@ -123,12 +123,20 @@ let currentChar = null;
 const DAY_NAMES = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 // Test mode's own calendar (days moved forward with ⏭); the real game always runs on the real date.
 const syncClock = () => E.setDayShift(state?.sandbox?.shift || 0);
+// Test mode: as if a week went by — the clock moves 7 days and the Sunday message comes.
+function weekPass() {
+  if (!state?.sandbox) return;
+  E.weekPasses(state); syncClock(); closeModal(); scheduleSave(); render();
+  FX.toast(`📬 مرّ أسبوع (${state.sandbox.shift / 7})`);
+  setTimeout(showOffer, 200);
+}
 function sandboxBadge() {
   document.body.classList.toggle('sandbox', !!state?.sandbox);
   let b = document.getElementById('sandbox-badge');
   if (state?.sandbox && !b) { b = document.createElement('button'); b.id = 'sandbox-badge'; b.className = 'sandbox-badge'; b.onclick = showSettings; document.body.appendChild(b); }
   if (b && state?.sandbox) b.textContent = state.sandbox.shift ? `🧪 وضع التجربة · مرّ ${state.sandbox.shift / 7} ${state.sandbox.shift === 7 ? 'أسبوع' : 'أسابيع'}` : '🧪 وضع التجربة';
   if (!state?.sandbox && b) b.remove();
+  const w = document.getElementById('nav-week'); if (w) w.hidden = !state?.sandbox;
 }
 function render() {
   sandboxBadge();
@@ -193,8 +201,23 @@ function closeDays() {
 // ---------- The Sunday message ----------
 // Every Sunday: build a habit (a new building) · open a new dimension · not this week.
 function maybeOffer() {
-  if (!state || !$('#modal').hidden || !E.pendingOffer(state, dayFor())) return;
-  showOffer();
+  if (!state || !$('#modal').hidden) return;
+  if (maybeTelegram()) return;
+  if (E.pendingOffer(state, dayFor())) showOffer();
+}
+// All eight dimensions open: a telegram from the commander calls the player to the palace hall.
+const allOpen = () => REGIONS.filter((r) => r.characterId).every((r) => state.regions[r.id]);
+function maybeTelegram() {
+  if (!state || !allOpen() || state.story?.speech || state.story?.summoned) return false;
+  state.story = { ...(state.story || {}), summoned: true }; scheduleSave();
+  setTimeout(() => {
+    SND.sfx.whoosh?.();
+    modal(`<div class="telegram"><div class="tg-stamp">📨</div><small>برقية من القائد</small><h2>الحضور إلى قاعة القصر حالاً</h2>
+      <p class="muted">الأبعاد الثمانية فتحت. القائد بستناك.</p>
+      <div class="pk-actions"><button class="pk-ok" id="tg-go">🏰 روح للقصر</button></div></div>`, { theme: 'game' });
+    $('#tg-go').onclick = () => go('hq');
+  }, 900);
+  return true;
 }
 function showOffer() {
   const o = E.pendingOffer(state, dayFor());
@@ -428,10 +451,10 @@ function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) 
     : { from: null, title: '', icon: '' };
   const head = mode === 'build' ? { k: `🏗 ${esc(c.name)} · مبنى ${(rd?.habits || 0) + 1} من 8`, t: 'العادة الجديدة' }
     : mode === 'open' ? { k: `🔓 ${esc(E.findRegion(regionId).name)}`, t: 'أول عادة لهاد البعد' }
-    : mode === 'edit' ? { k: 'تعديل المهمة', t: 'غيّر اسمها أو صورتها أو عدد مراتها' } : { k: esc(c.name), t: 'اختار أول عادة إلك' };
+    : mode === 'edit' ? { k: 'تعديل العادة', t: 'غيّر اسمها أو صورتها' } : { k: esc(c.name), t: 'اختار أول عادة إلك' };
   const lead = mode === 'build' ? `بتنبني بمبنى جديد، وبتطلع رتبة ${esc(c.name)} لـ <b>${esc(rd?.next?.name || '')}</b>.`
     : mode === 'open' ? 'البعد بيفتح بمبنى واحد: هاي العادة.'
-    : mode === 'edit' ? 'إذا غيّرت الاسم، سلسلة الأيام تبعتها بتبلّش من جديد.' : 'عادة وحدة بتعملها كل يوم. ابدأ بإشي صغير بتقدر تلتزم فيه 💪';
+    : mode === 'edit' ? 'العدّاد بيضل زي ما هو، بس الاسم والصورة بيتغيروا.' : 'عادة وحدة بتعملها كل يوم. ابدأ بإشي صغير بتقدر تلتزم فيه 💪';
   modal(`
     <div class="picker" style="--glow:${c.palette.glow}">
       <header class="pk-head"><div class="pk-medal">${DIM_ICON[id] || '⭐'}</div><div><small>${head.k}</small><h2>${head.t}</h2></div></header>
@@ -456,7 +479,7 @@ function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) 
         <div class="hp-sum" id="hp-sum"></div>
       </div>
       <div class="pk-actions">
-        <button class="pk-ok" id="hp-ok" disabled>${mode === 'build' ? '🏗 ابنيها' : mode === 'open' ? '🔓 افتح البعد' : 'ثبّت المهمة ✔'}</button>
+        <button class="pk-ok" id="hp-ok" disabled>${mode === 'build' ? '🏗 ابنيها' : mode === 'open' ? '🔓 افتح البعد' : editing ? 'احفظ ✔' : 'ثبّت المهمة ✔'}</button>
         ${mode === 'edit' && E.activeTasks(c, ch).length > 1 ? '<button class="pk-ghost" id="hp-del">🗑 احذفها</button>' : ''}
         <button class="pk-ghost" id="hp-cancel">${mode === 'first' ? 'لاحقًا' : 'رجوع'}</button>
       </div>
@@ -470,7 +493,8 @@ function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) 
     iconBtn.textContent = cur.icon || '⭐';
     ok.disabled = !t;
     sum.innerHTML = t
-      ? `<p><span>🏗</span>مبنى جديد اسمه <b>${esc(cur.icon || '⭐')} ${esc(t)}</b>.</p>
+      ? editing ? `<p><span>✎</span>المبنى بيصير اسمه <b>${esc(cur.icon || '⭐')} ${esc(t)}</b>.</p><p><span>⏱</span>العدّاد بيضل زي ما هو.</p>`
+      : `<p><span>🏗</span>مبنى جديد اسمه <b>${esc(cur.icon || '⭐')} ${esc(t)}</b>.</p>
          <p><span>⏱</span>إله عدّاد بيبلّش من هلأ، بيعد الأيام والساعات. بتقدر توقفه أو تصفّره.</p>`
       : '<p class="muted">اكتب اسم العادة 👆</p>';
   };
@@ -491,10 +515,10 @@ function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) 
     const habit = { title: cur.title.trim(), icon: cur.icon };
     if (mode === 'build' || mode === 'open') {
       const r = act(E.answerOffer(state, mode, { id: mode === 'open' ? regionId : id, habit }, dayFor()), ok);
-      if (r.ok) { closeModal(); enter(id); }
+      if (r.ok) { closeModal(); enter(id); maybeTelegram(); }
       return;
     }
-    const r = E.setHabit(state, id, rankIndex, editing?.id || null, habit);
+    const r = editing ? E.editHabit(state, id, editing.id, habit) : E.setHabit(state, id, rankIndex, null, habit);
     if (!r.ok) return FX.toast(r.reason, 'err');
     scheduleSave(); questsCollapsed = false; render();
     if (mode === 'first') showStartInfo(); else { FX.toast('تم ✔'); closeModal(); }
@@ -553,7 +577,7 @@ const habitsFor = (c) => { const ch = state.characters[c.id]; return ch ? E.acti
 function showHabit(charId, taskId) {
   const c = E.findCharacter(charId), t = E.activeTasks(c, state.characters[charId]).find((x) => x.id === taskId);
   if (!t) return;
-  modal(`<h2>${taskIcon(charId, t)} ${esc(t.title)}</h2><p class="muted">مبنى من مباني ${esc(c.name)}.</p><ul class="tasks">${taskRow(charId, t)}</ul>`);
+  modal(`<h2>${taskIcon(charId, t)} ${esc(t.title)}</h2><p class="muted">مبنى من مباني ${esc(c.name)}.</p><ul class="tasks">${taskRow(charId, t)}</ul><div class="pk-actions"><button class="pk-ok" data-edit-task="${charId}:${taskId}">✎ عدّل الاسم والصورة</button></div>`);
   modalRefresh = () => showHabit(charId, taskId);
   bind();
 }
@@ -644,7 +668,7 @@ function showSettings() {
   if ($('#sb-enter')) $('#sb-enter').onclick = () => swap(E.enterSandbox(state), '🧪 وضع التجربة: كبسة 📬 = مرّ أسبوع');
   if ($('#sb-leave')) $('#sb-leave').onclick = () => ask('ترجع لتقدّمك الحقيقي؟ كل إشي عملته بالتجربة بيروح.', () => swap(E.leaveSandbox(state), '↩ رجعت لتقدّمك الحقيقي'));
   // Test mode: a week passes — the counters run on a week and the Sunday message comes.
-  if ($('#sb-week')) $('#sb-week').onclick = () => { E.weekPasses(state); syncClock(); closeModal(); scheduleSave(); render(); setTimeout(showOffer, 200); };
+  if ($('#sb-week')) $('#sb-week').onclick = weekPass;
   $('#snd-on').onchange = (e) => { SND.set('enabled', e.target.checked); };
   document.querySelectorAll('[data-snd]').forEach((el) => (el.oninput = () => { SND.set(el.dataset.snd, +el.value); el.nextElementSibling.textContent = Math.round(el.value * 100); }));
   document.querySelectorAll('[data-snd-test]').forEach((el) => (el.onclick = () => SND.sfx[el.dataset.sndTest]()));
@@ -1290,7 +1314,8 @@ function bind() {
 
 function go(s) { if (s !== screen) SND.sfx.whoosh(); screen = s; closeModal(); render(); window.scrollTo(0, 0); }
 
-document.querySelectorAll('.nav-btn').forEach((b) => (b.onclick = () => go(b.dataset.screen)));
+document.querySelectorAll('.nav-btn[data-screen]').forEach((b) => (b.onclick = () => go(b.dataset.screen)));
+$('#nav-week').onclick = weekPass;
 $('#modal-close').onclick = closeModal;
 $('#settings').onclick = showSettings;
 // E closes the war map (the same key that opened it at the table).

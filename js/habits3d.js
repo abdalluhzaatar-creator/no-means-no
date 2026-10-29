@@ -1,9 +1,10 @@
 // The eight small buildings of a dimension: one for every habit. A habit built stands as a
 // little house in the dimension's colours with its counter (days, hours, minutes) on a
 // board over the door, its icon and its name above; a golden light burns on its roof
-// while the counter runs. A place not built
-// yet is a bare foundation with a lock. The spots are found once, the same every time:
-// free ground near where the character arrives, clear of the scene's own things.
+// while the counter runs. A place not built yet is a bare foundation with a lock. The
+// houses stand in two rows, four on the right and four on the left of the walk from where
+// he arrives to the middle, facing it; the spots are found once, clear of everything in
+// the scene, the decorations not shown yet too.
 import * as THREE from './vendor/three.module.min.js';
 
 export const HOUSES = 8;
@@ -97,10 +98,88 @@ function spots({ blocked, inside, spawn: [sx, sz], center = [0, 0], avoid = [], 
   return list;
 }
 
+// Two rows of four, one each side of the walk (spawn → center), on ground no object of the
+// scene stands on (every mesh counts, hidden ones too: decorations that come later).
+// Returns the eight spots, right and left in turn, nearest the front first, or null.
+export function sideSlots(scene, { spawn: [sx, sz], center = [0, 0], blocked = () => false, inside = () => true, avoid = [] }) {
+  // An occupancy grid of the scene's footprints (0.5 m cells).
+  const C = 0.5, N = 200, H = (N * C) / 2, grid = new Uint8Array(N * N), box = new THREE.Box3();
+  scene.updateMatrixWorld(true);
+  scene.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh) return;
+    box.setFromObject(o);
+    if (box.isEmpty() || box.min.y > 3.5) return;                         // birds, canopies up high
+    const w = box.max.x - box.min.x, d = box.max.z - box.min.z;
+    if (Math.max(w, d) > 14) return;                                       // the ground, walls round the place
+    const x0 = Math.max(0, Math.floor((box.min.x - 0.4 + H) / C)), x1 = Math.min(N - 1, Math.floor((box.max.x + 0.4 + H) / C));
+    const z0 = Math.max(0, Math.floor((box.min.z - 0.4 + H) / C)), z1 = Math.min(N - 1, Math.floor((box.max.z + 0.4 + H) / C));
+    for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) grid[i * N + j] = 1;
+  });
+  const taken = (x, z) => { const i = Math.floor((x + H) / C), j = Math.floor((z + H) / C); return i < 0 || j < 0 || i >= N || j >= N || grid[i * N + j]; };
+  const R = 1.6 * SCALE;
+  const free = (x, z) => {
+    if (!inside(x, z) || blocked(x, z) || taken(x, z)) return false;
+    for (const [ax, az, ar] of avoid) if (Math.hypot(x - ax, z - az) < ar + R) return false;
+    for (let a = 0; a < 12; a++) for (const k of [0.6, 1]) { const px = x + Math.cos(a * 0.524) * R * k, pz = z + Math.sin(a * 0.524) * R * k; if (blocked(px, pz) || taken(px, pz)) return false; }
+    return true;
+  };
+  let fx = center[0] - sx, fz = center[1] - sz; const fl = Math.hypot(fx, fz);
+  if (fl < 1) { fx = 0; fz = -1; } else { fx /= fl; fz /= fl; }
+  const rx = -fz, rz = fx;   // to his right
+  if (window.__nmnMap) { const rows = []; for (let z = -30; z <= 30; z++) { let r = ''; for (let x = -30; x <= 30; x++) r += free(x, z) ? 'o' : taken(x, z) || blocked(x, z) ? '#' : '.'; rows.push(`${String(z).padStart(3)} ${r}`); } console.log('houses map\n' + rows.join('\n')); }
+  // One side: four houses in a row at distance d from the walk, as near the front as they fit.
+  // From just ahead of him toward the middle; behind him only if nothing else fits.
+  const ahead = (a) => (a < 0 ? 100 - a : a);   // houses ahead first, then any behind him
+  const along = []; for (let a = 3; a <= 22; a += 0.5) along.push(a); for (let a = 2.5; a >= -6; a -= 0.5) along.push(a);
+  const row = (side, d) => {
+    const got = [];
+    for (const a of along) {
+      if (got.length >= 4) break;
+      const x = sx + fx * a + rx * side * d, z = sz + fz * a + rz * side * d;
+      if (got.some((g) => Math.abs(g.a - a) < 4.4) || !free(x, z)) continue;
+      got.push({ a, x, z });
+    }
+    if (window.__nmnDebug) dbg.push(`${side > 0 ? 'R' : 'L'}${d}:${got.length}`);
+    return got.length >= 4 ? got.sort((p, q) => ahead(p.a) - ahead(q.a)) : null;
+  };
+  // The same distance both sides if it can be, else the nearest for each.
+  let right = null, left = null; const dbg = [];
+  for (let d = 4.5; d <= 28 && !(right && left); d += 0.5) {
+    const r = right || row(1, d), l = left || row(-1, d);
+    if (r && l) { right = r; left = l; } else if (d > 9) { right ||= r; left ||= l; }
+  }
+  // Crowded places: still four each side, each house as near the walk as it fits.
+  const loose = (side) => {
+    const got = [];
+    for (const a of along) {
+      if (got.length >= 4) break;
+      for (let d = 4.5; d <= 18; d += 0.5) {
+        const x = sx + fx * a + rx * side * d, z = sz + fz * a + rz * side * d;
+        if (got.some((g) => Math.hypot(g.x - x, g.z - z) < 4.4) || !free(x, z)) continue;
+        got.push({ a, x, z }); break;
+      }
+    }
+    return got.length >= 4 ? got.sort((p, q) => ahead(p.a) - ahead(q.a)) : null;
+  };
+  right ||= loose(1); left ||= loose(-1);
+  if (window.__nmnDebug) console.log('houses rows', dbg.join(' '));
+  if (!right || !left) return null;
+  const out = [];
+  for (let i = 0; i < 4; i++) out.push([right[i].x, right[i].z], [left[i].x, left[i].z]);
+  return out;
+}
+
 // habits: [{ id, title, icon, time: { days, hours, minutes }, paused }] — the dimension's habits
 // in order (at most 8). The lamp on the roof burns while the counter runs.
-export function habitHouses(scene, { blocked, inside, groundAt = () => 0, spawn, center, avoid, minR, color = 0xe8dcc4, roof = 0xb8432e, habits = [] } = {}) {
-  const at = spots({ blocked, inside, spawn, center, avoid, minR });
+// slots: fixed spots (else two rows by the sides of the walk, else anywhere free near spawn).
+export function habitHouses(scene, { blocked, inside, groundAt = () => 0, spawn, center = [0, 0], avoid, minR, slots: fixed = null, color = 0xe8dcc4, roof = 0xb8432e, habits = [] } = {}) {
+  const side = fixed ? null : sideSlots(scene, { spawn, center, blocked, inside, avoid });
+  const at = fixed || side || spots({ blocked, inside, spawn, center, avoid, minR });
+  if (window.__nmnDebug) console.log('houses', fixed ? 'fixed' : side ? 'sides' : 'spots', JSON.stringify(spawn), JSON.stringify(at.map(([x, z]) => [+x.toFixed(1), +z.toFixed(1)])));
+  // Each faces the walk between the two rows.
+  let fx = center[0] - spawn[0], fz = center[1] - spawn[1]; const fl = Math.hypot(fx, fz);
+  if (fl < 1) { fx = 0; fz = -1; } else { fx /= fl; fz /= fl; }
+  const faceOf = (x, z) => { const a = (x - spawn[0]) * fx + (z - spawn[1]) * fz; return Math.atan2(spawn[0] + fx * a - x, spawn[1] + fz * a - z); };
   const root = new THREE.Group(); scene.add(root);
   let slots = [];
   const build = (list) => {
@@ -109,7 +188,7 @@ export function habitHouses(scene, { blocked, inside, groundAt = () => 0, spawn,
       const h = list[i], obj = h ? house(color, roof, h.icon || '⭐', h.title) : plot();
       obj.scale.setScalar(SCALE);
       obj.position.set(x, groundAt(x, z), z);
-      obj.rotation.y = Math.atan2(spawn[0] - x, spawn[1] - z);   // face where he arrives
+      obj.rotation.y = faceOf(x, z);
       root.add(obj);
       return { obj, habit: h || null, x, z };
     });

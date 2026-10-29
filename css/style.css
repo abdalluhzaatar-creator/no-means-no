@@ -782,3 +782,14 @@ body.cine .hud, body.cine .move-pad, body.cine .door-btn, body.cine .cell-captio
 .habit-row .counter b { font-size: 1.05rem; color: #fff; }
 .habit-row.is-paused .counter { color: #f4d58d; }
 .habit-row.is-paused .counter b { color: #f4d58d; }
+
+/* Test mode: "a week passed" next to the world button. */
+.nav-btn.week-btn { color: #fff; border-color: #ffd66b; background: linear-gradient(135deg, #7a4fc4, #a774e8) !important; }
+.nav-btn.week-btn[hidden] { display: none; }
+
+/* The commander's telegram. */
+.telegram { text-align: center; padding: 18px 10px 6px; background: repeating-linear-gradient(0deg, #f6ecd2, #f6ecd2 26px, #efe0bd 27px); color: #3a2a14; border-radius: 12px; border: 2px dashed #a8803e; }
+.telegram small { display: block; letter-spacing: 1px; font-weight: 800; color: #8a5a1a; }
+.telegram h2 { margin: 8px 0; font-size: 1.5rem; color: #5a1f10; }
+.telegram .muted { color: #6b5536; }
+.telegram .tg-stamp { font-size: 3rem; animation: offer-pulse 1.4s ease-in-out infinite; }

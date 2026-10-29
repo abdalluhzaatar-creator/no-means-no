@@ -365,7 +365,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
   const gallery = buildVestibule(scene);
   dungeon.setFuture(future); dungeon.setChild(child);
   // The marionette of the eight leaders, on its stand by the left wall of the vault, facing the aisle.
-  const mario = buildMarionette(scene, { at: new THREE.Vector3(DX - 10, 0, 4), face: Math.PI / 2 });
+  const mario = buildMarionette(scene, { at: new THREE.Vector3(DX - 10, 0, 4), face: Math.PI / 2, owned });
   let holdK = 0, heldAt = 0;
   const inSide = (x, z) => x > 10 && x < HW + 0.8 && Math.abs(z - SIDE.z) < SIDE.w / 2 - 0.45;
   // Spiral stairs: follow how far round the commander has walked (angle unwrapped),
@@ -782,7 +782,8 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
       if (to === 'heaven') { heaven.follow(following()); if (following() && from === 'shore') { const c0 = cmd.root.position; heaven.warriors.forEach((w, i) => w.hero.root.position.set(c0.x - HX + 1.8 * (Math.floor(i / 2) + 1), 0, c0.z + (i % 2 ? -1.3 : 1.3))); } if (storyState.phase === 'back' && from === 'shore') setTimeout(runCage, 900); }
       setTimeout(() => { fade.classList.remove('on'); going = false; }, white ? 500 : 150);
     }, white ? 1400 : 700);
-  };
+  };  if (window.__nmnDebug) window.__hqGo = (to) => go(to);
+
   // One interaction prompt: press E (or tap it on touch screens).
   let action = null;
   prompt.onclick = () => action?.();
