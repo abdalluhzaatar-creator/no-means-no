@@ -593,6 +593,7 @@ function showHabit(charId, taskId) {
   if (!t) return;
   modal(`<h2>مبنى ${habitNo(charId, t)} · ${esc(t.title)}</h2><p class="muted">من مباني ${esc(c.name)}.</p>
     <ul class="tasks">${taskRow(charId, t)}</ul>
+    <div class="pk-actions"><button class="pk-ok" data-edit-task="${charId}:${taskId}">✎ عدّل الاسم والصورة</button></div>
     <div class="habit-pic">
       ${t.img ? `<img src="${t.img}" alt="">` : '<div class="no-pic">ما في صورة</div>'}
       <div class="row wrap"><label class="btn">${t.img ? 'غيّر الصورة' : 'أضف صورة'}<input type="file" accept="image/*" id="hb-img" hidden></label>${t.img ? '<button class="btn" id="hb-noimg">شيل الصورة</button>' : ''}</div>

@@ -861,7 +861,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
       const dF = p.distanceTo(dungeon.futureAt), dC = p.distanceTo(dungeon.childAt);
       // Crying grows louder as you approach the child (only while it is sad).
       setCry(childLevel < 0.4 ? Math.max(0, 1 - dC / 22) * (1 - childLevel * 2) : 0);
-      if ((mario.holding && t0 - heldAt < 6) || (!mario.holding && mario.near(p))) { caption.hidden = false; caption.innerHTML = mario.holding ? '<b>🎎 القادة الثمانية بين إيديك</b><span>هم صراعاتك الداخلية… وإنت اللي ماسك الخيوط. حرّكهم زي ما بدك.</span>' : '<b>🎎 خيوط القائد</b><span>ثمان دمى لقادة الأبعاد الثمانية، معلّقة بخيوط بين إيديك.</span>'; }
+      if ((mario.holding && t0 - heldAt < 6) || (!mario.holding && mario.near(p))) { caption.hidden = false; caption.innerHTML = mario.holding ? '<b>🎎 القادة الثمانية بين إيديك</b><span>هم صراعاتك الداخلية… وإنت اللي ماسك الخيوط. حرّكهم زي ما بدك.</span>' : '<b>🎎 خيوط القائد</b>'; }
       else if (dF < 8 && dF <= dC) { caption.hidden = false; caption.innerHTML = futureText(futureLevel); }
       else if (dC < 8) { caption.hidden = false; caption.innerHTML = childText(childLevel); }
       else caption.hidden = true;
