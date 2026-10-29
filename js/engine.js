@@ -144,6 +144,7 @@ export function migrate(raw) {
   for (const id in s.characters) {
     const ch = s.characters[id];
     if (totalLevel(ch) > RANK_COUNT) setLevel(ch, RANK_COUNT);
+    const d = findCharacter(id); if (d?.stages && ch.plan) compact(d, ch);   // habits removed earlier: no empty ranks
     if (ch.plan) ch.plan = ch.plan.slice(0, RANK_COUNT);
   }
   s.startDay ||= today();
@@ -256,6 +257,7 @@ export function removeHabit(s, id, taskId) {
   if (!def || !ch) return fail('غير مملوكة');
   if (activeTasks(def, ch).length <= 1) return fail('لازم يضل عندك مهمة وحدة على الأقل');
   ch.plan = planOf(def, ch).map((r) => r.filter((t) => t.id !== taskId));
+  compact(def, ch);
   addLog(s, `🗑 ${def.name}: حذف مهمة`);
   return done(s, []);
 }
@@ -316,6 +318,23 @@ export function closeDays(s, now = today()) {
 
 // Set the overall level (1 = the first rank).
 function setLevel(ch, n) { ch.stage = Math.floor((n - 1) / 5); ch.level = ((n - 1) % 5) + 1; }
+// One building per rank, with no gaps: the rank follows the number of habits built.
+function compact(def, ch) {
+  if (!def?.stages || !ch) return;
+  const list = activeTasks(def, ch).slice(0, RANK_COUNT);
+  ch.plan = list.map((t) => [t]);
+  setLevel(ch, Math.max(1, list.length));
+}
+// Test mode only: a dimension starts again from zero (no buildings); the Sunday message
+// then builds its habits again as usual.
+export function resetDimension(s, id) {
+  if (!s.sandbox) return fail('بس بوضع التجربة');
+  const def = findCharacter(id), ch = s.characters[id];
+  if (!def?.stages || !ch) return fail('غير مملوكة');
+  ch.plan = []; setLevel(ch, 1);
+  addLog(s, `↺ ${def.name}: من الصفر`);
+  return done(s, [{ type: 'dimReset' }]);
+}
 
 // ---------- The Sunday message ----------
 // Every Sunday (from the first Sunday after the game began) the player chooses one:
@@ -328,7 +347,7 @@ export function pendingOffer(s, date = today()) {
   if (!s.startDay) return null;
   const sunday = offerSunday(date);
   if (sunday <= s.startDay || s.offerDone === sunday) return null;
-  const build = CHARACTERS.filter((c) => c.stages && s.characters[c.id] && activeTasks(c, s.characters[c.id]).length && totalLevel(s.characters[c.id]) < RANK_COUNT).map((c) => c.id);
+  const build = CHARACTERS.filter((c) => c.stages && s.characters[c.id] && activeTasks(c, s.characters[c.id]).length < RANK_COUNT).map((c) => c.id);
   const open = REGIONS.filter((r) => r.characterId && !r.kind && !s.regions[r.id]).map((r) => r.id);
   if (!build.length && !open.length) return null;
   return { sunday, build, open };
@@ -344,7 +363,8 @@ export function answerOffer(s, choice, { id, habit } = {}, date = today()) {
     if (!o.build.includes(id)) return fail('هاد البعد ما فيه مكان لعادة جديدة');
     const def = findCharacter(id), ch = s.characters[id];
     if (activeTasks(def, ch).some((t) => t.title === h.title)) return fail('هاي المهمة عندك أصلًا');
-    const n = totalLevel(ch);
+    compact(def, ch);
+    const n = activeTasks(def, ch).length;
     const r = setRankPlan(s, id, n, [h]); if (!r.ok) return r;
     setLevel(ch, n + 1);
     s.offerDone = o.sunday;
@@ -413,7 +433,7 @@ export function finishSpeech(s) {
 export function storyStep(s, phase) {
   s.story = { ...(s.story || {}), phase };
   if (phase === 'back') addLog(s, '🔭 القائد شاف جزيرة القادة');
-  if (phase === 'done') { s.story.jailed = false; s.story.escaped = true; addLog(s, '😈 لوسيفير هرب من القفص'); }
+  if (phase === 'done') { s.story.jailed = false; s.story.escaped = true; addLog(s, '🔥 لوسيفير هرب من القفص'); }
   return done(s, []);
 }
 // The island appears on the map once the commander has seen it through the spyglass.

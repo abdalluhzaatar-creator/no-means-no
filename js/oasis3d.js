@@ -8,6 +8,7 @@ import { buildRankStand } from './rankstand3d.js';
 import { createLucifer } from './lucifer3d.js';
 import { arm, unarm } from './heaven3d.js';
 import { habitHouses } from './habits3d.js';
+import { buildStarTree } from './startree3d.js';
 
 // ---------- helpers ----------
 function makeNoise(seed = 5) {
@@ -562,6 +563,8 @@ export function mountOasis(container, { palette, features, level, rank, habits =
   const STAND = { x: -19.6, z: 9.5 };
   const stand = rank ? buildRankStand(rank) : null;
   if (stand) { stand.root.position.set(STAND.x, 0.4, STAND.z); stand.root.rotation.y = Math.PI / 2; scene.add(stand.root); }
+  // Beside it, the star tree: a star lit for every building.
+  const starTree = buildStarTree(); starTree.root.position.set(STAND.x, 0.4, STAND.z - 1.6); starTree.root.rotation.y = Math.PI / 2; scene.add(starTree.root); starTree.set(habits.length);
 
   const setFeatures = (f, lvl) => {
     lanterns.visible = f.has('lanterns');
@@ -811,6 +814,7 @@ export function mountOasis(container, { palette, features, level, rank, habits =
     hero.update(t, dt, walkAmt, !grounded);
     stand?.tick(t);
     houses.tick(t);
+    starTree.tick(t);
     luci?.tick(t, dt);
     fnt.userData.tick(t);
     const lvl = aura.userData.level || 0;
@@ -864,7 +868,7 @@ export function mountOasis(container, { palette, features, level, rank, habits =
       cam.tYaw = Math.PI * 0.75; cam.tPitch = 0.3; cam.tDist = 7;   // side-front view to watch the prayer
       hero.pray(); burstUntil = clock.elapsedTime + 9;
     },
-    update({ features: f, level: l, rank: r, habits: hs }) { if (hs) houses.update(hs); setFeatures(f, l); if (r) { stand?.update(r); if (r.current !== tier) { unarm(hero); tier = r.current; arm(hero, palette, false, tier); } } },
+    update({ features: f, level: l, rank: r, habits: hs }) { if (hs) { houses.update(hs); starTree.set(hs.length); } setFeatures(f, l); if (r) { stand?.update(r); if (r.current !== tier) { unarm(hero); tier = r.current; arm(hero, palette, false, tier); } } },
     react(kind) { luci?.react(kind); },
     setWeather(k) { kind = k in WEATHER ? k : 'clear'; W = WEATHER[kind]; applySky(); },
     refreshSky() { applySky(); },

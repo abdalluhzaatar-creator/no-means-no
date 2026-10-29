@@ -24,7 +24,7 @@ const STEPS = [
   { when: (c) => c.screen === 'world', target: () => label('القيادة'), fly: 'hq',
     text: '…وفوت على <b>مقر القيادة</b>: هناك القائد، ورتب الأبعاد، وخريطة الأبعاد.', done: (c) => c.screen === 'hq' },
   { when: (c) => c.screen === 'hq', target: () => $('[data-war-map]'),
-    text: 'هاي <b>خريطة الأبعاد</b>: بتشوف فيها كل بُعد وكم مبنى فيه. بالتوفيق يا قائد 🫡', next: true, last: true },
+    text: 'هاي <b>خريطة الأبعاد</b>: بتشوف فيها كل بُعد وكم مبنى فيه. بالتوفيق يا قائد 🎖', next: true, last: true },
 ];
 
 // One-time tips after the tour.

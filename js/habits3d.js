@@ -56,17 +56,18 @@ function picture(src) {
   return g;
 }
 // A little house (about 2 × 2): stone base, walls in the dimension's colour, a roof, a door,
-// the counter board over the door, its number (or its picture) on the gable, its number and
-// name above, and a lamp on top that burns while the counter runs.
-function house(color, roof, n, img, title) {
+// the counter board over the door, its picture (or its icon) on the gable, a lamp on top
+// that burns while the counter runs, its number in gold above it and its name over all.
+function house(color, roof, n, img, icon, title) {
   const g = new THREE.Group();
   const base = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.25, 2.2), std(0xcfc6b2)); base.position.y = 0.12; g.add(base);
   const walls = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.3, 1.6), std(color)); walls.position.y = 0.9; g.add(walls);
   const r = new THREE.Mesh(new THREE.ConeGeometry(1.42, 0.95, 4), std(roof, { roughness: 0.6 })); r.position.y = 2.02; r.rotation.y = Math.PI / 4; g.add(r);
   const door = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.62, 0.05), std(0x4a2f1a)); door.position.set(0, 0.56, 0.81); g.add(door);
   const board = counterBoard(); board.position.set(0, 1.2, 0.83); g.add(board);
-  const sign = img ? picture(img) : label(String(n), { size: 0.6, emoji: true, bg: '#d4a53a', color: '#2a1a06', font: '800 62px system-ui, sans-serif' }); sign.position.set(0, 2.1, 1.0); g.add(sign);
-  const name = label(`${n} · ${title}`, { size: 0.42 }); name.position.set(0, 3.25, 0); g.add(name);
+  const sign = img ? picture(img) : label(icon || '⭐', { size: 0.55, emoji: true, bg: 'rgba(255,250,235,.95)', font: '64px system-ui, sans-serif' }); sign.position.set(0, 2.1, 1.0); g.add(sign);
+  const num = label(String(n), { size: 0.5, emoji: true, bg: '#d4a53a', color: '#2a1a06', font: '800 62px system-ui, sans-serif' }); num.position.set(0, 3.0, 0); g.add(num);
+  const name = label(title, { size: 0.42 }); name.position.set(0, 3.55, 0); g.add(name);
   const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), std(0x666666, { emissive: 0x000000 })); lamp.position.y = 2.6; g.add(lamp);
   g.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.receiveShadow = true; } });
   g.userData = { lamp, name, board };
@@ -195,7 +196,7 @@ export function habitHouses(scene, { blocked, inside, groundAt = () => 0, spawn,
   const build = (list) => {
     for (const s of slots) root.remove(s.obj);
     slots = at.map(([x, z], i) => {
-      const h = list[i], obj = h ? house(color, roof, h.n || i + 1, h.img, h.title) : plot(i + 1);
+      const h = list[i], obj = h ? house(color, roof, h.n || i + 1, h.img, h.icon, h.title) : plot(i + 1);
       obj.scale.setScalar(SCALE);
       obj.position.set(x, groundAt(x, z), z);
       obj.rotation.y = faceOf(x, z);
@@ -213,7 +214,7 @@ export function habitHouses(scene, { blocked, inside, groundAt = () => 0, spawn,
   });
   let key = '', shown = '';
   const update = (list) => {
-    const k = JSON.stringify(list.map((h) => [h.id, h.n, h.title, h.img]));
+    const k = JSON.stringify(list.map((h) => [h.id, h.n, h.title, h.icon, h.img]));
     if (k !== key) { key = k; build(list); shown = ''; }
     const t = JSON.stringify(list.map((h) => [h.time, h.paused, h.start]));
     if (t !== shown) { shown = t; show(list); }

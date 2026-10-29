@@ -186,6 +186,27 @@ t('editing a habit (name and picture) keeps its building and its counter', () =>
   assert.ok(E.editHabit(s, W, id, { img: null }).ok); assert.equal(E.activeTasks(def(), s.characters[W])[0].img, undefined);
 });
 
+t('test mode: a dimension starts again from zero and the Sunday message builds it again', () => {
+  const real = E.newState(); E.setHabit(real, W, 0, null, { title: 'ورد' }); real.startDay = '2026-01-01';
+  assert.equal(E.resetDimension(real, W).ok, false);              // never in the real game
+  const s = E.enterSandbox(real);
+  assert.ok(E.resetDimension(s, W).ok);
+  assert.equal(E.activeTasks(def(), s.characters[W]).length, 0);
+  const o = E.pendingOffer(s, '2026-11-02');
+  assert.ok(o.build.includes(W));
+  assert.ok(E.answerOffer(s, 'build', { id: W, habit: { title: 'قراءة' } }, '2026-11-02').ok);
+  assert.deepEqual(E.activeTasks(def(), s.characters[W]).map((t) => t.title), ['قراءة']);
+  assert.equal(E.totalLevel(s.characters[W]), 1);
+});
+
+t('an old save with habits removed has no empty ranks left', () => {
+  const s = E.newState(); s.characters[W].stage = 0; s.characters[W].level = 4;
+  s.characters[W].plan = [[{ id: 'a', title: 'أ', start: 1, paused: null }], [], [{ id: 'c', title: 'ج', start: 1, paused: null }], []];
+  const m = E.migrate(JSON.parse(JSON.stringify(s)));
+  assert.equal(E.totalLevel(m.characters[W]), 2);
+  assert.deepEqual(E.activeTasks(def(), m.characters[W]).map((t) => t.id), ['a', 'c']);
+});
+
 t('the decorations of a place come one by one with its buildings', () => {
   const s = E.newState(); E.setHabit(s, W, 0, null, { title: 'ورد' });
   assert.equal(E.regionFeatures(s, 'sanctuary').size, 0);

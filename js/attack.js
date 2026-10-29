@@ -206,7 +206,7 @@ export function playAttack({ fights, raid, shields }, { warrior, sfx = {}, onDon
     }
     if (ctl.skip) return;
     if (raid && (raid.gold || raid.medals)) {
-      root.classList.add('raid'); q('.atk-title').textContent = '😈 غارة لوسيفر';
+      root.classList.add('raid'); q('.atk-title').textContent = '🔥 غارة لوسيفر';
       q('.atk-cap').textContent = `سرق −${raid.gold} 🪙 و −${raid.medals} 🎖`; starEls.forEach((s) => (s.className = 'off')); q('.atk-pct').textContent = '';
       luci.root.visible = true; luci.setOpacity(1); luciMood = 'happy'; play('lose');
       camTo(new THREE.Vector3(1, 3.8, 14), new THREE.Vector3(1, 3, 0), 900);

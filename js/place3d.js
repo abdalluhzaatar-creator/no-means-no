@@ -12,6 +12,7 @@ import { placeAmbience } from './audio.js';
 import { createLucifer } from './lucifer3d.js';
 import { arm, unarm } from './heaven3d.js';
 import { habitHouses } from './habits3d.js';
+import { buildStarTree } from './startree3d.js';
 
 const heartTex = canvasTex(64, 64, (g) => { g.fillStyle = '#fff'; g.beginPath(); g.moveTo(32, 56); g.bezierCurveTo(-8, 30, 12, 0, 32, 18); g.bezierCurveTo(52, 0, 72, 30, 32, 56); g.fill(); });
 
@@ -54,11 +55,14 @@ export function mountPlace(container, { regionId, palette, rank, features = new 
   const stand = rank ? buildRankStand(rank) : null;
   const [SX, SZ, SR] = place.stand;
   if (stand) { stand.root.position.set(SX, place.groundAt?.(SX, SZ) || 0, SZ); stand.root.rotation.y = SR; scene.add(stand.root); }
+  // Beside it, the star tree: a star lit for every building.
+  const TX = SX + Math.cos(SR) * 1.6, TZ = SZ - Math.sin(SR) * 1.6;
+  const starTree = buildStarTree(); starTree.root.position.set(TX, place.groundAt?.(TX, TZ) || 0, TZ); starTree.root.rotation.y = SR; scene.add(starTree.root); starTree.set(habits.length);
 
   // The eight small buildings: one for every habit.
   const houses = habitHouses(scene, {
     blocked: place.blocked, groundAt: place.groundAt, spawn: [place.spawn[0], place.spawn[1]], center: [0, 0],
-    inside: (x, z) => Math.hypot(x, z) < (place.camR || 20) - 3, avoid: stand ? [[SX, SZ, 1.2]] : [],
+    inside: (x, z) => Math.hypot(x, z) < (place.camR || 20) - 3, avoid: [[TX, TZ, 0.8], ...(stand ? [[SX, SZ, 1.2]] : [])],
     color: '#f2ead8', roof: palette.accent, habits,
   });
 
@@ -123,6 +127,7 @@ export function mountPlace(container, { regionId, palette, rank, features = new 
     hero.update(t, dt, mv.walk, mv.air);
     stand?.tick(t);
     houses.tick(t);
+    starTree.tick(t);
     place.tick(t, dt, env.state, hero);
     luci?.tick(t, dt);
     env.tick(t, dt);
@@ -139,7 +144,7 @@ export function mountPlace(container, { regionId, palette, rank, features = new 
   tick();
 
   return {
-    update({ rank: r, features: f, habits: hs } = {}) { if (hs) houses.update(hs); if (r) { stand?.update(r); if (r.current !== tier) { unarm(hero); tier = r.current; cape = arm(hero, palette, false, tier); } } if (f) { feats = f; showFeats(); } },
+    update({ rank: r, features: f, habits: hs } = {}) { if (hs) { houses.update(hs); starTree.set(hs.length); } if (r) { stand?.update(r); if (r.current !== tier) { unarm(hero); tier = r.current; cape = arm(hero, palette, false, tier); } } if (f) { feats = f; showFeats(); } },
     pray() { if (!hero.busy()) hero.wave(); celebrate(); },
     react(kind) { luci?.react(kind); },
     setWeather(k) { env.setWeather(k); },

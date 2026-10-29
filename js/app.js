@@ -69,7 +69,7 @@ async function loadGame() {
     ctx: () => ({ screen, state, modal: !$('#modal').hidden, fly: (id) => disposeWorld?.flyTo?.(id),
       hasHabit: !!currentChar && !!state.characters[currentChar] && E.activeTasks(E.findCharacter(currentChar), state.characters[currentChar]).length > 0 }),
     save: scheduleSave,
-    onFinish: () => FX.banner('🫡 جاهز يا قائد', 'خلّص عاداتك كل يوم — والأحد بتجيك أول رسالة 📬.', '🫡'),
+    onFinish: () => FX.banner('🎖 جاهز يا قائد', 'خلّص عاداتك كل يوم — والأحد بتجيك أول رسالة 📬.', '🎖'),
   });
   // The rules changed (v4): show them once.
   // The rules changed (v5: stars and weekly wars): show them once to players who knew the old ones.
@@ -316,9 +316,9 @@ function taskRow(charId, t) {
   return `
   <li class="task habit-row ${paused ? 'is-paused' : 'is-running'}">
     <div class="task-main">
-      <strong><span class="t-no">${habitNo(charId, t)}</span> ${esc(t.title)}${E.findCharacter(charId)?.stages ? ` <button class="edit-task" data-edit-task="${charId}:${t.id}" title="عدّل الاسم">تعديل</button>` : ''}</strong>
-      <span class="counter"><b>${counterTxt(t)}</b>${paused ? ' <small>موقوف</small>' : ''}</span>
-      <small class="muted">بدأت: ${startDate(t)}</small>
+      <strong><span class="t-no">${habitNo(charId, t)}</span> <span class="t-ic">${taskIcon(charId, t)}</span> ${esc(t.title)}${E.findCharacter(charId)?.stages ? ` <button class="edit-task" data-edit-task="${charId}:${t.id}" title="عدّل الاسم والصورة">✎ تعديل</button>` : ''}</strong>
+      <span class="counter">⏱ <b>${counterTxt(t)}</b>${paused ? ' <small>⏸ موقوف</small>' : ''}</span>
+      <small class="muted">📅 بدأت: ${startDate(t)}</small>
     </div>
     <div class="task-actions">
       ${paused ? `<button class="btn ok" data-habit-run="${charId}:${t.id}">▶ شغّل</button>` : `<button class="btn" data-habit-pause="${charId}:${t.id}">⏸ وقّف</button>`}
@@ -433,14 +433,14 @@ function progressionPanel(c, ch) {
 const DIM_ICONS = {
   worshipper: ['🕌', '📖', '📿', '🤲', '🕋', '🌙', '⭐', '🕯', '💝', '🎧', '🧎', '☪', '📜', '🌅', '🌃', '💧', '🫶', '🍽'],
   scholar: ['📚', '📖', '🧠', '✍', '📝', '🔬', '🧪', '🧮', '🗣', '🌍', '🎓', '💻', '🔭', '📐', '🗂', '🧩', '🎧', '📰'],
-  athlete: ['🏃', '🏋', '💪', '🚴', '🏊', '🤸', '🧘', '⚽', '🥊', '🥗', '🍎', '🥦', '💧', '😴', '🚶', '❤️‍🩹', '⚖', '🩺'],
-  empath: ['🤝', '🕊', '🎁', '👂', '🏥', '🤲', '🧓', '🫡', '🙊', '🍞', '🫶', '💌', '☎', '🧸', '🌱', '🏠', '🪔', '🙏'],
+  athlete: ['🏃', '🏋', '💪', '🚴', '🏊', '🤸', '🧘', '⚽', '🥊', '🥗', '🍎', '🥦', '💧', '🛌', '🚶', '❤️‍🩹', '⚖', '🩺'],
+  empath: ['🤝', '🕊', '🎁', '👂', '🏥', '🤲', '🧓', '🎖', '🍞', '🫶', '💌', '☎', '🧸', '🌱', '🏠', '🪔', '🙏'],
   host: ['👪', '📞', '🤝', '🏠', '💬', '🍽', '☕', '🎉', '🫂', '✉', '🎁', '🧆', '🕌', '👋', '🪑', '🔥', '📸', '🎂'],
   builder: ['🎯', '🗓', '💼', '📈', '⏰', '📧', '💻', '🧑‍💼', '📊', '🗂', '🖊', '📞', '🏆', '🚀', '📌', '🧭', '☕', '📝'],
   merchant: ['🧾', '🐖', '💰', '🪙', '💳', '📊', '🏦', '💡', '🚫', '📉', '📈', '🧮', '🛒', '🏷', '💵', '🔐', '⚖', '📒'],
   keeper: ['🌳', '🌱', '♻', '🚯', '💧', '☀', '🌬', '🐝', '🐦', '🌻', '🚶', '🚲', '🌍', '🧹', '🪴', '🍃', '🔋', '🌊'],
 };
-const ICONS = ['⭐', '🔥', '✅', '🎯', '⏰', '📵', '🚭', '☕', '🍎', '💧', '😴', '🧹', '🎨', '🎸', '🧩', '📖', '✍', '💪', '🙏', '❤', '🌙', '☀', '🕯', '🎵', '🏠', '🚗', '📞', '💬', '🛑', '🧠', '👀', '🗝', '🏅', '🌟', '🍀', '🕐'];
+const ICONS = ['⭐', '🔥', '✅', '🎯', '⏰', '📵', '🚭', '☕', '🍎', '💧', '🛌', '🧹', '🎨', '🎸', '🧩', '📖', '✍', '💪', '🙏', '❤', '🌙', '☀', '🕯', '🎵', '🏠', '🚗', '📞', '💬', '🛑', '🧠', '👀', '🗝', '🏅', '🌟', '🍀', '🕐'];
 const DIM_ICON = { worshipper: '☪', scholar: '📚', athlete: '🏋', empath: '🕊', host: '🤝', builder: '🛠', merchant: '🪙', keeper: '🌳' };
 const taskIcon = (charId, t) => t.icon || (SUGGEST[charId] || []).find(([, x]) => x === t.title)?.[0] || DIM_ICON[charId] || '⭐';
 function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) {
@@ -457,7 +457,7 @@ function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) 
     : { from: null, title: '', icon: '' };
   const head = mode === 'build' ? { k: `🏗 ${esc(c.name)} · مبنى ${(rd?.habits || 0) + 1} من 8`, t: 'العادة الجديدة' }
     : mode === 'open' ? { k: `🔓 ${esc(E.findRegion(regionId).name)}`, t: 'أول عادة لهاد البعد' }
-    : mode === 'edit' ? { k: 'تعديل العادة', t: 'غيّر اسمها' } : { k: esc(c.name), t: 'اختار أول عادة إلك' };
+    : mode === 'edit' ? { k: 'تعديل العادة', t: 'غيّر اسمها أو صورتها' } : { k: esc(c.name), t: 'اختار أول عادة إلك' };
   const lead = mode === 'build' ? `بتنبني بمبنى جديد، وبتطلع رتبة ${esc(c.name)} لـ <b>${esc(rd?.next?.name || '')}</b>.`
     : mode === 'open' ? 'البعد بيفتح بمبنى واحد: هاي العادة.'
     : mode === 'edit' ? 'العدّاد بيضل زي ما هو. الصورة والملاحظات من شباك المبنى.' : 'عادة وحدة بتعملها كل يوم. ابدأ بإشي صغير بتقدر تلتزم فيه 💪';
@@ -473,7 +473,7 @@ function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) 
       <div class="pk-custom" id="pk-custom" hidden>
         <div class="pk-step"><b>2</b> خصّصها على كيفك</div>
         <div class="pk-name">
-          <button type="button" class="pk-icon" id="pk-icon" title="غيّر الصورة" hidden>⭐</button>
+          <button type="button" class="pk-icon" id="pk-icon" title="غيّر الصورة">⭐</button>
           <input id="pk-title" maxlength="80" placeholder="اسم المهمة">
         </div>
         <div class="pk-icons-wrap" id="pk-icons" hidden>
@@ -486,7 +486,6 @@ function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) 
       </div>
       <div class="pk-actions">
         <button class="pk-ok" id="hp-ok" disabled>${mode === 'build' ? '🏗 ابنيها' : mode === 'open' ? '🔓 افتح البعد' : editing ? 'احفظ ✔' : 'ثبّت المهمة ✔'}</button>
-        ${mode === 'edit' && E.activeTasks(c, ch).length > 1 ? '<button class="pk-ghost" id="hp-del">🗑 احذفها</button>' : ''}
         <button class="pk-ghost" id="hp-cancel">${mode === 'first' ? 'لاحقًا' : 'رجوع'}</button>
       </div>
     </div>`, { theme: 'game' });
@@ -516,7 +515,6 @@ function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) 
   iconBtn.onclick = () => { icons.hidden = !icons.hidden; };
   icons.querySelectorAll('[data-icon]').forEach((b) => (b.onclick = () => { cur.icon = b.dataset.icon; icons.hidden = true; SND.sfx.click(); draw(); }));
   $('#hp-cancel').onclick = () => (mode === 'build' || mode === 'open' ? showOffer() : closeModal());
-  if ($('#hp-del')) $('#hp-del').onclick = () => ask(`تحذف "${editing.title}"؟`, () => { const r = act(E.removeHabit(state, id, taskId)); if (r.ok) closeModal(); });
   ok.onclick = () => {
     const habit = { title: cur.title.trim(), icon: cur.icon };
     if (mode === 'build' || mode === 'open') {
@@ -578,7 +576,7 @@ const placeState = () => {
   return { features: E.regionFeatures(state, c.regionId), level: artLevel(ch), rank: rankState(c, ch), habits: habitsFor(c) };
 };
 // The dimension's habits for its eight small buildings (done today = the lamp on the roof lit).
-const habitsFor = (c) => { const ch = state.characters[c.id]; return ch ? E.activeTasks(c, ch).slice(0, E.RANK_COUNT).map((t, i) => ({ id: t.id, n: i + 1, title: t.title, img: t.img || null, start: t.start, time: E.habitDays(t), paused: t.paused != null })) : []; };
+const habitsFor = (c) => { const ch = state.characters[c.id]; return ch ? E.activeTasks(c, ch).slice(0, E.RANK_COUNT).map((t, i) => ({ id: t.id, n: i + 1, title: t.title, icon: taskIcon(c.id, t), img: t.img || null, start: t.start, time: E.habitDays(t), paused: t.paused != null })) : []; };
 // A picture from the device, made small (at most 360 px) to keep in the save.
 function shrinkImage(file, max = 360) {
   return new Promise((ok, bad) => {
@@ -796,13 +794,14 @@ function placeHUD() {
   return `
   <div class="hud-top">
     <div class="plate">
-      <div class="plate-avatar" style="--glow:${c.palette.glow}">${esc([...c.name][0])}</div>
+      <div class="plate-avatar" style="--glow:${c.palette.glow}">${DIM_ICON[c.id] || '☪'}</div>
       <div class="plate-body">
         <div class="plate-name">${c.name === r.name ? r.name : `${c.name} <span class="plate-place">· ${r.name}</span>`}</div>
-        <div class="plate-row"><span class="plate-streak" title="أطول عدّاد (أيام)">أطول عدّاد: ${best} يوم</span></div>
+        <div class="plate-row"><span class="plate-streak" title="أطول عدّاد (أيام)">⏱ أطول عدّاد: ${best} يوم</span></div>
 
       </div>
     </div>
+    ${state.sandbox && c.stages ? `<button class="hud-chip dim-reset" data-dim-reset="${c.id}" title="وضع التجربة بس">↺ البعد من الصفر</button>` : ''}
     <button class="hud-chip atmo" data-open-atmo>${WEATHER_NAMES[currentWeather()].split(' ')[0]} ${PERIODS[skyInfo().period]}${timeOverride === "auto" ? ` · ${fmtTime(new Date())}` : ""}${liveWeather?.temp != null && weatherOverride === 'auto' ? ` · ${liveWeather.temp}°` : ''}</button>
   </div>`;
 }
@@ -914,7 +913,7 @@ async function bindHQ() {
     const { mountHQ } = await import('./hq3d.js');
     if (!v.isConnected) return;
     v.querySelector('.w3-loading')?.remove();
-    hqScene = mountHQ(v, { weather: currentWeather(), places: dimPlaces(), owned: CHARACTERS.filter((c) => state.characters[c.id]).map((c) => c.id), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, ...innerState(), story: { ...state.story, ship: E.shipStage(state) }, ranks: Object.fromEntries(CHARACTERS.filter((c) => state.characters[c.id] && c.stages).map((c) => [c.id, E.rankName(state.characters[c.id])])), tiers: Object.fromEntries(CHARACTERS.filter((c) => state.characters[c.id] && c.stages).map((c) => [c.id, E.totalLevel(state.characters[c.id]) - 1])),
+    hqScene = mountHQ(v, { weather: currentWeather(), places: dimPlaces(), owned: CHARACTERS.filter((c) => state.characters[c.id] && (!c.stages || E.activeTasks(c, state.characters[c.id]).length)).map((c) => c.id), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, ...innerState(), story: { ...state.story, ship: E.shipStage(state) }, ranks: Object.fromEntries(CHARACTERS.filter((c) => state.characters[c.id] && c.stages).map((c) => [c.id, E.rankName(state.characters[c.id])])), tiers: Object.fromEntries(CHARACTERS.filter((c) => state.characters[c.id] && c.stages).map((c) => [c.id, E.totalLevel(state.characters[c.id]) - 1])),
       onStory: (phase) => { if (phase === 'march') act(E.finishSpeech(state)); else { act(E.storyStep(state, phase)); if (phase === 'back') FX.toast('🏝 شفت جزيرة القادة… السفينة بتوصلك لما تكمل'); } }, onRoom: (r) => { document.body.classList.toggle('in-dungeon', r === 'dungeon'); document.body.classList.toggle('in-heaven', r === 'heaven' || r === 'shore'); document.body.classList.toggle('in-gallery', r === 'gallery'); }, sky: skyInfo, onTable: showDimMap, onCommander: showCommandRanks });
     loadWeather();
   } catch (err) { console.warn('3D HQ unavailable', err); v.innerHTML = ''; }
@@ -923,7 +922,7 @@ async function bindHQ() {
 function showCommandRanks() {
   const cm = commander(state);
   modal(`
-    <h2>🫡 رتب القائد</h2>
+    <h2>🎖 رتب القائد</h2>
     <p class="muted">القائد بيترقّى لحاله مع العادات اللي بتبنيها بكل الأبعاد. بنيت ${cm.habits} 🏗.</p>
     <ol class="path">${COMMAND_RANKS.map(([need, name], i) => {
       const cls = i < cm.rankIndex ? 'done' : i === cm.rankIndex ? 'current' : '';
@@ -934,7 +933,7 @@ function showCommandRanks() {
 // Celebrate when the commander's level went up since the last look.
 function checkCommander() {
   const cm = commander(state);
-  if (lastCmdLevel != null && cm.level > lastCmdLevel) FX.banner(`ترقية القائد — ${cm.rank}`, `بنيت ${cm.habits} عادة فترقّى القائد لحاله`, '🫡');
+  if (lastCmdLevel != null && cm.level > lastCmdLevel) FX.banner(`ترقية القائد — ${cm.rank}`, `بنيت ${cm.habits} عادة فترقّى القائد لحاله`, '🎖');
   lastCmdLevel = cm.level;
 }
 // The eight dimensions: closed, being built (habits of 8), or full.
@@ -999,7 +998,7 @@ function hqHUD() {
   return `
   <div class="hud-top">
     <div class="plate">
-      <div class="plate-avatar" style="--glow:#ffc83d">ق</div>
+      <div class="plate-avatar" style="--glow:#ffc83d">🎖</div>
       <div class="plate-body">
         <div class="plate-name">القائد <span class="plate-place">· مقر القيادة</span></div>
         <div class="plate-row"><button class="rank" data-cmd-ranks style="--rank:#7a5a1f" title="اعرض كل الرتب">${cm.rank} ▾</button></div>
@@ -1132,7 +1131,7 @@ function trophyHUD() {
   return `
   <div class="hud-top">
     <div class="plate">
-      <div class="plate-avatar" style="--glow:#ffc83d">ك</div>
+      <div class="plate-avatar" style="--glow:#ffc83d">🏆</div>
       <div class="plate-body">
         <div class="plate-name">جزيرة الكؤوس</div>
         <div class="plate-row"><span class="plate-streak">🏆 ${won} / ${CUPS.length}</span></div>
@@ -1319,6 +1318,7 @@ function bind() {
   on('data-channel', (c) => { cupChannel = c; render(); });
   on('data-set-weather', (k) => { weatherOverride = k; oasis?.scene.setWeather(currentWeather()); disposeWorld?.setWeather?.(currentWeather()); hqScene?.setWeather?.(currentWeather()); render(); });
   on('data-set-time', (k) => { timeOverride = k; oasis?.scene.refreshSky(); disposeWorld?.refreshSky?.(); hqScene?.refreshSky?.(); render(); });
+  on('data-dim-reset', (id) => ask(`ترجّع ${E.findCharacter(id).name} من الصفر؟ كل مبانيه بتنشال (بوضع التجربة بس). بعدها "مرّ أسبوع" وابنِ من جديد.`, () => { const r = act(E.resetDimension(state, id)); if (r.ok) FX.toast('البعد رجع من الصفر'); }));
   on('data-toggle-quests', () => { questsCollapsed = !questsCollapsed; $('#quests')?.classList.toggle('collapsed', questsCollapsed); });
   on('data-pick-location', pickLocation);
   on('data-cmd-ranks', showCommandRanks);
