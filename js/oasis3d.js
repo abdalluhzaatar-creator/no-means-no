@@ -7,6 +7,7 @@ import { sfx } from './audio.js';
 import { buildRankStand } from './rankstand3d.js';
 import { createLucifer } from './lucifer3d.js';
 import { arm, unarm } from './heaven3d.js';
+import { habitHouses } from './habits3d.js';
 
 // ---------- helpers ----------
 function makeNoise(seed = 5) {
@@ -445,7 +446,7 @@ const WEATHER = {
 
 // ---------- mount ----------
 // opts.sky() → { elev } sun elevation in degrees, recomputed every minute.
-export function mountOasis(container, { palette, features, level, rank, onCharacter, onRanks, sky: skyInfo, weather = 'clear', lucifer = null }) {
+export function mountOasis(container, { palette, features, level, rank, habits = [], onCharacter, onRanks, onHabit, sky: skyInfo, weather = 'clear', lucifer = null }) {
   let seed = 7; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -705,7 +706,8 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
     ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ptr, camera);
     if (ray.intersectObject(hero.root, true).length) { if (!hero.busy()) hero.wave(); onCharacter?.(); return; }
-    if (stand && ray.intersectObject(stand.root, true).length) onRanks?.();
+    if (stand && ray.intersectObject(stand.root, true).length) { onRanks?.(); return; }
+    const h = houses.pick(ray); if (h) onHabit?.(h.id);
   });
 
   const resize = () => { const w = container.clientWidth, h = container.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); };
@@ -727,7 +729,7 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
   };
   window.addEventListener('keydown', onKey); window.addEventListener('keyup', onKey);
   const jump = () => { if (grounded && !hero.busy()) { vy = 7.5; grounded = false; sfx.jump(); } };
-  const blocked = (x, z) => {
+  const sceneBlocked = (x, z) => {
     if (stand && Math.hypot(x - STAND.x, z - STAND.z) < 1) return true;               // rank stand
     if (Math.abs(x) > 20.3 || Math.abs(z) > 20.3) return true;
     if (Math.abs(x) < 2.6 && z > 6 && z < 21) return true;                           // reflecting pool
@@ -737,6 +739,16 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
       if (Math.abs(x - bx) < w / 2 + 0.5 && Math.abs(z - bz) < d / 2 + 0.5) return true; // flower beds
     return false;
   };
+  // The eight small buildings (one for every habit), round the courtyard's sides.
+  const houses = habitHouses(scene, {
+    blocked: sceneBlocked, groundAt: () => 0.4, spawn: [0, 0], center: [0, -8], minR: 7,
+    inside: (x, z) => Math.abs(x) < 18.6 && Math.abs(z) < 18.6,
+    avoid: [[0, 5, 2.6], [0, -7.5, 2.6], [0, -1, 2], [STAND.x, STAND.z, 1.2],
+      [-14, 6, 1], [14, 6, 1], [-14, -6, 1], [14, -6, 1], [-6, 20, 1], [6, 20, 1], [-14, 18, 1], [14, 18, 1],
+      [-10, 6, 0.6], [10, 6, 0.6], [-10, -8, 0.6], [10, -8, 0.6], [-3.5, 1.5, 0.6], [3.5, 1.5, 0.6], [-3.5, -4, 0.6], [3.5, -4, 0.6]],
+    color: '#f6efe0', roof: palette.accent, habits,
+  });
+  const blocked = (x, z) => sceneBlocked(x, z) || houses.blocked(x, z);
   const pad = document.createElement('div'); pad.className = 'move-pad';
   pad.innerHTML = '<div class="joy"><div class="joy-knob"></div></div><button class="jump-btn" aria-label="نط">⤒</button>';
   container.appendChild(pad);
@@ -796,6 +808,7 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
     updateCamera(dt, walkAmt > 0.2);
     hero.update(t, dt, walkAmt, !grounded);
     stand?.tick(t);
+    houses.tick(t);
     luci?.tick(t, dt);
     fnt.userData.tick(t);
     const lvl = aura.userData.level || 0;
@@ -848,7 +861,7 @@ export function mountOasis(container, { palette, features, level, rank, onCharac
       cam.tYaw = Math.PI * 0.75; cam.tPitch = 0.3; cam.tDist = 7;   // side-front view to watch the prayer
       hero.pray(); burstUntil = clock.elapsedTime + 9;
     },
-    update({ features: f, level: l, rank: r }) { setFeatures(f, l); if (r) { stand?.update(r); if (r.current !== tier) { unarm(hero); tier = r.current; arm(hero, palette, false, tier); } } },
+    update({ features: f, level: l, rank: r, habits: hs }) { if (hs) houses.update(hs); setFeatures(f, l); if (r) { stand?.update(r); if (r.current !== tier) { unarm(hero); tier = r.current; arm(hero, palette, false, tier); } } },
     react(kind) { luci?.react(kind); },
     setWeather(k) { kind = k in WEATHER ? k : 'clear'; W = WEATHER[kind]; applySky(); },
     refreshSky() { applySky(); },

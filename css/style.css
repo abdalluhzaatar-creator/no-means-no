@@ -760,3 +760,20 @@ body.cine .hud, body.cine .move-pad, body.cine .door-btn, body.cine .cell-captio
 .atk3d { background: #0d0b22; }
 .atk-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .atk3d .atk-flash.on { opacity: .35; }
+/* ---------- the Sunday message ---------- */
+.offer { text-align: center; }
+.offer h2 { margin: 4px 0; }
+.offer-choices { display: grid; gap: 10px; margin-top: 14px; }
+.offer-btn { display: grid; grid-template-columns: 52px 1fr; grid-template-rows: auto auto; align-items: center; text-align: start; gap: 0 12px; padding: 12px 14px; border-radius: 16px; border: 2px solid #ffffff55; background: #ffffff14; color: inherit; font: inherit; cursor: pointer; }
+.offer-btn span { grid-row: span 2; font-size: 2rem; text-align: center; }
+.offer-btn b { font-size: 1.15rem; } .offer-btn small { opacity: .8; }
+.offer-btn.build { background: linear-gradient(135deg, #2f7d4f, #3fa86a); border-color: #9fe3b8; color: #fff; }
+.offer-btn.open { background: linear-gradient(135deg, #3a5f9a, #4f7fd0); border-color: #a8c8ff; color: #fff; }
+.offer-btn.skip { background: #00000022; }
+.offer-btn:disabled { opacity: .45; cursor: not-allowed; }
+.dims.pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin: 12px 0; }
+.dim.pickable { display: grid; gap: 4px; justify-items: center; padding: 8px; border-radius: 14px; border: 2px solid #ffffff33; background: #ffffff10; color: inherit; font: inherit; cursor: pointer; }
+.dim.pickable svg { width: 100%; height: auto; border-radius: 10px; }
+.dim.pickable:hover { border-color: #ffd66b; }
+.offer-box { cursor: pointer; color: #fff; border-color: #ffd66b; background: linear-gradient(135deg, #b8741a, #e0a83a) !important; animation: offer-pulse 1.4s ease-in-out infinite; }
+@keyframes offer-pulse { 50% { box-shadow: 0 0 0 6px #ffd66b33; } }

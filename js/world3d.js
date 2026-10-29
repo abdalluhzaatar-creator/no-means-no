@@ -621,7 +621,7 @@ export function mountWorld(container, spots, onPick, { sky: skyInfo = () => ({ e
     const el = document.createElement('button');
     el.className = `w3-label ${s.vis}`;
     el.innerHTML = s.def.kind === 'leaders' ? `🔒 ${s.def.name} · 🚢` : s.vis === 'owned' ? s.def.name
-      : `🔒 ${s.def.name} · ${s.def.cost?.keys ? `🗝 ${s.def.cost.keys}` : `🪙 ${s.def.cost?.gold ?? 0}`}`;
+      : s.def.kind === 'leaders' ? `🏝 ${s.def.name} · 🚢` : `🔒 ${s.def.name} · 📬`;
     el.onclick = () => onPick(s.def.id);
     labelLayer.appendChild(el);
     labels.push({ el, v: new THREE.Vector3(s.x, y + (floating ? 26 : s.def.kind === 'leaders' ? 90 : 22), s.z) });

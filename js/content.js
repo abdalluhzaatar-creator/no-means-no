@@ -3,9 +3,12 @@
 // Unlock requirements use the generic condition types in engine.js (CONDITIONS).
 
 // Ranks reached after the starting stage: Bronze 1-3, Silver 1-3, Gold 1-3, Platinum 1-3.
+// One rank for every habit built in a dimension (8 buildings = 8 ranks). Ranks come by
+// themselves: building a dimension's next habit raises it to the next rank.
 export const RANKS = [
   ['bronze', 'برونز', '#b0743f'], ['silver', 'فضّي', '#9aa4ad'], ['gold', 'ذهبي', '#d4a72c'], ['platinum', 'بلاتينيوم', '#5fb7c2'],
-].flatMap(([id, name, color]) => [1, 2, 3].map((n) => ({ id: `${id}${n}`, name: `${name} ${n}`, color })));
+  ['crystal', 'كريستال', '#b77be0'], ['master', 'ماستر', '#4c5d6b'], ['champion', 'بطل', '#c0392b'], ['legend', 'أسطورة', '#9b59d0'],
+].map(([id, name, color]) => ({ id, name, color }));
 
 // Item costs are objects: { gold?: number, keys?: number }.
 
@@ -207,7 +210,7 @@ export const REGIONS = [
     dimension: 'intellectual',
     desc: 'برج المعرفة: مكتبة ومرصد يعلوان كلما قرأت وتعلّمت.',
     characterId: 'scholar',
-    cost: { keys: 1 },
+    cost: {},
     requires: [],
     map: { x: 168, y: 246, revealedBy: 'sanctuary' },
     theme: { sky: ['#243048', '#8fa7c4'], ground: '#6b5540' },
@@ -225,7 +228,7 @@ export const REGIONS = [
     name: 'البعد الجسدي',
     desc: 'ساحة الأبطال: ملعب وحلبة تدريب تقوى كلما اعتنيت بجسدك.',
     characterId: 'athlete',
-    cost: { keys: 1 },
+    cost: {},
     requires: [],
     map: { x: 114, y: 442, revealedBy: 'sanctuary' },
     upgrades: [
@@ -242,7 +245,7 @@ export const REGIONS = [
     name: 'البعد الوجداني',
     desc: 'حديقة السكينة: بركة هادئة وأشجار وارفة، تعمر كلما قدّمت غيرك على نفسك.',
     characterId: 'empath',
-    cost: { keys: 1 },
+    cost: {},
     requires: [],
     map: { x: 437, y: 617, revealedBy: 'sanctuary' },
     upgrades: [
@@ -259,7 +262,7 @@ export const REGIONS = [
     name: 'البعد الاجتماعي',
     desc: 'ساحة الحي: بيوت وسوق وساحة لقاء، تعمر كلما وصلت الناس.',
     characterId: 'host',
-    cost: { keys: 1 },
+    cost: {},
     requires: [],
     map: { x: 757, y: 564, revealedBy: 'sanctuary' },
     upgrades: [
@@ -276,7 +279,7 @@ export const REGIONS = [
     name: 'البعد المهني',
     desc: 'ساحة الإنجاز: أبراج ومكاتب تعلو كلما تقدّمت في عملك.',
     characterId: 'builder',
-    cost: { keys: 1 },
+    cost: {},
     requires: [],
     map: { x: 900, y: 384, revealedBy: 'sanctuary' },
     upgrades: [
@@ -293,7 +296,7 @@ export const REGIONS = [
     name: 'البعد المالي',
     desc: 'ميناء التاجر: سفن وسوق وبيت مال يعمر كلما أحسنت إدارة مالك.',
     characterId: 'merchant',
-    cost: { keys: 1 },
+    cost: {},
     requires: [],
     map: { x: 768, y: 202, revealedBy: 'sanctuary' },
     upgrades: [
@@ -310,7 +313,7 @@ export const REGIONS = [
     name: 'البعد البيئي',
     desc: 'الغابة الحيّة: شجرة عملاقة وحديقة تخضرّ كلما اعتنيت بمحيطك.',
     characterId: 'keeper',
-    cost: { keys: 1 },
+    cost: {},
     requires: [],
     map: { x: 451, y: 142, revealedBy: 'sanctuary' },
     upgrades: [
@@ -381,10 +384,11 @@ export const CHANNEL_UNLOCK_CUP = 'silver';
 export const JOD_TO_USD = 1.41;
 
 
-// Commander ranks by level (مقر القيادة).
+// Commander ranks (مقر القيادة): the habits built across all dimensions each one needs
+// (the last one, all 8 × 8).
 export const COMMAND_RANKS = [
-  [1, 'جندي'], [3, 'عريف'], [5, 'رقيب'], [8, 'ملازم'], [11, 'نقيب'],
-  [15, 'رائد'], [20, 'عقيد'], [26, 'عميد'], [33, 'لواء'], [41, 'فريق'],
+  [0, 'جندي'], [3, 'عريف'], [8, 'رقيب'], [14, 'ملازم'], [20, 'نقيب'],
+  [28, 'رائد'], [36, 'عقيد'], [45, 'عميد'], [54, 'لواء'], [64, 'فريق'],
 ];
 
 // The dark king each dimension fights every week (Lucifer leads them all).

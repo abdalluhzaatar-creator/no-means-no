@@ -1,13 +1,11 @@
-// Old pirate-style war map of the eight dimensions (SVG), plus the canvas
+// Old pirate-style map of the eight dimensions (SVG), plus the canvas
 // texture used on the commander's table in 3D.
 
-// The fronts of this week's war (see engine warStatus).
+// Each dimension's state on the map (see engine dimStatus).
 export const WAR = {
-  coming:   { name: 'جبهة مسكّرة', icon: '🏴', color: '#6b5a44', desc: 'لم تُفتح هذه الجبهة بعد.' },
-  training: { name: 'تدريب', icon: '🌱', color: '#5f7a3a', desc: 'أول حرب بتبلّش السبت.' },
-  ahead:    { name: 'متقدّم', icon: '⚔️', color: '#2f7d4f', desc: 'على الطريق للفوز.' },
-  behind:   { name: 'متأخر', icon: '🔥', color: '#b8741a', desc: 'الملك متقدّم — بدك نجوم أكثر.' },
-  fallen:   { name: 'جبهة ساقطة', icon: '💀', color: '#2b2018', desc: '3 أيام صفر — حرب الأسبوع خسرانة.' },
+  coming:   { name: 'مسكّر', icon: '🔒', color: '#6b5a44', desc: 'بتفتحه برسالة الأحد.' },
+  building: { name: 'بيتبنى', icon: '🏗', color: '#2f7d4f', desc: 'فيه عادات، وفي مكان لعادات أكثر.' },
+  full:     { name: 'مكتمل', icon: '🏆', color: '#b8741a', desc: 'المباني الثمانية كلها انبنت.' },
 };
 
 // Landmark glyph per dimension, drawn in ink.
@@ -49,7 +47,7 @@ export function warMapSVG(places, hq) {
   const edge = 'M' + burn.map((p) => p.map((v) => v.toFixed(0)).join(' ')).join(' L') + 'Z';
   const coastD = coast(rand, 500, 360, 390, 260);
   return `
-<svg viewBox="0 0 ${W} ${H}" class="war-map" role="img" aria-label="خريطة الحرب" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 ${W} ${H}" class="war-map" role="img" aria-label="خريطة الأبعاد" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <radialGradient id="wm-paper" cx=".5" cy=".5" r=".75"><stop offset=".55" stop-color="#f1dfb4"/><stop offset=".9" stop-color="#d6b57a"/><stop offset="1" stop-color="#a47a3e"/></radialGradient>
     <filter id="wm-rough"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 .45  0 0 0 0 .3  0 0 0 0 .15  0 0 0 .18 0"/><feComposite in2="SourceGraphic" operator="in"/><feBlend in="SourceGraphic" mode="multiply"/></filter>
@@ -76,7 +74,7 @@ export function warMapSVG(places, hq) {
   <!-- sea monster & ship -->
   <g transform="translate(330 668) scale(.8)" fill="none" stroke="#6b4a24" stroke-width="2.4" opacity=".75"><path d="M0 0 q14 -26 28 0 q14 -26 28 0 q14 -26 28 0"/><circle cx="92" cy="-8" r="2" fill="#6b4a24"/></g>
   <g transform="translate(860 110)" stroke="#6b4a24" stroke-width="2" fill="none" opacity=".8"><path d="M-30 10 Q0 24 30 10 Z" fill="#c9a36a"/><path d="M0 10 V-30"/><path d="M0 -28 Q18 -16 0 -2" fill="#f6e7c4"/><path d="M0 -28 Q-16 -16 0 -2" fill="#f6e7c4"/></g>
-  <text x="500" y="52" text-anchor="middle" font-size="34" font-weight="800" fill="#4a2f14" style="letter-spacing:2px">خريطة الحرب</text>
+  <text x="500" y="52" text-anchor="middle" font-size="34" font-weight="800" fill="#4a2f14" style="letter-spacing:2px">خريطة الأبعاد</text>
   <!-- routes from headquarters -->
   ${places.filter((p) => p.status !== 'coming').map((p) => { const [x, y] = P(p.map); return `<path d="M${hqP[0]} ${hqP[1]} Q${(hqP[0] + x) / 2 + 40} ${(hqP[1] + y) / 2 - 40} ${x} ${y}" fill="none" stroke="#9b2c1f" stroke-width="3" stroke-dasharray="2 10" stroke-linecap="round"/>`; }).join('')}
   ${hq ? (() => { const a = onRing(1.13), b = onRing(0.97); return `
@@ -86,16 +84,15 @@ export function warMapSVG(places, hq) {
   ${hq ? `<g transform="translate(${hqP[0]} ${hqP[1]})" fill="none" stroke="#3a2412" stroke-width="2.5"><circle r="26" fill="#f6e7c4" stroke="#6b4a24"/>${GLYPH.hq}<text y="46" text-anchor="middle" font-size="17" font-weight="800" fill="#3a2412" stroke="none">مقر القيادة</text></g>` : ''}
   ${places.map((p) => {
     const [x, y] = P(p.map), w = WAR[p.status];
-    const X = p.status === 'fallen';
+    const X = false;
     return `
   <g class="wm-spot ${p.status}" data-war="${p.id}" transform="translate(${x.toFixed(0)} ${y.toFixed(0)})" tabindex="0" role="button" aria-label="${p.name}: ${w.name}">
-    ${p.status === 'behind' ? `<circle r="40" fill="#b3261e" opacity=".18"><animate attributeName="r" values="34;44;34" dur="1.6s" repeatCount="indefinite"/></circle>` : ''}
     <circle r="30" fill="${p.status === 'coming' ? '#d9c291' : '#f6e7c4'}" stroke="${w.color}" stroke-width="4" ${p.status === 'coming' ? 'stroke-dasharray="6 5"' : ''}/>
     <g fill="none" stroke="${p.status === 'coming' ? '#8a7457' : '#3a2412'}" stroke-width="2.4">${GLYPH[p.id] || ''}</g>
     ${X ? '<path d="M-24 -24 L24 24 M24 -24 L-24 24" stroke="#9b2c1f" stroke-width="7" stroke-linecap="round" opacity=".85"/>' : ''}
     <g transform="translate(24 -24)"><circle r="15" fill="${w.color}" stroke="#f6e7c4" stroke-width="2"/><text y="6" text-anchor="middle" font-size="16">${w.icon}</text></g>
     <text y="52" text-anchor="middle" font-size="18" font-weight="800" fill="#3a2412">${p.name}</text>
-    <text y="72" text-anchor="middle" font-size="14" font-weight="700" fill="${w.color}">${w.name}${p.war && !p.war.training ? ` · ⭐ ${p.war.total}/${p.war.need}` : ''}</text>
+    <text y="72" text-anchor="middle" font-size="14" font-weight="700" fill="${w.color}">${w.name}${p.status !== 'coming' ? ` · 🏗 ${p.habits}/8` : ''}</text>
   </g>`;
   }).join('')}
 </svg>`;

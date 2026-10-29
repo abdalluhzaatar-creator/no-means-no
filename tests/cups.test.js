@@ -4,7 +4,7 @@ import * as C from '../js/cups.js';
 let passed = 0;
 const t = (name, fn) => { fn(); passed++; console.log('✓', name); };
 const DAY = 86400000;
-const fresh = () => { const s = { keys: 0, stats: { activeDays: C.CUP_DAYS }, regions: { sanctuary: { level: 1 }, library: { level: 1 } } }; C.ensure(s); return s; };
+const fresh = () => { const s = { stats: { activeDays: C.CUP_DAYS }, regions: { sanctuary: { level: 1 }, library: { level: 1 } } }; C.ensure(s); return s; };
 
 t('stake is days in dinars, deducted from the wallet in dollars', () => {
   const s = fresh();
@@ -61,14 +61,16 @@ t('only the partner PIN judges; win returns the stake, loss keeps it with the pa
   assert.equal(s.cups.wallet, w);
 });
 
-t('channels are owned places; a won cup pays one key per 15 days', () => {
+t('channels are owned places; a won cup gives the stake back', () => {
   const s = fresh(); C.adjustWallet(s, 500);
   assert.equal(C.startChallenge(s, { channel: 'trophies-nope', cupId: 'stone', partner: 'a', pin: '1111' }).ok, false);
   delete s.regions.library;
   assert.equal(C.canOpenChannel(s, 'library').ok, false);
   const g = C.startChallenge(s, { channel: 'sanctuary', cupId: 'gold', partner: 'a', pin: '1111', now: 0 }).challenge;
+  const w = s.cups.wallet;
   assert.ok(C.judge(s, g.id, '1111', true, 45 * DAY).ok);
-  assert.equal(s.keys, 3);
+  assert.ok(s.cups.wallet > w);
+  assert.equal(s.keys, undefined, 'no keys any more');
 });
 
 console.log(`\n${passed} cup tests passed`);

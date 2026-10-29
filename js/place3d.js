@@ -11,6 +11,7 @@ import { DIM_SCENES, DIM_ENV } from './dims3d.js';
 import { placeAmbience } from './audio.js';
 import { createLucifer } from './lucifer3d.js';
 import { arm, unarm } from './heaven3d.js';
+import { habitHouses } from './habits3d.js';
 
 const heartTex = canvasTex(64, 64, (g) => { g.fillStyle = '#fff'; g.beginPath(); g.moveTo(32, 56); g.bezierCurveTo(-8, 30, 12, 0, 32, 18); g.bezierCurveTo(52, 0, 72, 30, 32, 56); g.fill(); });
 
@@ -26,7 +27,7 @@ function accessory(regionId, hero) {
   if (regionId === 'wealth') { add(hero.root.children[1], new THREE.SphereGeometry(0.09, 10, 8), m(0xd4a53a, { metalness: 0.9, roughness: 0.25 }), 0.2, 0.0, 0.2); }
 }
 
-export function mountPlace(container, { regionId, palette, rank, features = new Set(), sky: skyInfo, weather = 'clear', lucifer = null, onCharacter, onRanks }) {
+export function mountPlace(container, { regionId, palette, rank, features = new Set(), habits = [], sky: skyInfo, weather = 'clear', lucifer = null, onCharacter, onRanks, onHabit }) {
   let seed = 17; const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -54,6 +55,13 @@ export function mountPlace(container, { regionId, palette, rank, features = new 
   const [SX, SZ, SR] = place.stand;
   if (stand) { stand.root.position.set(SX, place.groundAt?.(SX, SZ) || 0, SZ); stand.root.rotation.y = SR; scene.add(stand.root); }
 
+  // The eight small buildings: one for every habit.
+  const houses = habitHouses(scene, {
+    blocked: place.blocked, groundAt: place.groundAt, spawn: [place.spawn[0], place.spawn[1]], center: [0, 0],
+    inside: (x, z) => Math.hypot(x, z) < (place.camR || 20) - 3, avoid: stand ? [[SX, SZ, 1.2]] : [],
+    color: '#f2ead8', roof: palette.accent, habits,
+  });
+
   // The character.
   const hero = buildWorshipper(palette);
   accessory(regionId, hero);
@@ -61,7 +69,7 @@ export function mountPlace(container, { regionId, palette, rank, features = new 
   let tier = rank?.current ?? 0;
   let cape = arm(hero, palette, false, tier);
   scene.add(hero.root);
-  const blocked = (x, z) => place.blocked(x, z) || (stand && Math.hypot(x - SX, z - SZ) < 1);
+  const blocked = (x, z) => place.blocked(x, z) || (stand && Math.hypot(x - SX, z - SZ) < 1) || houses.blocked(x, z);
   const walker = createWalker({ hero, camera, dom: renderer.domElement, container, blocked, dist: 12, height: 3 });
   if (place.groundAt) walker.setGround(place.groundAt);
   walker.teleport(...place.spawn);
@@ -97,7 +105,8 @@ export function mountPlace(container, { regionId, palette, rank, features = new 
     ptr.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.setFromCamera(ptr, camera);
     if (ray.intersectObject(hero.root, true).length) { if (!hero.busy()) hero.wave(); onCharacter?.(); return; }
-    if (stand && ray.intersectObject(stand.root, true).length) onRanks?.();
+    if (stand && ray.intersectObject(stand.root, true).length) { onRanks?.(); return; }
+    const h = houses.pick(ray); if (h) onHabit?.(h.id);
   });
 
   const resize = () => { const w = container.clientWidth, h = container.clientHeight; renderer.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix(); };
@@ -113,6 +122,7 @@ export function mountPlace(container, { regionId, palette, rank, features = new 
     const mv = walker.update(dt);
     hero.update(t, dt, mv.walk, mv.air);
     stand?.tick(t);
+    houses.tick(t);
     place.tick(t, dt, env.state, hero);
     luci?.tick(t, dt);
     env.tick(t, dt);
@@ -128,7 +138,7 @@ export function mountPlace(container, { regionId, palette, rank, features = new 
   tick();
 
   return {
-    update({ rank: r, features: f } = {}) { if (r) { stand?.update(r); if (r.current !== tier) { unarm(hero); tier = r.current; cape = arm(hero, palette, false, tier); } } if (f) { feats = f; showFeats(); } },
+    update({ rank: r, features: f, habits: hs } = {}) { if (hs) houses.update(hs); if (r) { stand?.update(r); if (r.current !== tier) { unarm(hero); tier = r.current; cape = arm(hero, palette, false, tier); } } if (f) { feats = f; showFeats(); } },
     pray() { if (!hero.busy()) hero.wave(); celebrate(); },
     react(kind) { luci?.react(kind); },
     setWeather(k) { env.setWeather(k); },

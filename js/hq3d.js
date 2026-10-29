@@ -827,7 +827,7 @@ export function mountHQ(container, { places, owned = [], weather = 'clear', hq, 
       if (cine.on) { caption.hidden = true; return; }
       if (shore.stairFoot(p) && !going && storyState.phase !== 'march') { runAscend(); return; }
       if (storyState.phase === 'march' && p.z - SZ < -11) { runSpyglass(); return; }
-      if (shore.nearShip(p)) { caption.hidden = false; caption.innerHTML = `<b>🚢 السفينة: ${shore.stage} من 12</b><span>${shore.stage >= 12 ? 'السفينة جاهزة… الإبحار لجزيرة القادة قريبًا.' : 'بتتبنى لحالها: كل 6 مهام بتنجزوها = قطعة جديدة.'}</span><i style="--v:${Math.round((shore.stage / 12) * 100)}%"></i>`; }
+      if (shore.nearShip(p)) { caption.hidden = false; caption.innerHTML = `<b>🚢 السفينة: ${shore.stage} من 12</b><span>${shore.stage >= 12 ? 'السفينة جاهزة… وجزيرة القادة فتحت.' : 'بتتبنى لحالها مع كل عادة بتبنيها. الأبعاد الـ8 × 8 عادات = السفينة جاهزة.'}</span><i style="--v:${Math.round((shore.stage / 12) * 100)}%"></i>`; }
       else caption.hidden = true;
     } else {
       const near = p.z > D.hl - 6 && Math.abs(p.x - DX) < 4;

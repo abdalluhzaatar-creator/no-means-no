@@ -126,23 +126,6 @@ t('a skipped day also resets the chain', () => {
   assert.equal(s.characters[W].perfectStreak, 1);
 });
 
-t('you start at Bronze 1; a key raises you to the next rank and adds its tasks', () => {
-  const s = setup();
-  assert.equal(E.rankName(s.characters[W]), 'برونز 1');
-  assert.ok(E.setRankPlan(s, W, 1, 'أذكار الصباح').ok);
-  assert.equal(E.levelUpCharacter(s, W).ok, false, 'no key yet');
-  s.keys = 1;
-  assert.equal(E.rankName(s.characters[W]), 'برونز 1', 'no automatic promotion');
-  const up = E.levelUpCharacter(s, W);
-  assert.ok(up.events.some((e) => e.type === 'rank' && e.rank === 'برونز 2'));
-  assert.equal(s.keys, 0, 'the key is spent');
-  assert.equal(E.activeTasks(def(), s.characters[W]).at(-1).title, 'أذكار الصباح');
-  s.keys = 1;
-  assert.equal(E.levelUpCharacter(s, W).ok, false, 'Bronze 3 has no tasks written yet');
-});
-
-// Play days a..b (January 2026; Jan 3 is a Saturday): fn(n) logs the day, then the day closes.
-function play(s, a, b, fn) { const reps = []; for (let n = a; n <= b; n++) { fn(n); reps.push(E.closeDays(s, day(n + 1))); } return reps; }
 const stars = (s, n, k) => {   // reach k stars on day n (prayer ×5 + Quran)
   const pr = task(s, 'الصلاة').id, q = task(s, 'صفحة قرآن').id;
   const plan = [[], [[pr, 4]], [[pr, 4], [q, 1]], [[pr, 5], [q, 1]]][k];
@@ -161,132 +144,10 @@ t('stars: ⭐ a third of the day, ⭐⭐ two thirds, ⭐⭐⭐ everything (a hab
   assert.equal(E.starsToday(one, W, day(1)), 3, 'one habit done = 3 stars');
 });
 
-t('wars run Saturday to Friday; the first needs 9 of 21 stars and pays a key and loot', () => {
-  const s = setup(); s.lastDay = day(3);
-  assert.equal(E.warStart(day(9)), day(3));
-  const reps = play(s, 3, 9, (n) => stars(s, n, 2));
-  const war = reps.at(-1).wars[0];
-  assert.ok(war.won); assert.equal(war.total, 14); assert.equal(war.need, 9);
-  assert.equal(s.keys, 1);
-  assert.ok(war.loot >= E.RULES.warLoot);
-  assert.equal(s.characters[W].war, null, 'Friday closes the war');
-});
-
-t('before its first Saturday a dimension trains: stars only, no war and no raids', () => {
-  const s = setup(); s.lastDay = day(6); s.shields = 0; s.gold = 1000;   // Tuesday
-  const reps = play(s, 6, 9, () => {});
-  assert.ok(reps.every((r) => !r.raids.length && r.stars.every((x) => x.training)));
-  assert.equal(s.gold, 1000); assert.equal(s.characters[W].war, null);
-  play(s, 10, 10, () => {});
-  assert.ok(s.characters[W].war, 'the war began on Saturday');
-});
-
-t('later wars need 12; a strong loss (¾ of it) gives half a key, two halves make a key', () => {
-  const s = setup(); s.lastDay = day(3);
-  play(s, 3, 9, (n) => stars(s, n, 3));
-  assert.equal(s.keys, 1);
-  let rep = play(s, 10, 16, (n) => stars(s, n, n <= 14 ? 1 : 2)).at(-1).wars[0];
-  assert.equal(rep.need, 12); assert.equal(rep.total, 9); assert.equal(rep.won, false); assert.equal(rep.key, 0.5);
-  assert.equal(s.keys, 1); assert.equal(s.keyHalves, 1);
-  play(s, 17, 23, (n) => stars(s, n, n <= 21 ? 1 : 2));
-  assert.equal(s.keys, 2, 'the second half completes a key');
-  rep = play(s, 24, 30, (n) => stars(s, n, 1)).at(-1).wars[0];
-  assert.equal(rep.key, 0, '7 stars is below ¾');
-});
-
-t('a shield turns a 0-star day into ⭐, once a week per dimension', () => {
-  const s = setup(); s.lastDay = day(3); s.shields = 2; s.gold = 1000;
-  const reps = play(s, 3, 4, () => {});
-  assert.equal(reps[0].shielded, 1); assert.equal(reps[0].raids.length, 0);
-  assert.equal(s.characters[W].war.stars[0], 1); assert.equal(s.characters[W].zeroRun, 1, 'the shielded day did not count as zero');
-  assert.equal(reps[1].shielded, 0, 'only once this week'); assert.equal(reps[1].raids.length, 1);
-  assert.equal(s.shields, 1);
-  play(s, 5, 10, () => {});
-  assert.equal(s.shields, 0, 'a new week, the shield works again');
-});
-
-t('a 0-star day with no shield brings one raid: 5% of the gold (at most 300) and 30 medals', () => {
-  const s = setup(); s.lastDay = day(3); s.shields = 0; s.gold = 1000; s.medals = 100;
-  const rep = E.closeDays(s, day(4));
-  assert.deepEqual(rep.raids, [{ date: day(3), gold: 50, medals: 30 }]);
-  assert.equal(s.gold, 950); assert.equal(s.medals, 70);
-  s.gold = 100000; E.closeDays(s, day(5));
-  assert.equal(s.gold, 100000 - 300, 'never more than 300');
-  s.gold = 0; E.closeDays(s, day(6)); assert.equal(s.gold, 0, 'never below zero');
-  s.keys = 1; assert.ok(E.buy(s, 'region', 'library').ok);
-  E.setHabit(s, 'scholar', 0, null, { title: 'قراءة', times: 1 });
-  E.activeTasks(E.findCharacter('scholar'), s.characters.scholar)[0].added = null;
-  s.gold = 1000; s.characters.scholar.war = { start: day(3), stars: [], first: true, fallen: false, shield: false };
-  assert.equal(E.closeDays(s, day(7)).raids.length, 1, 'one raid a day, however many fronts are at zero');
-});
-
-t('three 0-star days in a row in one dimension make its front fall: its week is lost', () => {
-  const s = setup(); s.lastDay = day(3); s.shields = 0;
-  const reps = play(s, 3, 9, (n) => (n >= 6 ? stars(s, n, 3) : null));
-  assert.deepEqual(reps[2].fallen, ['البعد الروحي']);
-  const war = reps.at(-1).wars[0];
-  assert.equal(war.total, 12); assert.equal(war.fallen, true); assert.equal(war.won, false); assert.equal(war.key, 0);
-});
-
-t('three lost wars in a row drop that dimension a rank (never below Bronze 1); its next win brings it back', () => {
-  const s = setup(); s.lastDay = day(3); s.shields = 0; s.keys = 1;
-  assert.ok(E.promoteWith(s, W, { title: 'ورد', times: 1 }).ok);
-  task(s, 'ورد').added = null;
-  const cmd = s.stats.keysEarned;
-  let reps = play(s, 3, 23, () => {});
-  assert.equal(reps.at(-1).dropped.length, 1);
-  assert.equal(E.rankName(s.characters[W]), 'برونز 1');
-  assert.deepEqual(E.activeTasks(def(), s.characters[W]).map((x) => x.title), ['الصلاة', 'صفحة قرآن']);
-  assert.equal(s.stats.keysEarned, cmd, 'the commander keeps every key he ever earned');
-  play(s, 24, 44, () => {});
-  assert.equal(E.rankName(s.characters[W]), 'برونز 1', 'never below Bronze 1');
-  reps = play(s, 45, 51, (n) => stars(s, n, 2));
-  assert.equal(reps.at(-1).restored.length, 1);
-  assert.equal(E.rankName(s.characters[W]), 'برونز 2', 'the rank and its habit are back');
-});
-
-t('medals climb the leagues; a new month pays the season prize', () => {
-  assert.equal(E.leagueOf(0).name, 'برونز'); assert.equal(E.leagueOf(1700).name, 'ذهب'); assert.equal(E.leagueOf(1e6).name, 'أسطورة');
-  const s = setup(); s.lastDay = day(24);
-  play(s, 24, 25, (n) => stars(s, n, 3));
-  assert.equal(s.medals, 60, '3 stars = 30 medals a day');
-  s.lastDay = day(31); stars(s, 31, 3);
-  const g = s.gold;
-  const rep = E.closeDays(s, '2026-02-01');
-  assert.deepEqual(rep.season, null, 'Jan 31 still belongs to January');
-  assert.deepEqual(E.closeDays(s, '2026-02-02').season, { league: 'برونز', gold: 100 });
-  assert.ok(s.gold >= g + 100 - E.RULES.raidMax);
-});
-
 t('an honest failure is counted, but only as a symbol', () => {
-  const s = setup(); const g = s.gold, sh = s.shields;
+  const s = setup(); const g = s.gold;
   E.reportTask(s, W, task(s, 'صفحة قرآن').id, false, { date: day(1) });
-  assert.equal(s.stats.honest, 1); assert.equal(s.gold, g); assert.equal(s.shields, sh);
-});
-
-t('shields are bought with gold, three at most', () => {
-  const s = E.newState(); s.gold = 1000;
-  assert.ok(E.buyShield(s).ok); assert.ok(E.buyShield(s).ok);
-  assert.equal(s.shields, 3); assert.equal(s.gold, 1000 - 2 * E.RULES.shieldCost);
-  assert.equal(E.buyShield(s).ok, false);
-});
-
-t('ranks go Bronze 1-3, Silver, Gold, Platinum', () => {
-  assert.deepEqual(def().stages.slice(1).map((x) => x.name), [
-    'برونز 1', 'برونز 2', 'برونز 3', 'فضّي 1', 'فضّي 2', 'فضّي 3',
-    'ذهبي 1', 'ذهبي 2', 'ذهبي 3', 'بلاتينيوم 1', 'بلاتينيوم 2', 'بلاتينيوم 3']);
-});
-
-t('the second place opens with a key (not gold) and brings its character', () => {
-  const s = E.newState();
-  s.gold = 10000;
-  assert.equal(E.mapVisibility(s, E.findRegion('library')), 'teaser');
-  assert.equal(E.buy(s, 'region', 'library').ok, false);
-  s.keys = 1;
-  assert.ok(E.buy(s, 'region', 'library').ok);
-  assert.equal(s.keys, 0);
-  assert.equal(s.gold, 10000);
-  assert.ok(s.characters.scholar);
+  assert.equal(s.stats.honest, 1); assert.equal(s.gold, g);
 });
 
 t('headquarters and the trophy island are visible from the start', () => {
@@ -302,7 +163,6 @@ t('cannot report a task that is not unlocked yet', () => {
 t('migrate v2 save: keeps gold/regions, restarts character levels', () => {
   const s = E.migrate({ version: 2, gold: 42, characters: { worshipper: { level: 4 } }, regions: { sanctuary: { level: 3 } } });
   assert.equal(s.gold, 42);
-  assert.equal(s.keys, 0);
   assert.equal(s.regions.sanctuary.level, 3);
   assert.equal(s.characters[W].level, 1);
   assert.equal(s.characters[W].stage, 0);
@@ -354,26 +214,6 @@ t('after midnight, Isha still belongs to the previous prayer day', () => {
   assert.equal(P.windowState(pd.windows.isha, now), 'open');
 });
 
-t('war map: coming → training → ahead / behind → fallen', () => {
-  const s = setup(); s.lastDay = day(1);
-  const lib = E.findRegion('library'), san = E.findRegion('sanctuary');
-  assert.equal(E.warStatus(s, lib).id, 'coming');
-  assert.equal(E.warStatus(s, san, day(1)).id, 'training', 'Thursday: the first war starts on Saturday');
-  assert.equal(E.warView(s, W, day(1)).inDays, 2);
-  E.closeDays(s, day(3));
-  assert.equal(E.road(s, W, day(3)).war.king, 'ملك الفراغ');
-  perfectDay(s, 3);
-  assert.equal(E.warStatus(s, san, day(3)).id, 'ahead');
-  s.shields = 0;
-  E.closeDays(s, day(4));
-  assert.equal(E.warStatus(s, san, day(4)).id, 'ahead', '3 stars by day 2 is on pace for 9');
-  E.closeDays(s, day(5));
-  assert.equal(E.warStatus(s, san, day(5)).id, 'behind');
-  E.closeDays(s, day(6));
-  assert.equal(E.warView(s, W, day(6)).zeroRun, 2);
-  E.closeDays(s, day(7));
-  assert.equal(E.warStatus(s, san, day(7)).id, 'fallen');
-});
 t('a written line naming a prayer is tied to that prayer time', () => {
   const s = E.newState();
   assert.equal(E.prayerIn('صلاة الضحى'), undefined);
@@ -384,29 +224,6 @@ t('a written line naming a prayer is tied to that prayer time', () => {
   assert.equal(E.activeTasks(def(), s.characters[W])[0].prayer, undefined, 'a task done several times a day is not tied to one prayer time');
 });
 
-t('habit picker: first habit, edit it, promotion adds the next habit for a key', () => {
-  const s = E.newState();
-  assert.ok(E.setHabit(s, W, 0, null, { title: 'الصلاة', times: 5 }).ok);
-  assert.equal(E.activeTasks(def(), s.characters[W]).length, 1);
-  const id = task(s, 'الصلاة').id;
-  assert.ok(E.setHabit(s, W, 0, id, { title: 'الصلاة', times: 1, icon: '🕯' }).ok);
-  assert.equal(task(s, 'الصلاة').id, id, 'same name keeps the task');
-  assert.equal(E.timesOf(task(s, 'الصلاة')), 5, 'the prayer is never less than five a day');
-  assert.ok(E.setHabit(s, W, 0, id, { title: 'الصلاة', times: 9 }).ok);
-  assert.equal(E.timesOf(task(s, 'الصلاة')), 5, 'and never more than five');
-  assert.equal(task(s, 'الصلاة').icon, '🕯', 'the player picks the icon');
-  assert.equal(E.road(s, W).canPromote, false, 'no key yet');
-  assert.equal(E.promoteWith(s, W, { title: 'ورد', times: 1 }).ok, false);
-  s.keys = 1;
-  assert.equal(E.promoteWith(s, W, { title: 'الصلاة', times: 1 }).ok, false, 'no duplicate habit');
-  assert.ok(E.promoteWith(s, W, { title: 'صفحة قرآن', times: 1 }).ok);
-  assert.equal(s.keys, 0);
-  assert.equal(E.rankName(s.characters[W]), 'برونز 2');
-  assert.deepEqual(E.activeTasks(def(), s.characters[W]).map((x) => x.title), ['الصلاة', 'صفحة قرآن']);
-  assert.ok(E.removeHabit(s, W, id).ok);
-  assert.equal(E.removeHabit(s, W, task(s, 'صفحة قرآن').id).ok, false, 'the last habit stays');
-});
-
 t('new dimensions start empty; old saves keep their preset tasks', () => {
   const s = E.newState(); s.characters.scholar = { stage: 0, level: 1 };
   assert.equal(E.activeTasks(E.findCharacter('scholar'), E.migrate(s).characters.scholar).length, 0);
@@ -414,35 +231,96 @@ t('new dimensions start empty; old saves keep their preset tasks', () => {
   assert.equal(E.activeTasks(E.findCharacter('scholar'), old.characters.scholar).length, 3);
 });
 
-t('test mode opens everything with keys and gold, upgrades nothing, and gives the real save back', () => {
-  const real = E.newState(); real.gold = 7; real.keys = 1;
-  assert.ok(E.setHabit(real, W, 0, null, { title: 'الصلاة', times: 5 }).ok);
-  const t2 = E.enterSandbox(real);
-  assert.equal(t2.keys, E.SANDBOX.keys); assert.equal(t2.gold, E.SANDBOX.gold);
-  assert.ok(Object.keys(t2.characters).length >= 8 && t2.regions.nature && t2.regions.hq);
-  assert.ok(Object.values(t2.characters).every((c) => E.totalLevel(c) === 1), 'every rank starts at Bronze 1');
-  t2.keys = 0; E.refillSandbox(t2); assert.equal(t2.keys, E.SANDBOX.keys);
-  const back = E.leaveSandbox(JSON.parse(JSON.stringify(t2)));
-  assert.equal(back.gold, 7); assert.equal(back.keys, 1); assert.equal(back.sandbox, undefined);
-  assert.equal(E.activeTasks(def(), back.characters[W])[0].title, 'الصلاة');
+
+t('eight ranks, one for every habit built: Bronze … Legend', () => {
+  assert.deepEqual(E.findCharacter('scholar').stages.slice(1).map((x) => x.name), ['برونز', 'فضّي', 'ذهبي', 'بلاتينيوم', 'كريستال', 'ماستر', 'بطل', 'أسطورة']);
+  assert.equal(E.RANK_COUNT, 8);
 });
 
-t('the story: after the speech Lucifer is jailed, the island shows (closed) and wars won build the ship', () => {
+// January 2026: the 4th, 11th and 18th are Sundays.
+const startOn = (n) => { const s = E.newState(); s.startDay = day(n); assert.ok(E.setHabit(s, W, 0, null, { title: 'الصلاة', times: 5 }).ok); return s; };
+
+t('the Sunday message comes on the first Sunday after the start, once', () => {
+  const s = startOn(7);
+  assert.equal(E.pendingOffer(s, day(10)), null, 'Saturday: nothing yet');
+  const o = E.pendingOffer(s, day(11));
+  assert.equal(o.sunday, day(11));
+  assert.deepEqual(o.build, [W]);
+  assert.equal(o.open.length, 7, 'the seven other dimensions can be opened');
+  assert.equal(E.pendingOffer(s, day(14))?.sunday, day(11), 'still waiting on Wednesday if not answered');
+  assert.ok(E.answerOffer(s, 'skip', {}, day(12)).ok);
+  assert.equal(E.pendingOffer(s, day(14)), null, '"not this week": nothing until next Sunday');
+  assert.equal(E.pendingOffer(s, day(18)).sunday, day(18));
+  assert.equal(E.pendingOffer(s, day(31)).sunday, day(25), 'Sundays missed do not pile up');
+  assert.equal(E.pendingOffer(startOn(4), day(4)), null, 'the starting Sunday itself does not count');
+});
+
+t('build a habit: a new building in that dimension and its rank rises by itself', () => {
+  const s = startOn(7);
+  assert.equal(E.answerOffer(s, 'build', { id: W, habit: { title: 'الصلاة' } }, day(11)).ok, false, 'no duplicate habit');
+  const r = E.answerOffer(s, 'build', { id: W, habit: { title: 'صفحة قرآن' } }, day(11));
+  assert.ok(r.events.some((e) => e.type === 'rank' && e.rank === 'فضّي'));
+  assert.deepEqual(E.activeTasks(def(), s.characters[W]).map((x) => x.title), ['الصلاة', 'صفحة قرآن']);
+  assert.equal(E.rankName(s.characters[W]), 'فضّي');
+  assert.equal(E.answerOffer(s, 'build', { id: W, habit: { title: 'ورد' } }, day(12)).ok, false, 'one choice a week');
+  for (let k = 3; k <= 8; k++) assert.ok(E.answerOffer(s, 'build', { id: W, habit: { title: `عادة ${k}` } }, day(11 + (k - 2) * 7)).ok);
+  assert.equal(E.rankName(s.characters[W]), 'أسطورة');
+  assert.deepEqual(E.pendingOffer(s, day(60)).build, [], 'eight buildings: full');
+});
+
+t('open a dimension: it opens with the habit the player picks', () => {
+  const s = startOn(7);
+  assert.equal(E.answerOffer(s, 'open', { id: 'library', habit: {} }, day(11)).ok, false, 'needs a habit');
+  assert.ok(E.answerOffer(s, 'open', { id: 'library', habit: { title: 'قراءة 10 صفحات' } }, day(11)).ok);
+  assert.ok(s.regions.library && s.characters.scholar);
+  assert.deepEqual(E.activeTasks(E.findCharacter('scholar'), s.characters.scholar).map((x) => x.title), ['قراءة 10 صفحات']);
+  assert.equal(E.dimStatus(s, E.findRegion('library')).habits, 1);
+  assert.equal(E.dimStatus(s, E.findRegion('body')).id, 'coming');
+  assert.equal(E.pendingOffer(s, day(18)).open.includes('library'), false);
+  assert.ok(E.pendingOffer(s, day(18)).build.includes('scholar'));
+});
+
+const DIMS = ['worshipper', 'scholar', 'athlete', 'empath', 'host', 'builder', 'merchant', 'keeper'];
+t('the ship grows with every habit built; all 64 = the island opens', () => {
+  const s = startOn(7);
+  assert.equal(E.mapVisibility(s, E.findRegion('leaders')), 'teaser', 'the island is on the map from the start');
+  assert.equal(E.habitsBuilt(s), 1); assert.equal(E.shipStage(s), 0); assert.equal(E.islandOpen(s), false);
+  for (const c of DIMS) {
+    s.characters[c] ||= { stage: 0, level: 1 };
+    for (let k = 0; k < 8; k++) if (E.activeTasks(E.findCharacter(c), s.characters[c]).length <= k) E.setRankPlan(s, c, k, [{ title: `${c} ${k}` }]);
+    s.characters[c].stage = 1; s.characters[c].level = 3;   // rank 8
+    s.regions[E.findCharacter(c).regionId] = { level: 1 };
+  }
+  assert.equal(E.habitsBuilt(s), 64); assert.equal(E.shipStage(s), E.SHIP.parts); assert.equal(E.islandOpen(s), true);
+  assert.equal(E.pendingOffer(s, day(60)), null, 'nothing left to build or open: no more messages');
+});
+
+t('the story: after the speech Lucifer is jailed; the cage is found empty at the end', () => {
   const s = setup();
-  const isle = E.findRegion('leaders');
-  assert.equal(E.mapVisibility(s, isle), 'hidden');
   assert.ok(E.finishSpeech(s).ok);
   assert.equal(s.story.jailed, true);
-  assert.equal(E.mapVisibility(s, isle), 'hidden', 'seen only through the spyglass');
-  E.storyStep(s, 'back');
-  assert.equal(E.mapVisibility(s, isle), 'teaser');
-  E.storyStep(s, 'done');
+  E.storyStep(s, 'back'); E.storyStep(s, 'done');
   assert.equal(s.story.jailed, false, 'he escaped');
-  assert.equal(E.buy(s, 'region', 'leaders').ok, false, 'the island is reached by ship only');
-  s.lastDay = day(3);
-  play(s, 3, 9, (d) => perfectDay(s, d));
-  assert.equal(E.shipStage(s), 1, 'a war won = one part');
-  assert.equal(E.migrate({ version: 4, story: { speech: true, ship: 17 } }).story.ship, 2, 'old saves keep their parts');
-  assert.equal(E.enterSandbox(s).regions.leaders, undefined);
+});
+
+t('old saves: keys, shields, medals and wars are gone; at most eight ranks', () => {
+  const m = E.migrate({ version: 5, planV: 2, keys: 3, shields: 2, medals: 400, characters: { worshipper: { stage: 2, level: 2, war: { start: day(3) }, wars: 4, plan: Array.from({ length: 12 }, (_, i) => [{ id: `t${i}`, title: `h${i}` }]) } } });
+  assert.equal(m.keys, undefined); assert.equal(m.shields, undefined); assert.equal(m.medals, undefined);
+  assert.equal(E.totalLevel(m.characters.worshipper), 8);
+  assert.equal(m.characters.worshipper.war, undefined);
+  assert.equal(E.activeTasks(def(), m.characters.worshipper).length, 8);
+  assert.ok(m.startDay);
+});
+
+t('test mode opens everything with gold and gives the real save back', () => {
+  const real = E.newState(); real.gold = 7;
+  assert.ok(E.setHabit(real, W, 0, null, { title: 'الصلاة', times: 5 }).ok);
+  const t2 = E.enterSandbox(real);
+  assert.equal(t2.gold, E.SANDBOX.gold);
+  assert.ok(Object.keys(t2.characters).length >= 8 && t2.regions.nature && t2.regions.hq);
+  assert.equal(t2.regions.leaders, undefined);
+  const back = E.leaveSandbox(JSON.parse(JSON.stringify(t2)));
+  assert.equal(back.gold, 7); assert.equal(back.sandbox, undefined);
+  assert.equal(E.activeTasks(def(), back.characters[W])[0].title, 'الصلاة');
 });
 console.log(`\n${passed} tests passed`);

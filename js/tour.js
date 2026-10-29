@@ -7,7 +7,7 @@
 const $ = (s) => document.querySelector(s);
 const label = (txt) => [...document.querySelectorAll('.w3-label')].find((e) => e.textContent.includes(txt));
 
-// ctx: { screen, state, modal (open?), hasHabit, warsBegun, fly(placeId) — brings a place into view }
+// ctx: { screen, state, modal (open?), hasHabit, fly(placeId) — brings a place into view }
 const STEPS = [
   { when: (c) => c.screen === 'world', target: () => label('الروحي'), fly: 'sanctuary',
     text: 'هاد عالمك 🗺 — اكبس على <b>البعد الروحي</b> وفوت عليه.', done: (c) => c.screen === 'character' },
@@ -15,27 +15,20 @@ const STEPS = [
     text: 'اختار <b>أول عادة</b> إلك (أو اكتب عادتك)، وبعدين اكبس <b>ثبّت المهمة ✔</b>.', done: (c) => c.hasHabit },
   { when: (c) => c.screen === 'character', target: () => $('[data-task-ok]') || $('.task-actions'),
     text: 'كل ما تعمل عادتك اكبس <b>أنجزت</b>. خلّصت كل عاداتك = <b>⭐⭐⭐</b> اليوم.', next: true },
-  { when: (c) => c.screen === 'character', target: () => $('.road'),
-    text: 'هاد <b>سطر الحرب ⚔</b>: كل سبت بتبلّش حرب ضد ملك هالبُعد. اجمع النجوم لحد الجمعة وبتربح <b>مفتاح 🗝</b>.', next: true },
-  { target: () => $('#shield-box'),
-    text: 'هاد <b>الدرع 🛡</b>: إذا خلص يوم بصفر نجوم، بيحوّله لنجمة وبيحميك من <b>غارة لوسيفر 😈</b>.', next: true },
-  { target: () => $('#keys-box'),
-    text: '<b>المفاتيح 🗝</b>: بتربحها بالحروب، وبتفتح فيها أبعاد جديدة وبترقّي رتبك.', next: true },
+  { target: () => $('#habits-box'),
+    text: 'هاد <b>عدّاد المباني 🏗</b>: كل بُعد فيه 8 مباني، وكل مبنى = عادة. لما تبنيهم كلهم بتجهز السفينة 🚢.', next: true },
+  { target: () => $('#habits-box'),
+    text: '<b>كل أحد</b> بتجيك <b>رسالة 📬</b>: ابني عادة جديدة، أو افتح بُعد جديد، أو "لا تستحق" وبيضل كل إشي زي ما هو.', next: true },
   { when: (c) => c.screen !== 'world', target: () => $('.nav-btn[data-screen="world"]'),
     text: 'هلأ ارجع <b>عالعالم</b>…', done: (c) => c.screen === 'world' || c.screen === 'hq' },
   { when: (c) => c.screen === 'world', target: () => label('القيادة'), fly: 'hq',
-    text: '…وفوت على <b>مقر القيادة</b>: هناك القائد، ورتب الأبعاد، وخريطة الحرب.', done: (c) => c.screen === 'hq' },
+    text: '…وفوت على <b>مقر القيادة</b>: هناك القائد، ورتب الأبعاد، وخريطة الأبعاد.', done: (c) => c.screen === 'hq' },
   { when: (c) => c.screen === 'hq', target: () => $('[data-war-map]'),
-    text: 'هاي <b>خريطة الحرب</b>: بتشوف فيها كل الجبهات ونجومها هالأسبوع. بالتوفيق يا قائد 🫡', next: true, last: true },
+    text: 'هاي <b>خريطة الأبعاد</b>: بتشوف فيها كل بُعد وكم مبنى فيه. بالتوفيق يا قائد 🫡', next: true, last: true },
 ];
 
 // One-time tips after the tour.
-const TIPS = [
-  { id: 'medals', when: (c) => c.warsBegun && $('#medals-box') && !$('#medals-box').hidden, target: () => $('#medals-box'),
-    text: '<b>الأوسمة 🎖</b>: كل نجمة بالحرب = 10. جمّعها وبتطلع بالدوري، وكل شهر في جائزة موسم.' },
-  { id: 'key', when: (c) => (c.state.keys || 0) > 0, target: () => $('#keys-box'),
-    text: 'معك <b>مفتاح 🗝</b>! افتح فيه بُعد جديد من العالم، أو روح للقائد ← <b>رتب الأبعاد</b> وترقّى.' },
-];
+const TIPS = [];
 
 export function createTour({ ctx, save, onFinish }) {
   const root = document.createElement('div'); root.className = 'coach'; root.hidden = true;

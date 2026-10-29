@@ -1,7 +1,7 @@
 // UI layer: renders screens from state, calls engine actions, saves, plays effects.
 import { CHARACTERS, REGIONS, CUPS, JOD_TO_USD, RANKS, COMMAND_RANKS, SUGGEST, KINGS } from './content.js';
 import * as C from './cups.js';
-import { commander, KEYS_PER_RANK } from './hq.js';
+import { commander } from './hq.js';
 import { warMapSVG, WAR } from './warmap.js';
 import * as E from './engine.js';
 import { createStorage } from './storage.js';
@@ -67,14 +67,15 @@ async function loadGame() {
   if (state.tour == null) { state.tour = raw && CHARACTERS.some((c) => state.characters[c.id] && E.activeTasks(c, state.characters[c.id]).length) ? 'done' : 0; scheduleSave(); }
   tour?.dispose();
   tour = createTour({
-    ctx: () => ({ screen, state, modal: !$('#modal').hidden, warsBegun: warsBegun(), fly: (id) => disposeWorld?.flyTo?.(id),
+    ctx: () => ({ screen, state, modal: !$('#modal').hidden, fly: (id) => disposeWorld?.flyTo?.(id),
       hasHabit: !!currentChar && !!state.characters[currentChar] && E.activeTasks(E.findCharacter(currentChar), state.characters[currentChar]).length > 0 }),
     save: scheduleSave,
-    onFinish: () => FX.banner('🫡 جاهز يا قائد', 'خلّص عاداتك كل يوم — والسبت بتبلّش أول حرب.', '🫡'),
+    onFinish: () => FX.banner('🫡 جاهز يا قائد', 'خلّص عاداتك كل يوم — والأحد بتجيك أول رسالة 📬.', '🫡'),
   });
   // The rules changed (v4): show them once.
   // The rules changed (v5: stars and weekly wars): show them once to players who knew the old ones.
-  if (raw && (state.seenRules || 0) < 5) { state.seenRules = 5; scheduleSave(); rulesPending = true; setTimeout(() => { if ($('#modal').hidden && rulesPending) { rulesPending = false; showRules(); } }, 900); }
+  if (raw && (state.seenRules || 0) < 6) { state.seenRules = 6; scheduleSave(); setTimeout(() => { if ($('#modal').hidden) showRules(); }, 900); }
+  setTimeout(maybeOffer, 1200);
 }
 
 function showLogin() {
@@ -136,12 +137,8 @@ function render() {
   checkCommander();
   syncSound();
   $('#gold').textContent = state.gold;
-  $('#keys').textContent = state.keys + (state.keyHalves ? '½' : '');
-  $('#shields').textContent = state.shields || 0;
-  const lg = E.leagueOf(state.medals), mb = $('#medals-box');
-  mb.hidden = !warsBegun();   // the league shows once the first war has begun
-  $('#medals').innerHTML = `${state.medals || 0}<span class="lg-name"> · ${esc(lg.name)}</span>`;
-  mb.style.setProperty('--lg', lg.color);
+  $('#habits').innerHTML = `<bdi>${E.habitsBuilt(state)}/${E.HABITS_ALL()}</bdi>`;
+  $('#offer-box').hidden = !E.pendingOffer(state, dayFor());
   const navScreen = screen === 'character' ? 'world' : screen;
   document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.screen === navScreen));
   document.body.classList.toggle('in-scene', (screen === 'character' && sceneFor(currentChar)) || screen === 'trophies' || screen === 'hq');
@@ -188,109 +185,82 @@ const noonOf = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12);
 const prayerNow = () => (state.location ? prayerDay(noonOf(new Date(Date.now() - E.RULES.dayEnds * 3600000)), state.location) : null);
 const dayFor = () => E.today();
 
-// Any war fought or under way (the league and the war map show from then on).
-const warsBegun = () => Object.values(state.characters || {}).some((ch) => ch.war || ch.wars > 0);
 const starTxt = (n) => (n ? '⭐'.repeat(n) : '✖');
 
-// When the game day closes (3 at night) every dimension banks its stars into its
-// war; a zero day uses a shield or brings Lucifer's raid; Friday ends the wars.
+// When the game day closes (3 at night) every dimension's stars for the day are counted
+// and the habits left undone are marked missed. In the morning: yesterday's stars.
 function closeDays() {
   const before = state.lastDay;
   const rep = E.closeDays(state);
   if (state.lastDay !== before) scheduleSave();
   if (!rep.days) return;
-  const big = rep.wars.length || rep.raids.length || rep.fallen.length || rep.dropped.length || rep.restored.length || rep.season || rep.started.length;
-  const after = () => { if (big) showNightReport(rep); };
-  // The night attack of the last day closed (its result is kept so it can be watched again).
-  const lastDate = rep.stars.at(-1)?.date, fights = rep.stars.filter((x) => x.date === lastDate);
-  if (!fights.length) { if (big) setTimeout(after, 600); return; }
-  state.lastAttack = { date: lastDate, fights, raid: rep.raids.find((r) => r.date === lastDate) || null };
-  scheduleSave();
-  setTimeout(() => showAttack(state.lastAttack, after), 400);
+  const lastDate = rep.stars.at(-1)?.date, last = rep.stars.filter((x) => x.date === lastDate);
+  if (last.length) setTimeout(() => FX.banner('🌙 نجوم مبارح', last.map((x) => `${x.name} ${starTxt(x.stars)}`).join(' · '), '⭐'), 500);
+  setTimeout(maybeOffer, 1500);
 }
-// The 3D night attack (loaded the first time it plays). Each warrior wears the armour of their rank.
-async function showAttack(data, then) {
-  if (!data) return then?.();
-  try {
-    const { playAttack } = await import('./attack.js');
-    const shown = playAttack({ ...data, shields: state.shields }, {
-      warrior: (id) => { const c = E.findCharacter(id), ch = state.characters[id]; return { palette: c.palette, tier: ch ? E.totalLevel(ch) - 1 : 0 }; },
-      sfx: SND.sfx, onDone: then,
-    });
-    if (!shown) then?.();
-  } catch (err) { console.warn('attack scene unavailable', err); then?.(); }
-}
-function showNightReport(rep) {
-  const lastDate = rep.stars.at(-1)?.date;
-  const last = rep.stars.filter((x) => x.date === lastDate);
-  const raid = rep.raids.reduce((a, x) => ({ gold: a.gold + x.gold, medals: a.medals + x.medals }), { gold: 0, medals: 0 });
-  const li = (ic, b, sm = '') => `<li><span>${ic}</span><div><b>${b}</b>${sm ? `<small>${sm}</small>` : ''}</div></li>`;
-  modal(`<div class="keyuse">
-    <div class="keyuse-icon">🌙</div>
-    <h2>تقرير الليلة</h2>
-    ${last.length ? `<p class="night-stars">${last.map((x) => `<span>${esc(x.name)} <b>${starTxt(x.stars)}</b></span>`).join('')}</p>` : ''}
-    <ul class="keyuse-list">
-      ${rep.started.map((x) => li('⚔', `${esc(x.name)}: بلّشت أول حرب ضد ${esc(x.king)}`, `من السبت للجمعة. ${E.RULES.firstWarWin} نجوم وبتربح مفتاح 🗝.`)).join('')}
-      ${rep.wars.map((w) => w.won
-        ? li('🏆', `${esc(w.name)}: انتصرت على ${esc(w.king)} — ${w.total}/${w.need} ⭐`, `🗝 مفتاح + ${w.loot} 🪙${state.story?.speech ? ' + قطعة بالسفينة 🚢' : ''}`)
-        : li(w.fallen ? '⚫' : '🏳', `${esc(w.name)}: خسرت أمام ${esc(w.king)} — ${w.total}/${w.need} ⭐`, w.key ? 'قرّبت كثير: أخذت نص مفتاح 🗝½.' : w.fallen ? 'الجبهة سقطت بعد 3 أيام صفر.' : 'الأسبوع الجاي حرب جديدة.')).join('')}
-      ${rep.restored.map((x) => li('⬆', `رجعت الرتبة: ${esc(x)}`, 'الفوز رجّعلك رتبتك وعادتها.')).join('')}
-      ${rep.dropped.map((x) => li('⬇', `نزلت رتبة: ${esc(x)}`, `${E.RULES.dropAfter} حروب خسارة ورا بعض. أول حرب بتربحها بترجّعها.`)).join('')}
-      ${rep.fallen.map((x) => li('⚫', `سقطت جبهة ${esc(x)}`, '3 أيام صفر ورا بعض — حرب هالأسبوع خسرانة.')).join('')}
-      ${rep.shielded ? li('🛡', `الدرع حوّل ${rep.shielded > 1 ? rep.shielded + ' أيام صفر' : 'يوم صفر'} لنجمة`, `ضايل معك ${state.shields || 0} 🛡`) : ''}
-      ${raid.gold || raid.medals ? li('😈', `غارة لوسيفر: −${raid.gold} 🪙 و −${raid.medals} 🎖`, 'يوم بصفر نجوم بيفتحله الباب.') : ''}
-      ${rep.season ? li('🏆', `جائزة الموسم — دوري ${esc(rep.season.league)}`, `+${rep.season.gold} 🪙`) : ''}
-    </ul>
-    ${rep.wars.length ? '<p class="luci-quote">😈 «أنا ما بخاف إنك تخسر حرب… بخاف إنك تكذب على حالك وتسمّيها انتصار.»</p>' : ''}
-    <div class="row wrap"><button class="btn primary" id="nr-ok">ماشي</button><button class="btn ghost" id="nr-attack">⚔ الهجوم مرة ثانية</button><button class="btn ghost" id="nr-rules">📜 القوانين</button></div>
-  </div>`);
-  $('#nr-attack').hidden = !state.lastAttack;
-  $('#nr-attack').onclick = () => { closeModal(); showAttack(state.lastAttack, () => showNightReport(rep)); };
-  $('#nr-ok').onclick = () => { closeModal(); if (rulesPending) { rulesPending = false; showRules(); } };
-  $('#nr-rules').onclick = () => { rulesPending = false; showRules(); };
-}
-let rulesPending = false;   // the new rules wait for the night report to close
 
-// The rules of the game, short and plain. Shields are bought here.
+// ---------- The Sunday message ----------
+// Every Sunday: build a habit (a new building) · open a new dimension · not this week.
+function maybeOffer() {
+  if (!state || !$('#modal').hidden || !E.pendingOffer(state, dayFor())) return;
+  showOffer();
+}
+function showOffer() {
+  const o = E.pendingOffer(state, dayFor());
+  if (!o) return FX.toast('ما في رسالة هالأسبوع');
+  modal(`<div class="offer">
+    <div class="keyuse-icon">📬</div>
+    <h2>رسالة الأحد</h2>
+    <p class="muted">أسبوع جديد. شو بدك تعمل هالأسبوع؟</p>
+    <div class="offer-choices">
+      <button class="offer-btn build" data-offer="build" ${o.build.length ? '' : 'disabled'}><span>🏗</span><b>ابني عادة</b><small>${o.build.length ? 'مبنى جديد = عادة جديدة، وبتترقّى رتبة البعد' : 'كل الأبعاد المفتوحة مليانة (8 عادات)'}</small></button>
+      <button class="offer-btn open" data-offer="open" ${o.open.length ? '' : 'disabled'}><span>🔓</span><b>افتح بعد جديد</b><small>${o.open.length ? `باقي ${o.open.length} أبعاد مسكّرة` : 'كل الأبعاد مفتوحة'}</small></button>
+      <button class="offer-btn skip" data-offer="skip"><span>🙅</span><b>لا تستحق</b><small>كل إشي بيضل زي ما هو لحد الأحد الجاي</small></button>
+    </div>
+  </div>`, { theme: 'game' });
+  document.querySelectorAll('[data-offer]').forEach((b) => (b.onclick = () => {
+    const k = b.dataset.offer;
+    if (k === 'skip') return ask('متأكد؟ هالأسبوع ما رح تبني ولا تفتح إشي.', () => { const r = act(E.answerOffer(state, 'skip', {}, dayFor())); if (r.ok) FX.toast('تمام — بنشوفك الأحد الجاي 📬'); });
+    if (k === 'build') return o.build.length === 1 ? pickHabit(o.build[0], { mode: 'build' }) : chooseDim('build', o.build);
+    chooseDim('open', o.open);
+  }));
+}
+// Which dimension: to build in (open ones with room) or to open (closed ones).
+function chooseDim(kind, ids) {
+  const regs = kind === 'build' ? ids.map((id) => E.findRegion(E.findCharacter(id).regionId)) : ids.map((id) => E.findRegion(id));
+  modal(`<div class="offer">
+    <h2>${kind === 'build' ? '🏗 وين بدك تبني؟' : '🔓 أي بعد بدك تفتح؟'}</h2>
+    <div class="dims pick">${regs.map((r) => {
+      const c = E.findCharacter(r.characterId), ch = state.characters[c.id], n = ch ? E.activeTasks(c, ch).length : 0;
+      return `<button class="dim pickable" data-pick-dim="${kind === 'build' ? c.id : r.id}">${regionSVG(r, kind === 'build' ? E.regionFeatures(state, r.id) : new Set(), '')}<b>${esc(r.name)}</b><small>${kind === 'build' ? `🏗 ${n}/8 · ${esc(E.rankName(ch))}` : esc(c.name)}</small></button>`;
+    }).join('')}</div>
+    <button class="btn ghost" id="offer-back">← رجوع</button>
+  </div>`, { theme: 'game' });
+  $('#offer-back').onclick = showOffer;
+  document.querySelectorAll('[data-pick-dim]').forEach((b) => (b.onclick = () => (kind === 'build' ? pickHabit(b.dataset.pickDim, { mode: 'build' }) : pickHabit(E.findRegion(b.dataset.pickDim).characterId, { mode: 'open', regionId: b.dataset.pickDim }))));
+}
+
+// The rules, short and plain.
 function showRules() {
-  const R = E.RULES, full = (state.shields || 0) >= R.maxShields;
+  const R = E.RULES;
   const li = (ic, b, sm = '') => `<li><span>${ic}</span><div><b>${b}</b>${sm ? `<small>${sm}</small>` : ''}</div></li>`;
   modal(`<div class="keyuse">
     <div class="keyuse-icon">📜</div>
     <h2>قوانين اللعبة</h2>
-    <p class="muted">كل يوم هجوم، كل أسبوع حرب، كل شهر دوري.</p>
     <ul class="keyuse-list rules">
-      ${li('⭐', 'كل يوم كل بُعد بيهاجم ملكه', 'ثلث عاداتك = ⭐ · ثلثينها = ⭐⭐ · كلها = ⭐⭐⭐. العادة اللي بتتكرر بتنحسب بقديش خلصت منها (الصلاة 4 من 5 = 80%).')}
-      ${li('✔', `خلّصت عادة = +${R.reward} 🪙`)}
+      ${li('🏗', 'كل بُعد فيه 8 مباني صغيرة', 'كل مبنى = عادة يومية. 8 عادات = 8 رتب.')}
+      ${li('☪', 'بتبلّش بالبعد الروحي وعادة وحدة')}
+      ${li('📬', 'كل أحد بتجيك رسالة', 'ابني عادة · افتح بعد جديد · لا تستحق (كل إشي بيضل زي ما هو لأسبوع).')}
+      ${li('🎖', 'الرتب بتطلع لحالها', 'كل عادة جديدة بتبنيها بتطلّع رتبة البُعد، والقائد بيترقّى مع كل العادات.')}
+      ${li('⭐', 'كل يوم نجوم لكل بُعد', 'ثلث عاداتك = ⭐ · ثلثينها = ⭐⭐ · كلها = ⭐⭐⭐.')}
+      ${li('✔', `خلّصت عادة = +${R.reward} 🪙`, 'والذهب بتزيّن فيه أماكن الأبعاد.')}
       ${li('🌙', `اليوم بيخلص الساعة ${R.dayEnds} بالليل`, 'مش الساعة 12.')}
-      ${li('⚔', 'كل أسبوع حرب: من السبت للجمعة', `كل بُعد ضد ملكه لحاله. ${R.warWin} من 21 نجمة = فوز (أول حرب ${R.firstWarWin}): 🗝 مفتاح + غنيمة ذهب.`)}
-      ${li('½', 'قرّبت؟ نص مفتاح 🗝', 'إذا جبت ثلاث أرباع النجوم المطلوبة. نصّين = مفتاح.')}
-      ${li('😈', 'يوم بصفر نجوم = غارة لوسيفر', `${Math.round(R.raidPct * 100)}% من ذهبك (${R.raidMax} بالأكثر) و${R.raidMedals} 🎖. غارة وحدة باليوم.`)}
-      ${li('🛡', 'الدرع بيحوّل يوم الصفر لنجمة', `مرة بالأسبوع لكل بُعد، وبينصرف لحاله. سعره ${R.shieldCost} 🪙، ومعك ${R.maxShields} بالأكثر.`)}
-      ${li('⚫', `${R.fallAfter} أيام صفر ورا بعض = الجبهة بتسقط`, 'حرب هاد البُعد هالأسبوع بتنحسب خسارة.')}
-      ${li('⬇', `${R.dropAfter} حروب خسارة ورا بعض = البُعد بينزل رتبة`, 'وأول حرب بتربحها بترجّعلك الرتبة وعادتها. ما في نزول تحت برونز 1.')}
-      ${li('🫡', `كل ${KEYS_PER_RANK} مفاتيح = القائد بيترقّى`, 'ورتبة القائد ما بتنزل أبدًا.')}
-      ${li('🎖', 'الأوسمة والدوري', `كل نجمة بالحرب = ${R.medalsPerStar} 🎖. الدوري الأعلى بيزيد غنيمة الحروب، وكل شهر في جائزة موسم.`)}
-      ${li('🌱', 'بُعد جديد بيتدرّب لأول سبت', 'نجوم بس — بلا حرب ولا غارات. والعادة الجديدة بتنحسب من بكرا.')}
-      ${li('🚢', 'بعد الخطاب: كل حرب بتربحها = قطعة بالسفينة')}
+      ${li('🚢', 'السفينة بتتبنى مع كل عادة', `لما تفتح الأبعاد الـ8 وتبني بكل واحد 8 عادات (${E.HABITS_ALL()}) بتجهز السفينة وبتفتح جزيرة القادة.`)}
       ${li('🤍', 'الصدق', 'سجّل فشلك بصدق. النجوم ما إلها قيمة إذا ما كانت حقيقية.')}
     </ul>
-    <p>معك <b>🛡 ${state.shields || 0}</b> من ${R.maxShields}.</p>
-    <button class="btn primary big" id="buy-shield" ${full || state.gold < R.shieldCost ? 'disabled' : ''}>${full ? '🛡 الدروع مليانة' : `🛡 اشتري درع — ${R.shieldCost} 🪙`}</button>
+    <button class="btn primary big" id="rules-ok">تمام</button>
   </div>`);
-  $('#buy-shield').onclick = (e) => { const r = act(E.buyShield(state), e.currentTarget); if (r.ok) { FX.toast('🛡 صار معك درع جديد'); showRules(); } };
-}
-
-// The league: medals, the ladder and the season prize.
-function showLeague() {
-  const lg = E.leagueOf(state.medals);
-  modal(`<div class="keyuse">
-    <div class="keyuse-icon">🎖</div>
-    <h2>دوري ${esc(lg.name)}</h2>
-    <p>معك <b>${state.medals || 0} 🎖</b>${lg.next ? ` — باقي <b>${lg.next.min - (state.medals || 0)}</b> لدوري ${esc(lg.next.name)}` : ' — أعلى دوري 🏆'}.</p>
-    <ol class="path">${E.LEAGUES.map((l, i) => `<li class="${i < lg.index ? 'done' : i === lg.index ? 'current' : ''}" style="--rank:${l.color}"><b class="rk">${esc(l.name)}</b><span>${l.min} 🎖 · غنيمة +${i * 10}% · موسم ${100 * (i + 1)} 🪙</span></li>`).join('')}</ol>
-    <p class="muted">كل نجمة بالحرب = ${E.RULES.medalsPerStar} 🎖، وغارة لوسيفر بتاخذ ${E.RULES.raidMedals}. جائزة الموسم بتنزل أول كل شهر.</p>
-  </div>`);
+  $('#rules-ok').onclick = () => { closeModal(); setTimeout(maybeOffer, 300); };
 }
 
 // A task tied to a prayer time can't count before that prayer's time begins.
@@ -417,25 +387,23 @@ function openSpot(id) {
   const def = E.findRegion(id);
   if (def.kind === 'trophies') return go('trophies');
   if (def.kind === 'hq') return go('hq');
-  if (def.kind === 'leaders') {
-    const st = E.shipStage(state);
-    modal(`<div class="keyuse"><div class="keyuse-icon">🏝</div><h2>${def.name}</h2><p class="muted">${def.desc}</p>
-      <h3 class="keyuse-title">🚢 السفينة: ${st} من ${E.SHIP.parts}</h3>${bar(st, E.SHIP.parts, 'كل ' + E.SHIP.per + ' أيام كاملة = قطعة جديدة')}
-      <p class="muted">السفينة على الشط تحت قاعة المحاربين. ${st >= E.SHIP.parts ? 'السفينة جاهزة… الإبحار قريبًا.' : 'أكملوا بناءها.'}</p></div>`);
-    return;
-  }
+  if (def.kind === 'leaders') return showIsland();
   if (state.regions[id]) return enter(def.characterId);
-  const st = E.shopStatus(state, 'region', def);
-  const c = E.findCharacter(def.characterId);
+  const c = E.findCharacter(def.characterId), o = E.pendingOffer(state, dayFor());
   modal(`
     <div class="region-full">${regionSVG(def, new Set(), '', { locked: true })}</div>
     <h2>${def.name}</h2>
     <p class="muted">${def.desc}</p>
-    <p>لفتح هذا المكان تحتاج <b>${E.costText(def.cost)}</b>${c ? ` — وستنضم إليك شخصية <b>${c.name}</b>.` : '.'}</p>
-    ${st.conditions.length ? `<ul class="conds">${st.conditions.map((x) => `<li class="${x.met ? 'met' : ''}">${x.met ? '✔' : '○'} ${esc(x.label)} <small>(${x.current}/${x.target})</small></li>`).join('')}</ul>` : ''}
-    <button class="btn primary" id="open-place" ${st.canBuy ? '' : 'disabled'}>
-      ${st.canBuy ? `افتح المكان — ${E.costText(def.cost)}` : !st.conditionsMet ? 'الشروط غير مكتملة' : def.cost?.keys ? 'تحتاج مفتاحًا — اربح حرب أسبوعية ⚔' : 'ذهب غير كافٍ'}</button>`);
-  $('#open-place').onclick = (e) => { const r = act(E.buy(state, 'region', id), e.currentTarget); if (r.ok) closeModal(); };
+    <p>🔒 مسكّر. بتفتحه من <b>رسالة الأحد 📬</b>${c ? `، ومعه بتنضم إليك شخصية <b>${c.name}</b> وأول عادة إلها` : ''}.</p>
+    ${o?.open.includes(id) ? `<button class="btn primary" id="open-place">📬 افتحه هالأسبوع</button>` : ''}`);
+  if ($('#open-place')) $('#open-place').onclick = () => pickHabit(def.characterId, { mode: 'open', regionId: id });
+}
+// The Island of Leaders: on the map from the start; the ship takes you there once ready.
+function showIsland() {
+  const def = E.findRegion('leaders'), n = E.habitsBuilt(state), all = E.HABITS_ALL(), st = E.shipStage(state), open = E.islandOpen(state);
+  modal(`<div class="keyuse"><div class="keyuse-icon">🏝</div><h2>${def.name}</h2><p class="muted">${def.desc}</p>
+    <h3 class="keyuse-title">🚢 السفينة: ${st} من ${E.SHIP.parts}</h3>${bar(n, all, 'كل عادة بتبنيها = خطوة بالسفينة')}
+    <p class="muted">${open ? '🎉 السفينة جاهزة والجزيرة فتحت!' : `السفينة بتجهز لما تفتح الأبعاد الـ8 وتبني بكل واحد 8 عادات. باقي ${all - n} عادة.`}</p></div>`);
 }
 
 // Visual growth of the character art follows overall progress (stage × 5 + level).
@@ -457,23 +425,23 @@ function progressionPanel(c, ch) {
   return `
   <section class="card">
     <div class="row between"><h3>🎖 الرتب</h3><button class="rank" data-ranks="${c.id}" title="اعرض كل الرتب" style="--rank:${E.rankColor(ch)}">${esc(E.rankName(ch))} ▾</button></div>
-    <p class="muted small-text">كل رتبة بتجيب عادة جديدة بتختارها لما تترقّى.</p>
+    <p class="muted small-text">كل عادة جديدة بتبنيها (من رسالة الأحد) بتطلّعك رتبة لحالها.</p>
     <ol class="path">${ladder.map((r, i) => {
       const n = i + 1, cls = n < cur ? 'done' : n === cur ? 'current' : '';
       const what = r.adds.length ? r.adds.map((a) => (n === 1 ? '' : '+ ') + a.title + (E.timesOf(a) > 1 ? ` ×${E.timesOf(a)}` : '')).join('، ') : n > cur ? 'عادة جديدة بتختارها' : '—';
       const unlock = n === cur + 1
-        ? `<button class="btn small ${state.keys ? 'primary' : ''}" data-promote="${c.id}" ${state.keys ? '' : 'disabled'} title="يحتاج مفتاحًا">🗝 1 افتح</button>` : '';
+        ? '<small class="muted">📬 من رسالة الأحد</small>' : '';
       return `<li class="${cls}" style="--rank:${r.color}"><b class="rk">${esc(r.name)}</b><span>${esc(what)}</span>${unlock}</li>`;
     }).join('')}</ol>
-    ${warLine(c.id)}
-    <p class="muted small-text">كل أسبوع حرب: ${E.RULES.warWin} نجمة من 21 = مفتاح 🗝، وبالمفتاح ترفع رتبتك أو تفتح بُعد.</p>
+    ${dimLine(c.id)}
   </section>`;
 }
 
 // The habit picker — one clear screen: pick a ready habit (or write your own),
 // rename it and give it an icon, choose how many times a day, see what it leads to.
-//   mode 'first'   : the dimension's first habit (Bronze 1)
-//   mode 'promote' : spend a key → next rank + the new habit it brings
+//   mode 'first'   : the spiritual dimension's first habit (at the start)
+//   mode 'build'   : the Sunday message — a new habit (a new building) in this dimension
+//   mode 'open'    : the Sunday message — open this dimension (regionId) with its first habit
 //   mode 'edit'    : change one of today's habits (taskId)
 // Icons: the dimension's own first, then general ones for any habit.
 const DIM_ICONS = {
@@ -490,21 +458,23 @@ const ICONS = ['⭐', '🔥', '✅', '🎯', '⏰', '📵', '🚭', '☕', '🍎
 const PRAYER_LABELS = ['الفجر', 'الظهر', 'العصر', 'المغرب', 'العشاء'];
 const DIM_ICON = { worshipper: '☪', scholar: '📚', athlete: '🏋', empath: '🕊', host: '🤝', builder: '🛠', merchant: '🪙', keeper: '🌳' };
 const taskIcon = (charId, t) => t.icon || (SUGGEST[charId] || []).find(([, x]) => x === t.title)?.[0] || DIM_ICON[charId] || '⭐';
-function pickHabit(id, { mode = 'first', taskId = null } = {}) {
+function pickHabit(id, { mode = 'first', taskId = null, regionId = null } = {}) {
   const c = E.findCharacter(id), ch = state.characters[id];
   const rd = E.road(state, id);
   const plan = E.planOf(c, ch);
   const editing = mode === 'edit' ? E.activeTasks(c, ch).find((t) => t.id === taskId) : null;
-  const rankIndex = mode === 'promote' ? E.totalLevel(ch) : mode === 'edit' ? plan.findIndex((r) => r.some((t) => t.id === taskId)) : E.totalLevel(ch) - 1;
+  const rankIndex = mode === 'edit' ? plan.findIndex((r) => r.some((t) => t.id === taskId)) : ch ? E.totalLevel(ch) - 1 : 0;
   const have = new Set(E.activeTasks(c, ch).map((t) => t.title).filter((t) => t !== editing?.title));
   const ideas = (SUGGEST[id] || []).filter(([, t]) => !have.has(t));
   // What is being built: { from: suggestion title | 'own', title, icon, times }
   const cur = editing
     ? { from: ideas.some(([, t]) => t === editing.title) ? editing.title : 'own', title: editing.title, icon: taskIcon(id, editing), times: E.timesOf(editing) }
     : { from: null, title: '', icon: '', times: 1 };
-  const head = mode === 'promote' ? { k: `ترقية لـ ${esc(rd.next.name)}`, t: 'عادة جديدة لرتبتك الجديدة' }
+  const head = mode === 'build' ? { k: `🏗 ${esc(c.name)} · مبنى ${(rd?.habits || 0) + 1} من 8`, t: 'العادة الجديدة' }
+    : mode === 'open' ? { k: `🔓 ${esc(E.findRegion(regionId).name)}`, t: 'أول عادة لهاد البعد' }
     : mode === 'edit' ? { k: 'تعديل المهمة', t: 'غيّر اسمها أو صورتها أو عدد مراتها' } : { k: esc(c.name), t: 'اختار أول عادة إلك' };
-  const lead = mode === 'promote' ? 'بمفتاح 🗝 واحد بتترقّى، و<b>بتنضاف عادة جديدة</b> لمهامك اليومية.'
+  const lead = mode === 'build' ? `بتنبني بمبنى جديد، وبتطلع رتبة ${esc(c.name)} لـ <b>${esc(rd?.next?.name || '')}</b>.`
+    : mode === 'open' ? 'البعد بيفتح بمبنى واحد: هاي العادة.'
     : mode === 'edit' ? 'إذا غيّرت الاسم، سلسلة الأيام تبعتها بتبلّش من جديد.' : 'عادة وحدة بتعملها كل يوم. ابدأ بإشي صغير بتقدر تلتزم فيه 💪';
   modal(`
     <div class="picker" style="--glow:${c.palette.glow}">
@@ -533,7 +503,7 @@ function pickHabit(id, { mode = 'first', taskId = null } = {}) {
         <div class="hp-sum" id="hp-sum"></div>
       </div>
       <div class="pk-actions">
-        <button class="pk-ok" id="hp-ok" disabled>${mode === 'promote' ? `⬆ ترقّى <small>🗝 1 · معك ${state.keys}</small>` : 'ثبّت المهمة ✔'}</button>
+        <button class="pk-ok" id="hp-ok" disabled>${mode === 'build' ? '🏗 ابنيها' : mode === 'open' ? '🔓 افتح البعد' : 'ثبّت المهمة ✔'}</button>
         ${mode === 'edit' && E.activeTasks(c, ch).length > 1 ? '<button class="pk-ghost" id="hp-del">🗑 احذفها</button>' : ''}
         <button class="pk-ghost" id="hp-cancel">${mode === 'first' ? 'لاحقًا' : 'رجوع'}</button>
       </div>
@@ -550,11 +520,11 @@ function pickHabit(id, { mode = 'first', taskId = null } = {}) {
     iconBtn.textContent = cur.icon || '⭐';
     $('#pk-prayers').hidden = !five;
     document.querySelector('[data-step="-1"]').disabled = cur.times <= (five ? 5 : 1);
-    ok.disabled = !t || (mode === 'promote' && !state.keys);
+    ok.disabled = !t;
     sum.innerHTML = t
       ? `<p><span>📅</span>كل يوم: <b>${esc(cur.icon || '⭐')} ${esc(t)}${cur.times > 1 ? ` × ${cur.times}` : ''}</b> — تسجّلها قبل الساعة ${E.RULES.dayEnds} بالليل.</p>
          ${five ? '<p><span>🕌</span>الصلاة خمس صلوات باليوم — لا أقل ولا أكثر.</p>' : ''}
-         <p><span>⭐</span>كل يوم بتاخذ نجوم حسب قديش خلّصت، وكل أسبوع حرب: ${E.RULES.warWin} نجمة = <b>مفتاح</b>${rd?.next && mode !== 'promote' ? ` ← بتترقّى لـ <b>${esc(rd.next.name)}</b> وبتختار عادة جديدة.` : '.'}</p>
+         <p><span>⭐</span>كل يوم بتاخذ نجوم حسب قديش خلّصت، وكل أحد بتجيك رسالة: تبني عادة، تفتح بعد، أو لا.</p>
          ${cur.times > 10 && !five ? '<p class="warn"><span>⚠</span>رقم كبير. ابدأ أقل وزيد مع الوقت.</p>' : ''}`
       : '<p class="muted">اكتب اسم المهمة 👆</p>';
   };
@@ -570,33 +540,36 @@ function pickHabit(id, { mode = 'first', taskId = null } = {}) {
   iconBtn.onclick = () => { icons.hidden = !icons.hidden; };
   icons.querySelectorAll('[data-icon]').forEach((b) => (b.onclick = () => { cur.icon = b.dataset.icon; icons.hidden = true; SND.sfx.click(); draw(); }));
   document.querySelectorAll('[data-step]').forEach((b) => (b.onclick = () => { cur.times = Math.max(1, Math.min(E.MAX_TIMES, cur.times + +b.dataset.step)); SND.sfx.click(); draw(); }));
-  $('#hp-cancel').onclick = () => (mode === 'promote' ? showDimRanks() : closeModal());
+  $('#hp-cancel').onclick = () => (mode === 'build' || mode === 'open' ? showOffer() : closeModal());
   if ($('#hp-del')) $('#hp-del').onclick = () => ask(`تحذف "${editing.title}"؟`, () => { const r = act(E.removeHabit(state, id, taskId)); if (r.ok) closeModal(); });
   ok.onclick = () => {
     const habit = { title: cur.title.trim(), icon: cur.icon, times: cur.times };
-    if (mode === 'promote') { const r = act(E.promoteWith(state, id, habit), ok); if (r.ok) { FX.toast(`🎖 صرت ${E.rankName(ch)} — وانضافت "${habit.title}"`); showDimRanks(); } return; }
+    if (mode === 'build' || mode === 'open') {
+      const r = act(E.answerOffer(state, mode, { id: mode === 'open' ? regionId : id, habit }, dayFor()), ok);
+      if (r.ok) { closeModal(); enter(id); }
+      return;
+    }
     const r = E.setHabit(state, id, rankIndex, editing?.id || null, habit);
     if (!r.ok) return FX.toast(r.reason, 'err');
     scheduleSave(); questsCollapsed = false; render();
-    if (mode === 'first') showKeyUses(id); else { FX.toast('تم ✔'); closeModal(); }
+    if (mode === 'first') showStartInfo(); else { FX.toast('تم ✔'); closeModal(); }
   };
   draw();
 }
 
-// Shown after the first task is set: stars every day, a war every week, and what a key does.
-function showKeyUses(id) {
-  const c = E.findCharacter(id), ch = state.characters[id];
-  const nextRank = RANKS[E.totalLevel(ch)]?.name || 'الرتبة الجاية';
+// Shown after the first habit is set: what comes every day and every Sunday.
+function showStartInfo() {
   const dims = REGIONS.filter((r) => r.characterId);
   modal(`
     <div class="keyuse">
-      <div class="keyuse-icon">🗝</div>
-      <h2>كل يوم نجوم ⭐ — وكل أسبوع حرب ⚔</h2>
-      <p class="muted">خلّص عادتك = ⭐⭐⭐. أول سبت بتبلّش حربك ضد ${esc(E.road(state, id)?.war?.king || 'الملك')}: اجمع ${E.RULES.firstWarWin} نجوم لحد الجمعة وبتربح مفتاح.</p>
-      <h3 class="keyuse-title">استخدامات المفتاح</h3>
+      <div class="keyuse-icon">🏗</div>
+      <h2>أول مبنى بالبعد الروحي جاهز</h2>
+      <p class="muted">كل بُعد فيه 8 مباني صغيرة، وكل مبنى = عادة. خلّص عادتك كل يوم وبتاخد ⭐⭐⭐.</p>
+      <h3 class="keyuse-title">📬 كل أحد بتجيك رسالة</h3>
       <ul class="keyuse-list">
-        <li><span>⬆</span><div><b>ترقية الشخصية لـ${esc(nextRank)}</b><small>عشان تقدر تربّي عادة جديدة فوق عادتك — من عند القائد بمقر القيادة.</small></div></li>
-        <li><span>🗺</span><div><b>فتح بُعد جديد من الأبعاد الثمانية</b></div></li>
+        <li><span>🏗</span><div><b>ابني عادة</b><small>مبنى جديد بأي بُعد مفتوح، والرتبة بتطلع لحالها.</small></div></li>
+        <li><span>🔓</span><div><b>افتح بعد جديد</b><small>من الأبعاد الثمانية، مع أول عادة إلو.</small></div></li>
+        <li><span>🙅</span><div><b>لا تستحق</b><small>كل إشي بيضل زي ما هو لحد الأحد الجاي.</small></div></li>
       </ul>
       <div class="dims">${dims.map((r) => `
         <figure class="dim ${state.regions[r.id] ? 'owned' : ''}">
@@ -613,7 +586,7 @@ function showRanks(id) {
   const cur = E.totalLevel(state.characters[id]);
   modal(`
     <h2>الرتب</h2>
-    <p class="muted">للنظر فقط. تبدأ من برونز 1، وكل رتبة جديدة بتاخدها بمفتاح 🗝 من عند <b>القائد</b> بمقر القيادة.</p>
+    <p class="muted">للنظر فقط. كل عادة جديدة بتبنيها (من رسالة الأحد) = رتبة جديدة، لحالها.</p>
     <ol class="ladder">${rankLadder(c).map((r, i) => `
       <li class="${i + 1 < cur ? 'done' : i + 1 === cur ? 'current' : ''}" style="--rank:${r.color}">
         <b>${i + 1}</b><span>${esc(r.name)}</span>
@@ -627,13 +600,22 @@ let oasis = null;
 let questsCollapsed = true;
 const placeState = () => {
   const c = E.findCharacter(currentChar), ch = state.characters[c.id];
-  return { features: E.regionFeatures(state, c.regionId), level: artLevel(ch), rank: rankState(c, ch) };
+  return { features: E.regionFeatures(state, c.regionId), level: artLevel(ch), rank: rankState(c, ch), habits: habitsFor(c) };
 };
-// What the rank stand shows: every rank, the current one, and this week's war stars.
+// The dimension's habits for its eight small buildings (done today = the lamp on the roof lit).
+const habitsFor = (c) => { const ch = state.characters[c.id], d = dayFor(); return ch ? E.activeTasks(c, ch).slice(0, E.RANK_COUNT).map((t) => ({ id: t.id, title: t.title, icon: taskIcon(c.id, t), done: E.taskComplete(E.taskProgress(state, c.id, t.id), d) })) : []; };
+// Tapping a building: its habit, to mark it done (or not).
+function showHabit(charId, taskId) {
+  const c = E.findCharacter(charId), t = E.activeTasks(c, state.characters[charId]).find((x) => x.id === taskId);
+  if (!t) return;
+  modal(`<h2>${taskIcon(charId, t)} ${esc(t.title)}</h2><p class="muted">مبنى من مباني ${esc(c.name)}.</p><ul class="tasks">${taskRow(charId, t)}</ul>`);
+  modalRefresh = () => showHabit(charId, taskId);
+  bind();
+}
+// What the rank stand shows: every rank, the current one, and the buildings (habits) so far.
 const rankState = (c, ch) => {
   if (!c.stages) return null;
-  const w = E.warView(state, c.id);
-  return { ranks: RANKS, current: E.totalLevel(ch) - 1, keyDays: w && !w.training ? Math.min(w.total, w.need) : 0, keyEvery: w && !w.training ? w.need : E.RULES.firstWarWin };
+  return { ranks: RANKS, current: E.totalLevel(ch) - 1, keyDays: E.activeTasks(c, ch).length, keyEvery: E.RANK_COUNT };
 };
 
 async function bindPlace() {
@@ -645,7 +627,7 @@ async function bindPlace() {
       const { mountPlace } = await import('./place3d.js');
       if (!v.isConnected) return;
       v.querySelector('.w3-loading')?.remove();
-      const scene = mountPlace(v, { regionId: c.regionId, palette: c.palette, rank: placeState().rank, features: placeState().features, lucifer: luciFor(c.id), onRanks: () => showRanks(c.id), sky: skyInfo, weather: currentWeather(), onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${['يلا نكمل!', 'خطوة كل يوم', 'أنا جاهز', 'الاستمرار سر النجاح'][Math.random() * 4 | 0]}`); } });
+      const scene = mountPlace(v, { regionId: c.regionId, palette: c.palette, rank: placeState().rank, features: placeState().features, habits: placeState().habits, onHabit: (id) => showHabit(c.id, id), lucifer: luciFor(c.id), onRanks: () => showRanks(c.id), sky: skyInfo, weather: currentWeather(), onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${['يلا نكمل!', 'خطوة كل يوم', 'أنا جاهز', 'الاستمرار سر النجاح'][Math.random() * 4 | 0]}`); } });
       oasis = { char: c.id, scene };
       loadWeather();
       return;
@@ -653,7 +635,7 @@ async function bindPlace() {
     const { mountOasis } = await import('./oasis3d.js');
     if (!v.isConnected) return;
     v.querySelector('.w3-loading')?.remove();
-    const scene = mountOasis(v, { palette: c.palette, ...placeState(), lucifer: luciFor(c.id), onRanks: () => showRanks(c.id), sky: skyInfo, weather: currentWeather(),
+    const scene = mountOasis(v, { palette: c.palette, ...placeState(), onHabit: (id) => showHabit(c.id, id), lucifer: luciFor(c.id), onRanks: () => showRanks(c.id), sky: skyInfo, weather: currentWeather(),
       onCharacter: () => { SND.sfx.wave(); FX.toast(`${c.name}: ${randomLine()}`); } });
     oasis = { char: c.id, scene };
     loadWeather();
@@ -707,12 +689,11 @@ function showSettings() {
       <h3>🧪 وضع التجربة</h3>
       ${state.sandbox
         ? `<p class="muted small-text">إنت هلأ بوضع التجربة. تقدّمك الحقيقي محفوظ وبيرجع لما تطلع.</p>
-           <div class="row wrap"><button class="btn primary" id="sb-refill">🔄 عبّي المفاتيح والمصاري</button><button class="btn" id="sb-leave">↩ ارجع لتقدّمي الحقيقي</button></div>
+           <div class="row wrap"><button class="btn primary" id="sb-refill">🔄 عبّي المصاري</button><button class="btn" id="sb-leave">↩ ارجع لتقدّمي الحقيقي</button></div>
            <p class="muted small-text">جرّب كيف كل إشي مربوط ببعض:</p>
-           <p class="muted small-text">⏭ جرّب الحرب: سجّل عاداتك، وبعدين خلّص اليوم وشوف النجوم والغارة وتقرير الليلة. ٧ مرات = أسبوع حرب كامل.</p>
-           <div class="row wrap"><button class="btn primary" id="sb-day">⏭ خلّص اليوم</button><button class="btn" id="sb-week">⏭⏭ خلّص لآخر الأسبوع</button></div>
-           <div class="row wrap"><button class="btn" id="sb-cmd">🫡 رقّي القائد</button><button class="btn" id="sb-dims">🎖 رقّي المحاربين</button><button class="btn" id="sb-ship">🚢 كمّل السفينة</button><button class="btn" id="sb-story">📜 القصة من الأول</button></div>`
-        : `<p class="muted small-text">بيفتحلك كل الأبعاد والأماكن، وبيعطيك <b>🗝 ${E.SANDBOX.keys}</b> مفتاح و<b>🪙 ${E.SANDBOX.gold.toLocaleString('en')}</b>. ما في إشي مترقّي — إنت بترقّي وبتشوف. تقدّمك الحقيقي بينحفظ وبيرجع لما تطلع.</p>
+           <div class="row wrap"><button class="btn primary" id="sb-day">⏭ خلّص اليوم</button><button class="btn" id="sb-week">📬 روح للأحد الجاي (الرسالة)</button></div>
+           <div class="row wrap"><button class="btn" id="sb-fill">🏗 ابني كل العادات (السفينة)</button><button class="btn" id="sb-story">📜 القصة من الأول</button></div>`
+        : `<p class="muted small-text">بيفتحلك كل الأبعاد والأماكن، وبيعطيك <b>🪙 ${E.SANDBOX.gold.toLocaleString('en')}</b>. تقدّمك الحقيقي بينحفظ وبيرجع لما تطلع.</p>
            <button class="btn primary" id="sb-enter">🧪 افتح كل إشي</button>`}
     </section>`);
   if ($('#tour-again')) $('#tour-again').onclick = () => { tour?.restart(); closeModal(); go('world'); };
@@ -722,12 +703,19 @@ function showSettings() {
   // Move test mode's calendar: the day (or the week, up to Friday) closes as it would at 3 at night.
   const skip = (n) => { closeModal(); state.sandbox.shift = (state.sandbox.shift || 0) + n; syncClock(); closeDays(); scheduleSave(); render(); oasis?.scene.update(placeState()); };
   if ($('#sb-day')) $('#sb-day').onclick = () => skip(1);
-  if ($('#sb-week')) $('#sb-week').onclick = () => { const d = new Date(dayFor() + 'T00:00:00Z').getUTCDay(); skip(((5 - d + 7) % 7) + 1); };
+  if ($('#sb-week')) $('#sb-week').onclick = () => { const d = new Date(dayFor() + 'T00:00:00Z').getUTCDay(); skip(7 - d); };
   if ($('#sb-refill')) $('#sb-refill').onclick = () => { E.refillSandbox(state); scheduleSave(); render(); FX.toast('🔄 تعبّوا'); };
-  if ($('#sb-cmd')) $('#sb-cmd').onclick = () => { state.stats.keysEarned = (state.stats.keysEarned || 0) + KEYS_PER_RANK; scheduleSave(); closeModal(); checkCommander(); render(); hqScene?.update({ rankIndex: commander(state).rankIndex }); FX.toast(`🫡 القائد صار ${commander(state).rank}`); };
-  if ($('#sb-dims')) $('#sb-dims').onclick = () => showDimRanks();
-  if ($('#sb-ship')) $('#sb-ship').onclick = () => { state.story = { ...state.story, ship: E.SHIP.parts * E.SHIP.per }; scheduleSave(); hqScene?.setShip(E.SHIP.parts); closeModal(); render(); FX.toast('🚢 السفينة اكتملت — شوفها عالشط تحت قاعة المحاربين'); };
-  if ($('#sb-story')) $('#sb-story').onclick = () => { state.story = { speech: false, jailed: false, ship: 0, phase: 'none' }; scheduleSave(); closeModal(); go('world'); FX.toast('📜 القصة رجعت من الأول'); };
+  // Test: every dimension open with its 8 habits (the ship ready, the island open).
+  if ($('#sb-fill')) $('#sb-fill').onclick = () => {
+    for (const c of CHARACTERS.filter((x) => x.stages)) {
+      const ch = state.characters[c.id] ||= { stage: 0, level: 1, perfectStreak: 0, lastPerfectDate: null };
+      state.regions[c.regionId] ||= { level: 1 };
+      for (let k = 0; k < E.RANK_COUNT; k++) if (E.activeTasks(c, ch).length <= k) { E.setRankPlan(state, c.id, k, [{ title: `${c.name} ${k + 1}` }]); ch.stage = Math.floor(k / 5); ch.level = (k % 5) + 1; }
+      ch.stage = 1; ch.level = 3;
+    }
+    scheduleSave(); hqScene?.setShip(E.shipStage(state)); closeModal(); render(); FX.toast('🏗 كل العادات انبنت — السفينة جاهزة');
+  };
+  if ($('#sb-story')) $('#sb-story').onclick = () => { state.story = { speech: false, jailed: false, phase: 'none' }; scheduleSave(); closeModal(); go('world'); FX.toast('📜 القصة رجعت من الأول'); };
   $('#snd-on').onchange = (e) => { SND.set('enabled', e.target.checked); };
   document.querySelectorAll('[data-snd]').forEach((el) => (el.oninput = () => { SND.set(el.dataset.snd, +el.value); el.nextElementSibling.textContent = Math.round(el.value * 100); }));
   document.querySelectorAll('[data-snd-test]').forEach((el) => (el.onclick = () => SND.sfx[el.dataset.sndTest]()));
@@ -813,28 +801,17 @@ function prayerNowLine() {
   return next ? `<div class="hud-chip">⏳ ${PRAYER_NAMES[next[0]]} ${fmtTime(next[1].start)}</div>` : '';
 }
 
-// This week's war of one dimension, in a few lines (under today's tasks and in the panels).
-function warLine(id) {
-  const rd = E.road(state, id), w = rd?.war;
-  if (!w) return '';
-  if (w.training) return `<div class="road">
-    <p>🌱 <b>تدريب</b> — اليوم ${starTxt(w.today)}. أول حرب ضد <b>${esc(w.king)}</b> بتبلّش ${w.inDays === 1 ? 'بكرا السبت' : w.inDays === 2 ? 'بعد يومين (السبت)' : `بعد ${w.inDays} أيام (السبت)`}.</p></div>`;
-  const pct = Math.min(100, Math.round((w.total / w.need) * 100));
-  const state_ = w.fallen ? '<p class="road-warn">⚫ الجبهة سقطت — حرب هالأسبوع خسرانة. الأسبوع الجاي حرب جديدة.</p>'
-    : w.won ? '<p class="road-ready">🏆 جمعت النجوم! الفوز بيتسجّل يوم الجمعة.</p>'
-    : w.lost ? '<p class="road-warn">🏳 ما بتلحق هالأسبوع — جمّع نجوم لنص المفتاح.</p>'
-    : w.zeroRun === E.RULES.fallAfter - 1 && !w.today ? '<p class="road-warn">⚠ يومين صفر ورا بعض — صفر كمان والجبهة بتسقط!</p>' : '';
+// One dimension in a line: its buildings (habits) of 8, its rank, today's stars.
+function dimLine(id) {
+  const rd = E.road(state, id);
+  if (!rd || !rd.habits) return '';
   return `<div class="road">
-    <div class="road-bar"><i style="width:${pct}%"></i></div>
-    <p>⚔ ضد <b>${esc(w.king)}</b>: <b><bdi>${w.total}/${w.need}</bdi></b> ⭐ · اليوم ${starTxt(w.today)} · ${w.left ? `باقي ${w.left} ${w.left > 2 ? 'أيام' : 'يوم'}` : 'آخر يوم!'}</p>
-    ${state_}
-    ${w.losses ? `<p class="road-warn">🏳 ${w.losses} من ${E.RULES.dropAfter} حروب خسارة ورا بعض${w.losses === E.RULES.dropAfter - 1 ? ' — خسارة كمان وبتنزل رتبة!' : ''}</p>` : ''}
-    ${w.restore ? '<p class="road-ready">⬆ اربح هالحرب وبترجعلك رتبتك.</p>' : ''}
-    ${rd.canPromote ? '<p class="road-ready">🗝 معك مفتاح! روح للقائد بمقر القيادة ← 🎖 رتب الأبعاد وترقّى.</p>' : ''}
-    ${state.lastAttack ? '<button class="btn ghost small road-replay" data-replay-attack>▶ شوف هجوم مبارح</button>' : ''}
+    <div class="road-bar"><i style="width:${Math.round((rd.habits / rd.max) * 100)}%"></i></div>
+    <p>🏗 <b><bdi>${rd.habits}/${rd.max}</bdi></b> عادات · ${esc(rd.rank.name)} · اليوم ${starTxt(E.starsToday(state, id, dayFor()) || 0)}</p>
+    ${E.pendingOffer(state, dayFor()) ? '<button class="btn small primary" data-show-offer>📬 رسالة الأحد</button>' : ''}
   </div>`;
 }
-const roadLine = warLine;
+const roadLine = dimLine;
 
 function placeHUD() {
   const c = E.findCharacter(currentChar);
@@ -891,23 +868,19 @@ function showUpgrades() {
 }
 
 
-// Commander's ranks desk (HQ): every opened dimension, its rank, its habits and its
-// war this week. Ranks are granted here: one key = next rank + a new habit.
+// Commander's desk (HQ): every opened dimension, its rank and its habits (buildings).
 function showDimRanks() {
   const list = CHARACTERS.filter((c) => c.stages && state.characters[c.id]);
   modal(`
     <h2>🎖 رتب الأبعاد</h2>
-    <p class="muted">معك <b>🗝 ${state.keys}</b>. كل مفتاح = رتبة جديدة لبُعد + عادة جديدة بتختارها.</p>
+    <p class="muted">كل عادة بتبنيها = رتبة. بنيت <b>${E.habitsBuilt(state)}</b> من ${E.HABITS_ALL()}.</p>
     <ul class="dim-ranks">${list.map((c) => {
       const ch = state.characters[c.id], rd = E.road(state, c.id), tasks = E.activeTasks(c, ch);
-      const btn = !rd.next ? '<span class="muted">🏆 أعلى رتبة</span>'
-        : !tasks.length ? `<button class="btn small" data-set-tasks="${c.id}">🎯 اختار أول مهمة</button>`
-          : `<button class="btn small ${rd.canPromote ? 'primary' : ''}" data-promote="${c.id}" ${rd.canPromote ? '' : 'disabled'}>⬆ ${esc(rd.next.name)} — 🗝 1</button>`;
       return `<li>
         <div class="dr-head"><b>${esc(c.name)}</b><span class="rank" style="--rank:${rd.rank.color}">${esc(rd.rank.name)}</span></div>
         <div class="dr-habits">${tasks.length ? tasks.map((t) => `<span>${taskIcon(c.id, t)} ${esc(t.title)}${E.timesOf(t) > 1 ? ` ×${E.timesOf(t)}` : ''}</span>`).join('') : '<span class="muted">ما في مهام لسا</span>'}</div>
-        ${warLine(c.id)}
-        <div class="row wrap">${btn}</div>
+        ${dimLine(c.id)}
+        ${!tasks.length ? `<div class="row wrap"><button class="btn small" data-set-tasks="${c.id}">🎯 اختار أول مهمة</button></div>` : ''}
       </li>`;
     }).join('')}</ul>`);
   modalRefresh = showDimRanks;
@@ -956,14 +929,12 @@ function realmCard(r) {
   const ch = c && state.characters[c.id];
   const locked = !st.owned && !st.conditionsMet;
   const art = regionSVG(r, st.owned ? E.regionFeatures(state, r.id) : new Set(), c ? characterSVG(c, ch ? artLevel(ch) : 1, { size: 90, locked }) : '', { locked });
-  const rarity = r.cost?.keys ? 'epic' : 'common';
-  let action;
-  if (st.owned) action = `<button class="store-btn owned" data-enter-realm="${r.id}">▶ ادخل</button>`;
-  else if (locked) action = `<button class="store-btn" disabled>🔒 ${esc(st.conditions.find((x) => !x.met)?.label || 'مقفل')}</button>`;
-  else action = `<button class="store-btn buy" data-buy="region:${r.id}" ${st.affordable ? '' : 'disabled'}>${E.costText(r.cost)}</button>`;
+  const rarity = 'common';
+  const n = ch ? E.activeTasks(c, ch).length : 0;
+  const action = st.owned ? `<button class="store-btn owned" data-enter-realm="${r.id}">▶ ادخل · 🏗 ${n}/8</button>` : '<button class="store-btn" data-show-offer>📬 بتفتحه برسالة الأحد</button>';
   return `
   <article class="realm ${rarity} ${st.owned ? 'is-owned' : ''} ${locked ? 'is-locked' : ''}">
-    <div class="realm-art">${art}${st.owned ? '<span class="realm-tag">✔ مملوك</span>' : rarity === 'epic' ? '<span class="realm-tag epic">نادر</span>' : ''}</div>
+    <div class="realm-art">${art}${st.owned ? '<span class="realm-tag">✔ مفتوح</span>' : ''}</div>
     <div class="realm-body">
       <h3>${r.name}</h3>
       ${c ? `<div class="realm-with">+ ${c.name}</div>` : ''}
@@ -977,8 +948,8 @@ function renderShop() {
   return `
   <div class="store">
     <header class="store-head">
-      <h2>🛒 المتجر</h2>
-      <div class="store-sub">كل عالم = مكان + شخصيته</div>
+      <h2>🧭 الأبعاد</h2>
+      <div class="store-sub">كل بعد = مكان + شخصيته + 8 مباني (عادات). بتفتحها برسالة الأحد 📬</div>
     </header>
     <div class="store-grid">${realms.map(realmCard).join('')}</div>
   </div>`;
@@ -999,95 +970,83 @@ async function bindHQ() {
     const { mountHQ } = await import('./hq3d.js');
     if (!v.isConnected) return;
     v.querySelector('.w3-loading')?.remove();
-    hqScene = mountHQ(v, { weather: currentWeather(), places: warPlaces(), owned: CHARACTERS.filter((c) => state.characters[c.id]).map((c) => c.id), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, ...innerState(), story: { ...state.story, ship: E.shipStage(state) }, ranks: Object.fromEntries(CHARACTERS.filter((c) => state.characters[c.id] && c.stages).map((c) => [c.id, E.rankName(state.characters[c.id])])), tiers: Object.fromEntries(CHARACTERS.filter((c) => state.characters[c.id] && c.stages).map((c) => [c.id, E.totalLevel(state.characters[c.id]) - 1])),
-      onStory: (phase) => { if (phase === 'march') act(E.finishSpeech(state)); else { act(E.storyStep(state, phase)); if (phase === 'back') FX.toast('🏝 جزيرة القادة صارت ظاهرة عالخريطة… مسكّرة لحد ما تكمل السفينة'); } }, onRoom: (r) => { document.body.classList.toggle('in-dungeon', r === 'dungeon'); document.body.classList.toggle('in-heaven', r === 'heaven' || r === 'shore'); document.body.classList.toggle('in-gallery', r === 'gallery'); }, sky: skyInfo, onTable: showWarMap, onCommander: showCommandRanks });
+    hqScene = mountHQ(v, { weather: currentWeather(), places: dimPlaces(), owned: CHARACTERS.filter((c) => state.characters[c.id]).map((c) => c.id), hq: E.findRegion('hq').map, rankIndex: cm.rankIndex, ...innerState(), story: { ...state.story, ship: E.shipStage(state) }, ranks: Object.fromEntries(CHARACTERS.filter((c) => state.characters[c.id] && c.stages).map((c) => [c.id, E.rankName(state.characters[c.id])])), tiers: Object.fromEntries(CHARACTERS.filter((c) => state.characters[c.id] && c.stages).map((c) => [c.id, E.totalLevel(state.characters[c.id]) - 1])),
+      onStory: (phase) => { if (phase === 'march') act(E.finishSpeech(state)); else { act(E.storyStep(state, phase)); if (phase === 'back') FX.toast('🏝 شفت جزيرة القادة… السفينة بتوصلك لما تكمل'); } }, onRoom: (r) => { document.body.classList.toggle('in-dungeon', r === 'dungeon'); document.body.classList.toggle('in-heaven', r === 'heaven' || r === 'shore'); document.body.classList.toggle('in-gallery', r === 'gallery'); }, sky: skyInfo, onTable: showDimMap, onCommander: showCommandRanks });
     loadWeather();
   } catch (err) { console.warn('3D HQ unavailable', err); v.innerHTML = ''; }
 }
-// All commander ranks: each one takes KEYS_PER_RANK keys.
+// All commander ranks: each one comes with the habits built (across all dimensions).
 function showCommandRanks() {
   const cm = commander(state);
   modal(`
     <h2>🫡 رتب القائد</h2>
-    <p class="muted">كل ${KEYS_PER_RANK} مفاتيح تجمعها يترقّى القائد تلقائيًا. جمعت ${cm.keysEarned} 🗝.</p>
-    <ol class="path">${COMMAND_RANKS.map(([, name], i) => {
+    <p class="muted">القائد بيترقّى لحاله مع العادات اللي بتبنيها بكل الأبعاد. بنيت ${cm.habits} 🏗.</p>
+    <ol class="path">${COMMAND_RANKS.map(([need, name], i) => {
       const cls = i < cm.rankIndex ? 'done' : i === cm.rankIndex ? 'current' : '';
-      const need = i === 0 ? 'البداية' : `🗝 ${i * KEYS_PER_RANK} مفاتيح`;
-      return `<li class="${cls}" style="--rank:#7a5a1f"><b class="rk">${name}</b><span>${need}</span></li>`;
+      return `<li class="${cls}" style="--rank:#7a5a1f"><b class="rk">${name}</b><span>${need ? `🏗 ${need} عادة` : 'البداية'}</span></li>`;
     }).join('')}</ol>`);
 }
 
 // Celebrate when the commander's level went up since the last look.
 function checkCommander() {
   const cm = commander(state);
-  if (lastCmdLevel != null && cm.level > lastCmdLevel) FX.banner(`ترقية القائد — ${cm.rank}`, `جمعت ${KEYS_PER_RANK} مفاتيح فترقّى القائد تلقائيًا`, '🫡');
+  if (lastCmdLevel != null && cm.level > lastCmdLevel) FX.banner(`ترقية القائد — ${cm.rank}`, `بنيت ${cm.habits} عادة فترقّى القائد لحاله`, '🫡');
   lastCmdLevel = cm.level;
 }
-// The eight dimensions with their war status.
-const warPlaces = () => REGIONS.filter((r) => r.characterId).map((r) => {
-  const w = E.warStatus(state, r);
-  return { id: r.id, name: r.name, map: r.map, status: w.id, level: w.level, war: w.war, info: w };
+// The eight dimensions: closed, being built (habits of 8), or full.
+const dimPlaces = () => REGIONS.filter((r) => r.characterId).map((r) => {
+  const d = E.dimStatus(state, r);
+  return { id: r.id, name: r.name, map: r.map, status: d.id, level: d.level, habits: d.habits, info: d };
 });
 
-function showWarMap() {
+// The map of dimensions (the table in headquarters).
+function showDimMap() {
   if ($('#modal').hidden) SND.sfx.paper();
-  const places = warPlaces();
+  const places = dimPlaces();
   const count = (id) => places.filter((p) => p.status === id).length;
-  const W0 = E.warStart(dayFor()), left = 6 - Math.round((new Date(dayFor()) - new Date(W0)) / 86400000);
   modal(`
     <div class="war-wrap">${warMapSVG(places, E.findRegion('hq').map)}</div>
     <div class="war-legend">${Object.entries(WAR).map(([id, w]) => `<span style="--c:${w.color}">${w.icon} ${w.name} <b>${count(id)}</b></span>`).join('')}</div>
-    <p class="muted small-text">⚔ حرب الأسبوع بتخلص ${left ? `بعد ${left} ${left > 2 ? 'أيام' : 'يوم'} (الجمعة)` : 'الليلة'} · اضغط على أي جبهة لترى حالتها · <kbd>E</kbd> للخروج</p>`);
+    <p class="muted small-text">🏗 ${E.habitsBuilt(state)} من ${E.HABITS_ALL()} عادة · اضغط على أي بعد · <kbd>E</kbd> للخروج</p>`);
   $('#modal').classList.add('wide');
-  modalRefresh = showWarMap;
+  modalRefresh = showDimMap;
   document.querySelectorAll('.war-map [data-war]').forEach((el) => (el.onclick = () => showFront(el.dataset.war)));
 }
 
 function showFront(id) {
-  const r = E.findRegion(id), p = warPlaces().find((x) => x.id === id), w = WAR[p.status];
+  const r = E.findRegion(id), p = dimPlaces().find((x) => x.id === id), w = WAR[p.status];
   const c = E.findCharacter(r.characterId), ch = state.characters[c.id];
-  const why = {
-    coming: ch ? `اختار أول عادة لـ${c.name} عشان يبلّش يتدرّب.` : `افتح ${r.name} (🗝 ${r.cost?.keys || 0}) لتبدأ هذه الحرب ضد ${KINGS[r.id]}.`,
-    training: `بيتدرّب لحد السبت — بعدها أول حرب ضد ${KINGS[r.id]}.`,
-    ahead: `متقدّم على ${KINGS[r.id]} — كمّل هيك وبتربح.`,
-    behind: `${KINGS[r.id]} متقدّم عليك — بدك نجوم أكثر بالأيام الجاية.`,
-    fallen: `الجبهة سقطت بعد ${E.RULES.fallAfter} أيام صفر — حرب هالأسبوع خسرانة.`,
-  }[p.status];
+  const why = { coming: 'مسكّر — بتفتحه برسالة الأحد 📬.', building: `🏗 ${p.habits} من 8 عادات.`, full: '🏆 كل المباني الثمانية انبنت.' }[p.status];
   modal(`
     <div class="front" style="--c:${w.color}">
       <div class="front-badge">${w.icon}</div>
       <h2>${r.name}</h2>
       <div class="front-status">${w.name}</div>
       <p>${why}</p>
-      ${ch ? warLine(c.id) : ''}
+      ${ch ? dimLine(c.id) : ''}
       <div class="row wrap">
         <button class="btn ghost" id="back-map">← الخريطة</button>
-        ${ch ? `<button class="btn primary" id="go-front">اذهب إلى الجبهة</button>` : `<button class="btn primary" id="go-front">المتجر</button>`}
+        ${ch ? '<button class="btn primary" id="go-front">ادخل البعد</button>' : ''}
       </div>
     </div>`);
   $('#modal').classList.add('wide');
-  $('#back-map').onclick = showWarMap;
-  $('#go-front').onclick = () => (ch ? enter(c.id) : go('shop'));
+  $('#back-map').onclick = showDimMap;
+  if ($('#go-front')) $('#go-front').onclick = () => enter(c.id);
 }
 
 let reportOpen = false;
 
 // The two prisoners of the dungeon (0..1).
-// Future self: grows with every character level and every opened place, rewarded
-// for fronts ahead in this week's war, held back by fallen ones.
+// Future self: grows with every habit built and every opened dimension.
 // Inner child: grows with self-respect in action — won challenge cups (keeping your
-// word to yourself), fronts held, and the commander's rank.
+// word to yourself) and the commander's rank.
 function innerState() {
-  const places = warPlaces();
-  const fallen = places.filter((p) => p.status === 'fallen').length;
-  const ahead = places.filter((p) => p.status === 'ahead').length;
-  const levels = CHARACTERS.reduce((a, c) => { const ch = state.characters[c.id]; return a + (ch ? E.totalLevel(ch) - 1 : 0); }, 0);
-  const opened = places.filter((p) => state.regions[p.id]).length;
+  const opened = dimPlaces().filter((p) => state.regions[p.id]).length;
   const cups = C.wonCups(state).length;
   const clamp = (x) => Math.max(0, Math.min(1, x));
   return {
-    future: clamp((levels * 2 + (opened - 1) * 3 + ahead * 3 - fallen * 4) / 60),
-    child: clamp((cups * 8 + ahead * 3 + commander(state).rankIndex * 3 - fallen * 5) / 60),
+    future: clamp((E.habitsBuilt(state) - 1 + (opened - 1) * 2) / 60),
+    child: clamp((cups * 8 + commander(state).rankIndex * 5) / 60),
   };
 }
 function hqHUD() {
@@ -1100,29 +1059,29 @@ function hqHUD() {
       <div class="plate-body">
         <div class="plate-name">القائد <span class="plate-place">· مقر القيادة</span></div>
         <div class="plate-row"><button class="rank" data-cmd-ranks style="--rank:#7a5a1f" title="اعرض كل الرتب">${cm.rank} ▾</button></div>
-        <div class="meter" data-cmd-ranks><span class="meter-label">${cm.nextRank ? `🗝 نحو ${cm.nextRank}` : '🎖 أعلى رتبة'}</span><b><bdi>${cm.nextRank ? `${cm.keysInRank}/${KEYS_PER_RANK}` : '✔'}</bdi></b><div class="xp"><span style="width:${Math.round(cm.rankProgress * 100)}%"></span></div></div>
+        <div class="meter" data-cmd-ranks><span class="meter-label">${cm.nextRank ? `🏗 نحو ${cm.nextRank}` : '🎖 أعلى رتبة'}</span><b><bdi>${cm.nextRank ? `${cm.habits}/${cm.nextAt}` : '✔'}</bdi></b><div class="xp"><span style="width:${Math.round(cm.rankProgress * 100)}%"></span></div></div>
       </div>
     </div>
   </div>
   <button class="hud-chip view-toggle" data-view-mode title="إخفاء اللوحات لمشاهدة القاعة">👁 مشاهدة</button>
   <aside class="cup-side">
-    <button class="hud-chip warmap-btn" data-war-map>🗺 خريطة الحرب</button>
+    <button class="hud-chip warmap-btn" data-war-map>🗺 خريطة الأبعاد</button>
     <div class="challenge-card report ${reportOpen ? 'open' : ''}">
       <button class="report-title" data-toggle-report>📋 تقرير القائد <span>${reportOpen ? '▴' : '▾'}</span></button>
-      <small class="muted-w">يترقّى لحاله: كل ${KEYS_PER_RANK} مفاتيح تجمعها = رتبة جديدة.</small>
+      <small class="muted-w">يترقّى لحاله مع كل العادات اللي بتبنيها.</small>
       <div class="report-row"><span>🗺 الأماكن المفتوحة</span><b>${cm.opened.length} / ${cm.places.length}</b></div>
       <ul class="report-list">${cm.places.map((r) => `<li class="${state.regions[r.id] ? 'on' : ''}">${state.regions[r.id] ? '✔' : '🔒'} ${r.name}</li>`).join('')}</ul>
-      <div class="report-row"><span>🗝 مفاتيح جمعتها</span><b>${cm.keysEarned}</b></div>
+      <div class="report-row"><span>🏗 العادات</span><b><bdi>${cm.habits}/${E.HABITS_ALL()}</bdi></b></div>
       <div class="report-row"><span>⬆ الشخصيات</span></div>
       <ul class="report-list">${cm.chars.map((c) => `<li class="on">${c.def.name} — ${E.rankName(c.ch)}</li>`).join('')}</ul>
       <div class="report-row"><span>🏆 كؤوس</span><b>${won}</b></div>
-      <div class="report-row"><span>🗝 مفاتيح جاهزة</span><b>${state.keys}</b></div>
+      <div class="report-row"><span>🚢 السفينة</span><b><bdi>${E.shipStage(state)}/${E.SHIP.parts}</bdi></b></div>
     </div>
   </aside>
   <div class="dock">
-    <button class="dock-btn promote-btn" data-dim-ranks>🎖<span>رتب الأبعاد</span>${CHARACTERS.some((c) => E.road(state, c.id)?.canPromote) ? '<i class="dot"></i>' : ''}</button>
-    <button class="dock-btn" data-war-map>🗺<span>خريطة الحرب</span></button>
-    <button class="dock-btn" data-go="shop">🛒<span>افتح مكانًا</span></button>
+    <button class="dock-btn promote-btn" data-dim-ranks>🎖<span>رتب الأبعاد</span></button>
+    <button class="dock-btn" data-war-map>🗺<span>خريطة الأبعاد</span></button>
+    ${E.pendingOffer(state, dayFor()) ? '<button class="dock-btn" data-show-offer>📬<span>رسالة الأحد</span><i class="dot"></i></button>' : ''}
     <button class="dock-btn" data-go="trophies">🏆<span>الكؤوس</span></button>
     <button class="dock-btn" data-go="world">🗺<span>العالم</span></button>
   </div>`;
@@ -1384,12 +1343,10 @@ function showCupHistory() {
 
 // Failure: no choosing the punishment — say plainly what it will cost when the day closes.
 function failDialog(title, penalty, onYes) {
-  const sh = state.shields || 0;
   modal(`
     <h2>ما عملتها؟</h2>
     <p><b>${esc(title)}</b></p>
-    <p class="muted">الصدق مع نفسك أول خطوة — والنجوم ما إلها قيمة إذا ما كانت حقيقية. هالعادة ما رح تنحسب بنجوم اليوم.
-      ${sh ? `إذا البُعد خلص اليوم بصفر نجوم، الدرع 🛡 بيحوّله لنجمة.` : `إذا البُعد خلص اليوم بصفر نجوم، لوسيفر بيغير عليك.`}</p>
+    <p class="muted">الصدق مع نفسك أول خطوة — والنجوم ما إلها قيمة إذا ما كانت حقيقية. هالعادة ما رح تنحسب بنجوم اليوم.</p>
     <div class="row wrap">
       <button class="btn bad" id="pen-yes">ما عملتها</button>
       <button class="btn ghost" id="pen-no">رجوع</button>
@@ -1428,8 +1385,8 @@ function bind() {
   on('data-dim-ranks', showDimRanks);
   on('data-open-atmo', showAtmosphere);
   on('data-cup-picker', showCupPicker);
-  on('data-war-map', showWarMap);
-  on('data-replay-attack', () => showAttack(state.lastAttack));
+  on('data-war-map', showDimMap);
+  on('data-show-offer', showOffer);
   on('data-toggle-report', () => { reportOpen = !reportOpen; render(); });
   on('data-view-mode', () => document.body.classList.toggle('view-mode'));
   on('data-cup-rules', showCupRules);
@@ -1449,16 +1406,13 @@ function bind() {
     failDialog(def.title, 0, () => { const r = act(() => E.reportTask(state, c, t, false, { date: dayFor(c) })); if (r.ok && oasis?.char === c) oasis.scene.react?.('fail'); });
   });
   on('data-cmd-ranks', showCommandRanks);
-  on('data-level', (id, el) => act(E.levelUpCharacter(state, id), el));
   on('data-upgrade', (id, el) => act(E.upgradeRegion(state, id), el));
-  on('data-buy', (v, el) => { const [k, id] = v.split(':'); act(E.buy(state, k, id), el); });
   on('data-enter-realm', (id) => enter(E.findRegion(id).characterId));
   on('data-go', go);
   on('data-spot', openSpot);
   on('data-ranks', showRanks);
   on('data-edit-task', (v) => { const [c, t] = v.split(':'); pickHabit(c, { mode: 'edit', taskId: t }); });
   on('data-set-tasks', (v) => pickHabit(v.split(':')[0], { mode: 'first' }));
-  on('data-promote', (id) => pickHabit(id, { mode: 'promote' }));
 }
 
 function go(s) { if (s !== screen) SND.sfx.whoosh(); screen = s; closeModal(); render(); window.scrollTo(0, 0); }
@@ -1491,17 +1445,6 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#moda
 
 boot();
 
-// The key box at the top explains what keys are for.
-document.getElementById('keys-box')?.addEventListener('click', () => {
-  if (!state) return;
-  modal(`
-    <h2>🗝 المفاتيح</h2>
-    <p>معك <b>${state.keys}${state.keyHalves ? ' ونص' : ''}</b> ${state.keys === 1 ? 'مفتاح' : 'مفاتيح'}.</p>
-    <p>بالمفتاح <b>تفتح منطقة جديدة</b> على الخريطة، أو <b>ترفع رتبة</b> شخصية (مثل برونز 1 → برونز 2 فتنضاف مهام الرتبة اللي كتبتها).</p>
-    <p>وكل ${KEYS_PER_RANK} مفاتيح تجمعها يترقّى القائد تلقائيًا 🫡.</p>
-    <p class="muted">بتكسب مفتاح لما تربح حرب الأسبوع (${E.RULES.warWin} نجمة من 21)، ونص مفتاح إذا قرّبت.</p>
-    <button class="btn ghost" id="keys-rules">📜 كل القوانين</button>`);
-  $('#keys-rules').onclick = showRules;
-});
-document.getElementById('shield-box')?.addEventListener('click', () => { if (state) showRules(); });
-document.getElementById('medals-box')?.addEventListener('click', () => { if (state) showLeague(); });
+// The top bar: the habits built (the dimensions' ranks) and the Sunday message.
+document.getElementById('habits-box')?.addEventListener('click', () => { if (state) showDimRanks(); });
+document.getElementById('offer-box')?.addEventListener('click', () => { if (state) showOffer(); });

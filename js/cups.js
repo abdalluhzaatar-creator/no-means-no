@@ -83,8 +83,6 @@ export function startChallenge(s, { channel, cupId, partner, pin, now = Date.now
 }
 
 // Rule 4: only the second party (who knows the PIN) decides. Win → stake returns; loss → it's theirs.
-// Winning a cup pays one key per 15 days of the cup (on top of the keys the wars earn).
-export const keyReward = (cup) => Math.floor(cup.days / 15);
 
 export function judge(s, id, pin, won, now = Date.now()) {
   const c = ensure(s);
@@ -97,9 +95,6 @@ export function judge(s, id, pin, won, now = Date.now()) {
   if (won) {
     c.wallet = round2(c.wallet + ch.stakeUsd);
     c.walletLog.unshift({ at: now, delta: ch.stakeUsd, note: `استرجاع مبلغ ${findCup(ch.cupId).name}` });
-    const k = keyReward(findCup(ch.cupId));
-    if (k) { s.keys = (s.keys || 0) + k; if (s.stats) s.stats.keysEarned = (s.stats.keysEarned || 0) + k; }
-    ch.keys = k;
   } else {
     c.walletLog.unshift({ at: now, delta: 0, note: `خسارة ${findCup(ch.cupId).name} — المبلغ صار لـ ${ch.partner}` });
   }
